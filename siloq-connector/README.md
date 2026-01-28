@@ -4,13 +4,14 @@ WordPress plugin that connects your WordPress site to the Siloq SEO platform for
 
 ## Features
 
-✅ **Two-Way Sync** - Sync WordPress pages with Siloq platform  
-✅ **Auto-Sync** - Automatically sync pages when published or updated  
-✅ **Schema Injection** - Automatically inject AI-generated schema markup  
-✅ **Admin Dashboard** - Easy-to-use interface for managing syncs  
-✅ **Bulk Operations** - Sync all pages at once  
-✅ **Sync Status Monitoring** - Track which pages are synced and when  
+✅ **Two-Way Sync** - Sync WordPress pages with Siloq platform
+✅ **Auto-Sync** - Automatically sync pages when published or updated
+✅ **Schema Injection** - Automatically inject AI-generated schema markup
+✅ **Admin Dashboard** - Easy-to-use interface for managing syncs
+✅ **Bulk Operations** - Sync all pages at once
+✅ **Sync Status Monitoring** - Track which pages are synced and when
 ✅ **REST API Integration** - Secure communication with Siloq backend
+✅ **Lead Gen Scanner** - Embeddable website scanner widget for lead capture (v1.1.0)
 
 ## Requirements
 
@@ -97,6 +98,31 @@ Once a page is synced:
 Pages automatically need re-syncing if:
 - Content has been modified since last sync
 - You manually click **Sync Now**
+
+### Lead Gen Scanner Widget
+
+Embed a website scanner on any page to capture leads and generate scan results:
+
+1. **Add the shortcode** to any page or post: `[siloq_scanner]`
+2. Visitors enter their website URL and email
+3. The scanner analyzes their site (5 categories: Technical SEO, Content, Structure, Performance, SEO Factors)
+4. Shows teaser results: Overall score + grade + top 3 high-priority issues
+5. CTA to get full report redirects to Siloq signup (BLUEPRINT plan by default)
+
+**Shortcode Options:**
+```
+[siloq_scanner title="Free SEO Audit" button_text="Scan My Site" signup_url="https://app.siloq.io/signup?plan=blueprint"]
+```
+
+**Configure Signup URL:**
+- Go to **Siloq → Settings**
+- Set **Lead Gen Signup URL** (or leave empty for default)
+- All captured leads are stored in `wp_siloq_leads` database table
+
+**View Captured Leads:**
+```sql
+SELECT email, website_url, created_at FROM wp_siloq_leads ORDER BY created_at DESC;
+```
 
 ## Troubleshooting
 

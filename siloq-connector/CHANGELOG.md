@@ -5,6 +5,37 @@ All notable changes to the Siloq WordPress Connector plugin will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-29
+
+### Added
+- **Lead Gen Scanner Widget**
+  - New shortcode `[siloq_scanner]` for embedding scanner on any page
+  - Visitor lead capture with email collection
+  - Website scanning via Siloq API (5 categories: Technical SEO, Content, Structure, Performance, SEO Factors)
+  - Teaser results display (score + grade + top 3 high-priority issues)
+  - CTA to full report with automatic signup redirection
+  - New database table `wp_siloq_leads` for lead storage
+  - Shortcode customization options (title, button_text, signup_url)
+  - Admin setting for default signup URL
+  - Responsive design with smooth animations
+  - AJAX-powered scanning with real-time progress indicator
+  - Polling mechanism for scan results (3-second interval)
+  - Security features: nonce verification, input sanitization, SQL injection prevention
+
+### Technical Details
+- **New Files:**
+  - `includes/class-siloq-lead-gen-scanner.php` - Scanner class
+  - `assets/css/lead-gen-scanner.css` - Widget styles
+  - `assets/js/lead-gen-scanner.js` - Frontend interactivity
+- **Modified Files:**
+  - `siloq-connector.php` - Added scanner initialization
+  - `includes/class-siloq-admin.php` - Added signup URL setting
+- **API Endpoints Used:**
+  - `POST /api/v1/scans` - Create website scan
+  - `GET /api/v1/scans/{id}` - Get scan results
+- **Database Changes:**
+  - New table: `wp_siloq_leads` (email, website_url, scan_id, ip_address, user_agent, created_at)
+
 ## [1.0.0] - 2026-01-21
 
 ### Added
@@ -120,15 +151,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned Features
-- **v1.1.0** (Next Minor Release)
+- **v1.2.0** (Next Minor Release)
   - Support for custom post types
   - Scheduled content generation
   - Advanced schema types (Article, Product, Review)
   - Bulk content import
   - Export/import settings
   - WP-CLI commands
+  - Admin page to view/export captured leads
 
-- **v1.2.0** (Future Release)
+- **v1.3.0** (Future Release)
   - Gutenberg block integration
   - Visual silo builder in admin
   - Real-time content preview
@@ -185,6 +217,7 @@ If you were using a beta/development version:
 
 ## Version History
 
+- **1.1.0** (2026-01-29) - Added Lead Gen Scanner widget
 - **1.0.0** (2026-01-21) - Initial stable release
 - **0.9.0-beta** (Development) - Feature complete, testing phase
 - **0.5.0-alpha** (Development) - Core sync functionality

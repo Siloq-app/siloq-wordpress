@@ -23,6 +23,7 @@ class Siloq_Admin {
         $api_url = get_option('siloq_api_url', '');
         $api_key = get_option('siloq_api_key', '');
         $auto_sync = get_option('siloq_auto_sync', 'no');
+        $signup_url = get_option('siloq_signup_url', '');
         
         ?>
         <div class="wrap">
@@ -86,15 +87,36 @@ class Siloq_Admin {
                             <td>
                                 <fieldset>
                                     <label>
-                                        <input 
-                                            type="checkbox" 
-                                            name="siloq_auto_sync" 
-                                            value="yes" 
+                                        <input
+                                            type="checkbox"
+                                            name="siloq_auto_sync"
+                                            value="yes"
                                             <?php checked($auto_sync, 'yes'); ?>
                                         />
                                         <?php _e('Automatically sync pages when published or updated', 'siloq-connector'); ?>
                                     </label>
                                 </fieldset>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th scope="row">
+                                <label for="siloq_signup_url">
+                                    <?php _e('Lead Gen Signup URL', 'siloq-connector'); ?>
+                                </label>
+                            </th>
+                            <td>
+                                <input
+                                    type="url"
+                                    id="siloq_signup_url"
+                                    name="siloq_signup_url"
+                                    value="<?php echo esc_attr($signup_url); ?>"
+                                    class="regular-text"
+                                    placeholder="https://app.siloq.io/signup?plan=blueprint"
+                                />
+                                <p class="description">
+                                    <?php _e('The URL where users are redirected after viewing scan results. Leave empty to use the default Siloq signup URL. Use shortcode: [siloq_scanner]', 'siloq-connector'); ?>
+                                </p>
                             </td>
                         </tr>
                     </table>
@@ -162,6 +184,7 @@ class Siloq_Admin {
         $api_url = isset($_POST['siloq_api_url']) ? sanitize_text_field($_POST['siloq_api_url']) : '';
         $api_key = isset($_POST['siloq_api_key']) ? sanitize_text_field($_POST['siloq_api_key']) : '';
         $auto_sync = isset($_POST['siloq_auto_sync']) ? 'yes' : 'no';
+        $signup_url = isset($_POST['siloq_signup_url']) ? esc_url_raw($_POST['siloq_signup_url']) : '';
         
         // Validate
         $errors = array();
@@ -193,6 +216,7 @@ class Siloq_Admin {
         update_option('siloq_api_url', $api_url);
         update_option('siloq_api_key', $api_key);
         update_option('siloq_auto_sync', $auto_sync);
+        update_option('siloq_signup_url', $signup_url);
         
         // If API credentials changed, clear cached sync statuses (optional)
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {
