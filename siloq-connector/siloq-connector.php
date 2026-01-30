@@ -267,7 +267,8 @@ class Siloq_Connector {
     }
     
     /**
-     * AJAX: Test API connection
+     * AJAX: Test API connection.
+     * Uses current form values (api_url, api_key) from POST; falls back to saved options if empty.
      */
     public function ajax_test_connection() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
@@ -277,8 +278,24 @@ class Siloq_Connector {
             return;
         }
         
+        // Prefer POST (form), then REQUEST (some servers), then saved options
+        $api_url = '';
+        $api_key = '';
+        if (!empty($_POST['siloq_api_url']) || !empty($_POST['siloq_api_key'])) {
+            $api_url = isset($_POST['siloq_api_url']) ? trim(sanitize_text_field(wp_unslash($_POST['siloq_api_url']))) : '';
+            $api_key = isset($_POST['siloq_api_key']) ? trim(sanitize_text_field(wp_unslash($_POST['siloq_api_key']))) : '';
+        }
+        if (($api_url === '' || $api_key === '') && (isset($_REQUEST['siloq_api_url']) || isset($_REQUEST['siloq_api_key']))) {
+            $api_url = isset($_REQUEST['siloq_api_url']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['siloq_api_url']))) : $api_url;
+            $api_key = isset($_REQUEST['siloq_api_key']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['siloq_api_key']))) : $api_key;
+        }
+        if ($api_url === '' || $api_key === '') {
+            $api_url = trim((string) get_option('siloq_api_url', ''));
+            $api_key = trim((string) get_option('siloq_api_key', ''));
+        }
+        
         $api_client = new Siloq_API_Client();
-        $result = $api_client->test_connection();
+        $result = $api_client->test_connection_with_credentials($api_url, $api_key);
         
         if ($result['success']) {
             wp_send_json_success($result);

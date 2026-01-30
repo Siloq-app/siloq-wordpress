@@ -157,7 +157,7 @@
     }
 
     /**
-     * Show scan results
+     * Show scan results (all real API data)
      */
     function showResults(data) {
         // Populate score and grade
@@ -174,16 +174,45 @@
             scoreCircle.css('background', 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)');
         }
 
+        // Scan meta (URL, pages analyzed, duration)
+        $('#siloq-scan-url').text(data.url ? 'Website: ' + data.url : '');
+        $('#siloq-pages-analyzed').text(data.pages_crawled != null ? 'Pages analyzed: ' + data.pages_crawled : '');
+        $('#siloq-scan-duration').text(data.scan_duration_seconds != null ? 'Scan time: ' + data.scan_duration_seconds + 's' : '');
+        if (data.url || data.pages_crawled != null || data.scan_duration_seconds != null) {
+            $('#siloq-scan-meta').show();
+        }
+
+        // Score breakdown (Technical, Content, Structure, Performance, SEO)
+        const breakdown = $('#siloq-score-breakdown');
+        breakdown.empty();
+        const scores = [
+            { label: 'Technical', value: data.technical_score },
+            { label: 'Content', value: data.content_score },
+            { label: 'Structure', value: data.structure_score },
+            { label: 'Performance', value: data.performance_score },
+            { label: 'SEO', value: data.seo_score }
+        ];
+        scores.forEach(function(s) {
+            if (s.value != null && s.value !== '') {
+                const v = Math.round(parseFloat(s.value));
+                breakdown.append('<span class="siloq-score-pill">' + escapeHtml(s.label) + ': <strong>' + v + '</strong></span>');
+            }
+        });
+        if (breakdown.children().length) {
+            breakdown.show();
+        }
+
         // Populate issues count
         $('#siloq-issues-count').text(data.total_issues);
         $('#siloq-hidden-issues').text(data.hidden_issues);
 
-        // Populate issues list
+        // All recommendations from API (use recommendations or fallback to issues)
+        const list = data.recommendations && data.recommendations.length ? data.recommendations : (data.issues || []);
         const issuesContainer = $('#siloq-issues-preview');
         issuesContainer.empty();
 
-        if (data.issues && data.issues.length > 0) {
-            data.issues.forEach(function(issue) {
+        if (list.length > 0) {
+            list.forEach(function(issue) {
                 const issueHtml = `
                     <div class="siloq-issue-item">
                         <div class="siloq-issue-category">${escapeHtml(issue.category)}</div>
@@ -204,16 +233,110 @@
     }
 
     /**
-     * Handle CTA button click
+     * Handle CTA button click – fetch and show full report inline
      */
     function handleCtaClick(e) {
         e.preventDefault();
 
-        const widget = $(this).closest('.siloq-scanner-widget');
-        const signupUrl = widget.data('signup-url') || siloqScanner.signupUrl;
+        if (!scanId) {
+            return;
+        }
 
-        // Redirect to signup page
-        window.location.href = signupUrl;
+        const $btn = $(this);
+        const originalText = $btn.text();
+        $btn.prop('disabled', true).text('Loading report...');
+
+        $.ajax({
+            url: siloqScanner.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'siloq_get_full_report',
+                nonce: siloqScanner.nonce,
+                scan_id: scanId
+            },
+            success: function(response) {
+                if (response.success && response.data) {
+                    replaceWithFullReport(response.data);
+                } else {
+                    showReportError(response.data && response.data.message ? response.data.message : 'Could not load report.');
+                    $btn.prop('disabled', false).text(originalText);
+                }
+            },
+            error: function(xhr, status, err) {
+                showReportError('Network error. Please try again.');
+                $btn.prop('disabled', false).text(originalText);
+            }
+        });
+    }
+
+    /**
+     * Replace results area with full Keyword Cannibalization Report
+     */
+    function replaceWithFullReport(report) {
+        const signupUrl = siloqScanner.signupUrl || '#';
+        const sep = signupUrl.indexOf('?') >= 0 ? '&' : '?';
+        const ctaUrl = signupUrl + sep + (report.upgrade_cta && report.upgrade_cta.scan_id_param ? report.upgrade_cta.scan_id_param : 'scan_id') + '=' + encodeURIComponent(report.scan_id);
+
+        const summary = report.scan_summary || {};
+        const details = report.keyword_cannibalization_details || [];
+        const educational = report.educational_explanation || {};
+        const locked = report.locked_recommendations || [];
+        const ctaLabel = (report.upgrade_cta && report.upgrade_cta.label) ? report.upgrade_cta.label : 'Unlock Full Report & Fix Issues';
+
+        let summaryHtml = '<div class="siloq-full-report">' +
+            '<h3 class="siloq-report-heading">Keyword Cannibalization Report</h3>' +
+            '<section class="siloq-report-summary">' +
+            '<h4>Scan Summary</h4>' +
+            '<ul class="siloq-report-summary-list">' +
+            '<li><strong>Website scanned</strong>: ' + escapeHtml(summary.website_url || '') + '</li>' +
+            '<li><strong>Pages analyzed</strong>: ' + escapeHtml(String(summary.total_pages_analyzed != null ? summary.total_pages_analyzed : 0)) + '</li>' +
+            '<li><strong>Cannibalization conflicts</strong>: ' + escapeHtml(String(summary.total_cannibalization_conflicts != null ? summary.total_cannibalization_conflicts : 0)) + '</li>' +
+            '<li><strong>Overall risk</strong>: <span class="siloq-risk-badge siloq-risk-' + (summary.overall_risk_level || 'low').toLowerCase() + '">' + escapeHtml(summary.overall_risk_level || 'Low') + '</span></li>' +
+            '</ul></section>';
+
+        if (details.length) {
+            summaryHtml += '<section class="siloq-report-keywords"><h4>Keyword Cannibalization Details</h4><div class="siloq-keyword-list">';
+            details.forEach(function(item) {
+                const urls = item.conflicting_urls || [];
+                const urlsList = urls.slice(0, 3).map(function(u) { return '<span class="siloq-conflict-url">' + escapeHtml(u) + '</span>'; }).join(', ');
+                summaryHtml += '<div class="siloq-keyword-detail">' +
+                    '<div class="siloq-keyword-name">' + escapeHtml(item.keyword || '') + '</div>' +
+                    '<div class="siloq-keyword-meta">' +
+                    '<span class="siloq-conflict-type">' + escapeHtml(item.conflict_type || '') + '</span> ' +
+                    '<span class="siloq-severity siloq-severity-' + (item.severity || 'medium').toLowerCase() + '">' + escapeHtml(item.severity || '') + '</span>' +
+                    '</div>' +
+                    (urlsList ? '<div class="siloq-conflicting-urls">' + urlsList + '</div>' : '') +
+                    '</div>';
+            });
+            summaryHtml += '</div></section>';
+        }
+
+        summaryHtml += '<section class="siloq-report-educational">' +
+            '<h4>' + escapeHtml(educational.title || 'What is keyword cannibalization?') + '</h4>' +
+            '<p>' + escapeHtml(educational.body || '') + '</p></section>';
+
+        summaryHtml += '<section class="siloq-report-locked">' +
+            '<h4>Recommended fixes (unlock to view)</h4>' +
+            '<ul class="siloq-locked-list">';
+        locked.forEach(function(title) {
+            summaryHtml += '<li class="siloq-locked-item">' + escapeHtml(title) + '</li>';
+        });
+        summaryHtml += '</ul></section>';
+
+        summaryHtml += '<div class="siloq-report-cta-wrap">' +
+            '<a href="' + escapeHtml(ctaUrl) + '" class="siloq-cta-btn siloq-upgrade-cta">' + escapeHtml(ctaLabel) + '</a>' +
+            '</div></div>';
+
+        $('#siloq-scanner-results').html(summaryHtml);
+    }
+
+    /**
+     * Show error message in results area
+     */
+    function showReportError(message) {
+        $('#siloq-scanner-results').prepend(
+            '<div class="siloq-error-message siloq-report-error">' + escapeHtml(message) + '</div>'
+        );
     }
 
     /**

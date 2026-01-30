@@ -14,20 +14,25 @@
             e.preventDefault();
             
             const $button = $(this);
+            const $form = $button.closest('form');
             const $status = $('#siloq-connection-status');
+            // Read from the same form by name (works even if IDs differ)
+            const apiUrl = ($form.length ? $form.find('input[name="siloq_api_url"]') : $('input[name="siloq_api_url"]')).val();
+            const apiKey = ($form.length ? $form.find('input[name="siloq_api_key"]') : $('input[name="siloq_api_key"]')).val();
             
             // Disable button and show loading
             $button.prop('disabled', true).addClass('siloq-syncing');
             $status.removeClass('success error').addClass('loading')
                 .html('<span class="siloq-loading"></span> ' + siloqAjax.strings.testing);
             
-            // Make AJAX request
             $.ajax({
                 url: siloqAjax.ajaxurl,
                 type: 'POST',
                 data: {
                     action: 'siloq_test_connection',
-                    nonce: siloqAjax.nonce
+                    nonce: siloqAjax.nonce,
+                    siloq_api_url: apiUrl ? String(apiUrl).trim() : '',
+                    siloq_api_key: apiKey ? String(apiKey).trim() : ''
                 },
                 success: function(response) {
                     $button.prop('disabled', false).removeClass('siloq-syncing');

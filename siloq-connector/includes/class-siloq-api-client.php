@@ -29,7 +29,7 @@ class Siloq_API_Client {
     }
     
     /**
-     * Test API connection
+     * Test API connection (uses saved options from constructor).
      */
     public function test_connection() {
         if (empty($this->api_url) || empty($this->api_key)) {
@@ -38,19 +38,59 @@ class Siloq_API_Client {
                 'message' => __('API URL and API Key are required', 'siloq-connector')
             );
         }
-        
-        $response = $this->make_request('POST', '/auth/verify', array());
-        
-        if (is_wp_error($response)) {
+        return $this->test_connection_with_credentials($this->api_url, $this->api_key);
+    }
+
+    /**
+     * Test API connection using provided URL and key (e.g. from form before save).
+     * Use this so "Test Connection" works with current form values without saving first.
+     *
+     * @param string $api_url Base API URL (e.g. http://localhost:8000/api/v1).
+     * @param string $api_key API key.
+     * @return array { success: bool, message: string, data?: array }
+     */
+    public function test_connection_with_credentials($api_url, $api_key) {
+        $api_url = is_string($api_url) ? trim($api_url) : '';
+        $api_key = is_string($api_key) ? trim($api_key) : '';
+        if (empty($api_url) || empty($api_key)) {
             return array(
                 'success' => false,
-                'message' => $response->get_error_message()
+                'message' => __('API URL and API Key are required', 'siloq-connector')
             );
         }
-        
+        $base = rtrim($api_url, '/');
+        $url = $base . '/auth/verify';
+        $args = array(
+            'method'  => 'POST',
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'   => 'application/json',
+                'Accept'        => 'application/json',
+                'User-Agent'    => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION,
+            ),
+            'timeout' => 30,
+            'sslverify' => true,
+        );
+        $response = wp_remote_request($url, $args);
+        if (is_wp_error($response)) {
+            $msg = $response->get_error_message();
+            // Friendlier message for "could not connect" (e.g. WordPress in Docker, API on host)
+            if (strpos($msg, 'Failed to connect') !== false || strpos($msg, 'Could not connect') !== false) {
+                $hint = '';
+                if (strpos($api_url, 'localhost') !== false) {
+                    $hint = ' ' . __('If WordPress runs in Docker, use host.docker.internal instead of localhost (e.g. http://host.docker.internal:8000/api/v1). Otherwise ensure the Siloq API is running and reachable.', 'siloq-connector');
+                } else {
+                    $hint = ' ' . __('Ensure the Siloq API is running and the URL is reachable from this server.', 'siloq-connector');
+                }
+                $msg = $msg . $hint;
+            }
+            return array(
+                'success' => false,
+                'message' => $msg
+            );
+        }
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $code = wp_remote_retrieve_response_code($response);
-        
         if ($code === 200 && isset($body['authenticated']) && $body['authenticated']) {
             return array(
                 'success' => true,
@@ -58,7 +98,6 @@ class Siloq_API_Client {
                 'data' => $body
             );
         }
-        
         return array(
             'success' => false,
             'message' => isset($body['error']) ? $body['error'] : __('Authentication failed', 'siloq-connector')

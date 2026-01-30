@@ -42,6 +42,9 @@ class Siloq_Lead_Gen_Scanner {
         add_action('wp_ajax_siloq_poll_scan', array($this, 'ajax_poll_scan'));
         add_action('wp_ajax_nopriv_siloq_poll_scan', array($this, 'ajax_poll_scan'));
 
+        add_action('wp_ajax_siloq_get_full_report', array($this, 'ajax_get_full_report'));
+        add_action('wp_ajax_nopriv_siloq_get_full_report', array($this, 'ajax_get_full_report'));
+
         // Enqueue scripts and styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_assets'));
     }
@@ -164,7 +167,7 @@ class Siloq_Lead_Gen_Scanner {
                 </div>
             </div>
 
-            <!-- Step 3: Results -->
+            <!-- Step 3: Results (real API data) -->
             <div class="siloq-scanner-results" id="siloq-scanner-results" style="display: none;">
                 <div class="siloq-score-display">
                     <div class="siloq-score-circle">
@@ -174,12 +177,22 @@ class Siloq_Lead_Gen_Scanner {
                     <div class="siloq-grade-badge" id="siloq-grade-badge">F</div>
                 </div>
 
+                <div class="siloq-scan-meta" id="siloq-scan-meta">
+                    <span id="siloq-scan-url"></span>
+                    <span id="siloq-pages-analyzed"></span>
+                    <span id="siloq-scan-duration"></span>
+                </div>
+
+                <div class="siloq-score-breakdown" id="siloq-score-breakdown">
+                    <!-- Technical, Content, Structure, Performance, SEO scores injected by JS -->
+                </div>
+
                 <h3 class="siloq-results-title">
                     <span id="siloq-issues-count">0</span> Critical Issues Found
                 </h3>
 
                 <div class="siloq-issues-preview" id="siloq-issues-preview">
-                    <!-- Issues will be injected here by JS -->
+                    <!-- All recommendations from API injected by JS -->
                 </div>
 
                 <div class="siloq-cta-section">
@@ -234,8 +247,12 @@ class Siloq_Lead_Gen_Scanner {
      * AJAX: Submit scan request
      */
     public function ajax_submit_scan() {
-        // Verify nonce
-        check_ajax_referer('siloq_scanner_nonce', 'nonce');
+        // Verify nonce (wp_verify_nonce avoids 403 when Referer is stripped)
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'siloq_scanner_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'));
+            return;
+        }
 
         // Validate inputs
         $website_url = isset($_POST['website_url']) ? esc_url_raw($_POST['website_url']) : '';
@@ -256,14 +273,11 @@ class Siloq_Lead_Gen_Scanner {
         // Store lead in WordPress (for future marketing)
         $this->store_lead($website_url, $email);
 
-        // Dummy API: return fake scan ID when no real API or dummy mode enabled
-        if ($this->use_dummy_scan()) {
-            $dummy_scan_id = 'dummy-' . time();
-            $this->update_lead_scan_id($email, $dummy_scan_id);
-            wp_send_json_success(array(
-                'scan_id' => $dummy_scan_id,
-                'status' => 'processing',
-                'message' => 'Scan started successfully.',
+        // Require API to be configured – no dummy data
+        $api_url = get_option('siloq_api_url', '');
+        if (empty($api_url)) {
+            wp_send_json_error(array(
+                'message' => 'Please configure Siloq API URL and API Key in the plugin settings (Settings → Siloq).',
             ));
             return;
         }
@@ -273,6 +287,7 @@ class Siloq_Lead_Gen_Scanner {
             'url' => $website_url,
             'scan_type' => 'full',
         ));
+        
 
         if (is_wp_error($response)) {
             wp_send_json_error(array(
@@ -303,10 +318,14 @@ class Siloq_Lead_Gen_Scanner {
      * AJAX: Poll scan results
      */
     public function ajax_poll_scan() {
-        // Verify nonce
-        check_ajax_referer('siloq_scanner_nonce', 'nonce');
+        // Verify nonce (wp_verify_nonce avoids 403 when Referer is stripped)
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'siloq_scanner_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'));
+            return;
+        }
 
-        $scan_id = isset($_POST['scan_id']) ? sanitize_text_field($_POST['scan_id']) : '';
+        $scan_id = isset($_POST['scan_id']) ? sanitize_text_field(wp_unslash($_POST['scan_id'])) : '';
 
         if (empty($scan_id)) {
             wp_send_json_error(array(
@@ -314,13 +333,10 @@ class Siloq_Lead_Gen_Scanner {
             ));
         }
 
-        // Dummy API: return completed mock data for dummy scan IDs
-        if ($this->use_dummy_scan() && strpos($scan_id, 'dummy-') === 0) {
-            $teaser_data = $this->get_dummy_teaser_data();
-            wp_send_json_success(array(
-                'status' => 'completed',
-                'completed' => true,
-                'data' => $teaser_data,
+        $api_url = get_option('siloq_api_url', '');
+        if (empty($api_url)) {
+            wp_send_json_error(array(
+                'message' => 'API not configured. Please configure Siloq API in plugin settings.',
             ));
             return;
         }
@@ -358,14 +374,14 @@ class Siloq_Lead_Gen_Scanner {
             ));
         }
 
-        // If completed, extract teaser data (score + top 3 issues)
+        // If completed, return full scan data for display (real API data only)
         if ($scan_data['status'] === 'completed') {
-            $teaser_data = $this->extract_teaser_data($scan_data);
+            $display_data = $this->build_scan_display_data($scan_data);
 
             wp_send_json_success(array(
                 'status' => 'completed',
                 'completed' => true,
-                'data' => $teaser_data,
+                'data' => $display_data,
             ));
         }
 
@@ -375,41 +391,134 @@ class Siloq_Lead_Gen_Scanner {
     }
 
     /**
-     * Extract teaser data from full scan results
-     * Shows: Overall score + grade + top 3 high-priority recommendations
+     * AJAX: Get full lead-gen report (Keyword Cannibalization Report)
      */
-    private function extract_teaser_data($scan_data) {
+    public function ajax_get_full_report() {
+        $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'siloq_scanner_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed. Please refresh the page and try again.'));
+            return;
+        }
+
+        $scan_id = isset($_POST['scan_id']) ? sanitize_text_field(wp_unslash($_POST['scan_id'])) : '';
+
+        if (empty($scan_id)) {
+            wp_send_json_error(array('message' => 'Invalid scan ID.'));
+        }
+
+        $api_url = get_option('siloq_api_url', '');
+        if (empty($api_url) || strpos($scan_id, 'dummy-') === 0) {
+            wp_send_json_error(array(
+                'message' => 'Configure Siloq API and run a real scan to view the full report.',
+            ));
+            return;
+        }
+
+        $response = $this->api_client->request('GET', '/scans/' . $scan_id . '/report', array());
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array(
+                'message' => 'Could not load report. Please try again.',
+                'error' => $response->get_error_message(),
+            ));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200 || empty($body)) {
+            wp_send_json_error(array(
+                'message' => 'Invalid report response. Please try again.',
+            ));
+        }
+
+        wp_send_json_success($body);
+    }
+
+    /**
+     * Mock full report for dummy scan (no backend)
+     */
+    private function get_dummy_full_report($scan_id) {
+        return array(
+            'scan_id' => $scan_id,
+            'scan_summary' => array(
+                'website_url' => 'https://example.com',
+                'total_pages_analyzed' => 12,
+                'total_cannibalization_conflicts' => 4,
+                'overall_risk_level' => 'Medium',
+            ),
+            'keyword_cannibalization_details' => array(
+                array(
+                    'keyword' => 'best running shoes',
+                    'conflicting_urls' => array('https://example.com/shoes', 'https://example.com/best-shoes'),
+                    'conflict_type' => 'same keyword',
+                    'severity' => 'High',
+                ),
+                array(
+                    'keyword' => 'running gear guide',
+                    'conflicting_urls' => array('https://example.com/gear', 'https://example.com/guides'),
+                    'conflict_type' => 'same intent',
+                    'severity' => 'Medium',
+                ),
+            ),
+            'educational_explanation' => array(
+                'title' => 'What is keyword cannibalization?',
+                'body' => 'Keyword cannibalization occurs when multiple pages on your site target the same or very similar keywords. Search engines may split rankings between these pages or pick the wrong one, which hurts your visibility and traffic. Consolidating or clearly differentiating content helps you rank better and gives users a clearer path.',
+            ),
+            'locked_recommendations' => array(
+                'Page consolidation',
+                'Primary keyword assignment',
+                'Content silo restructuring',
+            ),
+            'upgrade_cta' => array(
+                'label' => 'Unlock Full Report & Fix Issues',
+                'scan_id_param' => 'scan_id',
+            ),
+        );
+    }
+
+    /**
+     * Build full display data from scan API response (all real API data).
+     */
+    private function build_scan_display_data($scan_data) {
         $recommendations = isset($scan_data['recommendations']) ? $scan_data['recommendations'] : array();
 
-        // Filter high-priority recommendations only
-        $high_priority = array_filter($recommendations, function($rec) {
-            return isset($rec['priority']) && $rec['priority'] === 'high';
-        });
-
-        // Get top 3 issues
-        $top_issues = array_slice($high_priority, 0, 3);
-
-        // Format for frontend
+        // Format all recommendations for frontend (category, issue, action, priority)
         $formatted_issues = array();
-        foreach ($top_issues as $issue) {
+        foreach ($recommendations as $rec) {
             $formatted_issues[] = array(
-                'category' => ucfirst($issue['category'] ?? 'SEO'),
-                'issue' => $issue['issue'] ?? 'Issue detected',
-                'action' => $issue['action'] ?? 'Action required',
+                'category' => ucfirst($rec['category'] ?? 'SEO'),
+                'issue' => $rec['issue'] ?? 'Issue detected',
+                'action' => $rec['action'] ?? 'Action required',
+                'priority' => $rec['priority'] ?? 'medium',
             );
         }
 
-        // Calculate hidden issues count
         $total_issues = count($recommendations);
         $hidden_count = max(0, $total_issues - 3);
 
         return array(
-            'overall_score' => round($scan_data['overall_score'] ?? 0),
+            // Summary (backward compatible)
+            'overall_score' => round((float) ($scan_data['overall_score'] ?? 0)),
             'grade' => $scan_data['grade'] ?? 'F',
+            'url' => $scan_data['url'] ?? '',
             'issues' => $formatted_issues,
             'total_issues' => $total_issues,
             'hidden_issues' => $hidden_count,
-            'url' => $scan_data['url'] ?? '',
+            // Full API data
+            'pages_crawled' => (int) ($scan_data['pages_crawled'] ?? 0),
+            'scan_duration_seconds' => isset($scan_data['scan_duration_seconds']) ? (int) $scan_data['scan_duration_seconds'] : null,
+            'technical_score' => isset($scan_data['technical_score']) ? (float) $scan_data['technical_score'] : null,
+            'content_score' => isset($scan_data['content_score']) ? (float) $scan_data['content_score'] : null,
+            'structure_score' => isset($scan_data['structure_score']) ? (float) $scan_data['structure_score'] : null,
+            'performance_score' => isset($scan_data['performance_score']) ? (float) $scan_data['performance_score'] : null,
+            'seo_score' => isset($scan_data['seo_score']) ? (float) $scan_data['seo_score'] : null,
+            'recommendations' => $formatted_issues,
+            'technical_details' => isset($scan_data['technical_details']) ? $scan_data['technical_details'] : array(),
+            'content_details' => isset($scan_data['content_details']) ? $scan_data['content_details'] : array(),
+            'structure_details' => isset($scan_data['structure_details']) ? $scan_data['structure_details'] : array(),
+            'performance_details' => isset($scan_data['performance_details']) ? $scan_data['performance_details'] : array(),
+            'seo_details' => isset($scan_data['seo_details']) ? $scan_data['seo_details'] : array(),
         );
     }
 
