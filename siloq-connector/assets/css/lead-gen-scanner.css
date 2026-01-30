@@ -1,9 +1,74 @@
 /**
  * Siloq Lead Gen Scanner Styles
+ * Matches Lead Generation page UI (header, card, error box)
  *
  * @package Siloq_Connector
  * @since 2.1.0
  */
+
+/* Lead Gen page wrapper */
+.siloq-lead-gen-wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Golden header bar */
+.siloq-lead-gen-header {
+    background: linear-gradient(135deg, #f5d547 0%, #e8c220 100%);
+    padding: 12px 20px;
+    margin: 0 -16px 24px -16px;
+    border-radius: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.siloq-lead-gen-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 640px;
+    margin: 0 auto;
+}
+.siloq-lead-gen-logo {
+    background: rgba(255,255,255,0.5);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #555;
+    font-weight: 600;
+}
+.siloq-lead-gen-menu {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: #333;
+    line-height: 1;
+}
+.siloq-lead-gen-contact {
+    background: #2563eb;
+    color: #fff !important;
+    padding: 8px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+}
+.siloq-lead-gen-contact:hover {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+/* Page title */
+.siloq-lead-gen-page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 24px 0;
+    text-align: left;
+}
 
 .siloq-scanner-widget {
     max-width: 600px;
@@ -51,10 +116,11 @@
     width: 100%;
     padding: 14px 16px;
     font-size: 16px;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    transition: border-color 0.3s ease;
+    border: 1px solid #000;
+    border-radius: 4px;
+    transition: border-color 0.2s ease;
     box-sizing: border-box;
+    background: #fff;
 }
 
 .siloq-form-group input:focus {
@@ -69,7 +135,7 @@
     font-size: 18px;
     font-weight: 600;
     color: #ffffff;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -100,9 +166,10 @@
 }
 
 .siloq-error-message {
-    background: #fee;
-    color: #c33;
+    background: #fef2f2;
+    color: #b91c1c;
     padding: 12px 16px;
+    border: 1px solid #b91c1c;
     border-radius: 6px;
     margin-top: 16px;
     font-size: 14px;

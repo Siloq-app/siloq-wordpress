@@ -360,6 +360,18 @@ class Siloq_API_Client {
         
         return $response;
     }
+
+    /**
+     * Public request method for scanner and other callers
+     *
+     * @param string $method   HTTP method (GET, POST, etc.)
+     * @param string $endpoint Endpoint path (e.g. /scans)
+     * @param array  $data     Request body/data
+     * @return array|WP_Error
+     */
+    public function request($method, $endpoint, $data = array()) {
+        return $this->make_request($method, $endpoint, $data);
+    }
     
     /**
      * Validate API credentials

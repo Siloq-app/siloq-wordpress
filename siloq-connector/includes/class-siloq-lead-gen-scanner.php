@@ -90,10 +90,28 @@ class Siloq_Lead_Gen_Scanner {
             'title' => 'Free SEO Audit',
             'button_text' => 'Scan My Site',
             'signup_url' => $this->get_signup_url(),
+            'show_page_title' => 'yes',
+            'show_header' => 'yes',
+            'contact_url' => '#',
         ), $atts, 'siloq_scanner');
 
         ob_start();
         ?>
+        <div class="siloq-lead-gen-wrap">
+            <?php if ($atts['show_header'] === 'yes') : ?>
+            <header class="siloq-lead-gen-header">
+                <div class="siloq-lead-gen-header-inner">
+                    <span class="siloq-lead-gen-logo">Logo.</span>
+                    <button type="button" class="siloq-lead-gen-menu" aria-label="Menu">&#9776;</button>
+                    <a href="<?php echo esc_url($atts['contact_url']); ?>" class="siloq-lead-gen-contact">Contact Us</a>
+                </div>
+            </header>
+            <?php endif; ?>
+
+            <?php if ($atts['show_page_title'] === 'yes') : ?>
+            <h1 class="siloq-lead-gen-page-title">Lead Generation</h1>
+            <?php endif; ?>
+
         <div class="siloq-scanner-widget" data-signup-url="<?php echo esc_url($atts['signup_url']); ?>">
             <!-- Step 1: Input Form -->
             <div class="siloq-scanner-form" id="siloq-scanner-form">
@@ -107,7 +125,8 @@ class Siloq_Lead_Gen_Scanner {
                             type="url"
                             id="siloq-website-url"
                             name="website_url"
-                            placeholder="https://yourwebsite.com"
+                            placeholder="https://crystallizedcouture.com"
+                            value=""
                             required
                             pattern="https?://.+"
                         />
@@ -119,7 +138,8 @@ class Siloq_Lead_Gen_Scanner {
                             type="email"
                             id="siloq-email"
                             name="email"
-                            placeholder="you@example.com"
+                            placeholder="nicolette@crystallizedcouture.com"
+                            value=""
                             required
                         />
                     </div>
@@ -129,9 +149,9 @@ class Siloq_Lead_Gen_Scanner {
                     </button>
 
                     <p class="siloq-privacy-note">We respect your privacy. No spam, ever.</p>
-                </form>
 
-                <div class="siloq-error-message" id="siloq-error-message" style="display: none;"></div>
+                    <div class="siloq-error-message" id="siloq-error-message" style="display: none;"></div>
+                </form>
             </div>
 
             <!-- Step 2: Scanning Progress -->
@@ -176,8 +196,38 @@ class Siloq_Lead_Gen_Scanner {
                 </div>
             </div>
         </div>
+        </div><!-- .siloq-lead-gen-wrap -->
         <?php
         return ob_get_clean();
+    }
+
+    /**
+     * Whether to use dummy scan API (no real backend)
+     */
+    private function use_dummy_scan() {
+        if (get_option('siloq_use_dummy_scan', 'yes') === 'yes') {
+            return true;
+        }
+        $api_url = get_option('siloq_api_url', '');
+        return empty($api_url);
+    }
+
+    /**
+     * Dummy teaser data for testing
+     */
+    private function get_dummy_teaser_data($url = '') {
+        return array(
+            'overall_score' => 62,
+            'grade' => 'D',
+            'issues' => array(
+                array('category' => 'Technical SEO', 'issue' => 'Missing meta description on key pages', 'action' => 'Add unique meta descriptions under 160 characters'),
+                array('category' => 'Content', 'issue' => 'Thin content on product pages', 'action' => 'Expand product copy with benefits and keywords'),
+                array('category' => 'Performance', 'issue' => 'Large images slowing page load', 'action' => 'Compress and use next-gen formats (WebP)'),
+            ),
+            'total_issues' => 8,
+            'hidden_issues' => 5,
+            'url' => $url,
+        );
     }
 
     /**
@@ -206,20 +256,27 @@ class Siloq_Lead_Gen_Scanner {
         // Store lead in WordPress (for future marketing)
         $this->store_lead($website_url, $email);
 
+        // Dummy API: return fake scan ID when no real API or dummy mode enabled
+        if ($this->use_dummy_scan()) {
+            $dummy_scan_id = 'dummy-' . time();
+            $this->update_lead_scan_id($email, $dummy_scan_id);
+            wp_send_json_success(array(
+                'scan_id' => $dummy_scan_id,
+                'status' => 'processing',
+                'message' => 'Scan started successfully.',
+            ));
+            return;
+        }
+
         // Submit scan to Siloq API
         $response = $this->api_client->request('POST', '/scans', array(
-            'body' => json_encode(array(
-                'url' => $website_url,
-                'scan_type' => 'full',
-            )),
-            'headers' => array(
-                'Content-Type' => 'application/json',
-            ),
+            'url' => $website_url,
+            'scan_type' => 'full',
         ));
 
         if (is_wp_error($response)) {
             wp_send_json_error(array(
-                'message' => 'Unable to start scan. Please try again.',
+                'message' => 'Network error. Please check your connection and try again.',
                 'error' => $response->get_error_message(),
             ));
         }
@@ -237,7 +294,7 @@ class Siloq_Lead_Gen_Scanner {
 
         wp_send_json_success(array(
             'scan_id' => $scan_data['id'],
-            'status' => $scan_data['status'],
+            'status' => isset($scan_data['status']) ? $scan_data['status'] : 'processing',
             'message' => 'Scan started successfully.',
         ));
     }
@@ -257,12 +314,23 @@ class Siloq_Lead_Gen_Scanner {
             ));
         }
 
+        // Dummy API: return completed mock data for dummy scan IDs
+        if ($this->use_dummy_scan() && strpos($scan_id, 'dummy-') === 0) {
+            $teaser_data = $this->get_dummy_teaser_data();
+            wp_send_json_success(array(
+                'status' => 'completed',
+                'completed' => true,
+                'data' => $teaser_data,
+            ));
+            return;
+        }
+
         // Get scan results from Siloq API
         $response = $this->api_client->request('GET', '/scans/' . $scan_id);
 
         if (is_wp_error($response)) {
             wp_send_json_error(array(
-                'message' => 'Unable to retrieve scan results.',
+                'message' => 'Network error. Please check your connection and try again.',
                 'error' => $response->get_error_message(),
             ));
         }

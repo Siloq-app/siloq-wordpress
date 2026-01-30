@@ -226,6 +226,10 @@ class Siloq_Connector {
      * Show admin notices
      */
     public function show_admin_notices() {
+        // When using dummy scan only, skip API notice
+        if (get_option('siloq_use_dummy_scan', 'yes') === 'yes') {
+            return;
+        }
         // Check if API settings are configured
         $api_url = get_option('siloq_api_url');
         $api_key = get_option('siloq_api_key');
@@ -498,6 +502,7 @@ function siloq_activate() {
     add_option('siloq_api_url', '');
     add_option('siloq_api_key', '');
     add_option('siloq_auto_sync', 'no');
+    add_option('siloq_use_dummy_scan', 'yes');
     
     // Flush rewrite rules
     flush_rewrite_rules();
