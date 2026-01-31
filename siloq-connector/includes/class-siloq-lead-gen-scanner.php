@@ -55,8 +55,15 @@ class Siloq_Lead_Gen_Scanner {
     public function enqueue_assets() {
         // Only enqueue if shortcode is present on the page
         global $post;
-        if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'siloq_scanner')) {
-            wp_enqueue_style(
+        if (!$post || !is_a($post, 'WP_Post')) {
+            return;
+        }
+        $content = isset($post->post_content) && is_string($post->post_content) ? $post->post_content : '';
+        if ($content === '' || !has_shortcode($content, 'siloq_scanner')) {
+            return;
+        }
+
+        wp_enqueue_style(
                 'siloq-lead-gen-scanner',
                 SILOQ_PLUGIN_URL . 'assets/css/lead-gen-scanner.css',
                 array(),
@@ -71,12 +78,11 @@ class Siloq_Lead_Gen_Scanner {
                 true
             );
 
-            wp_localize_script('siloq-lead-gen-scanner', 'siloqScanner', array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('siloq_scanner_nonce'),
-                'signupUrl' => $this->get_signup_url(),
-            ));
-        }
+        wp_localize_script('siloq-lead-gen-scanner', 'siloqScanner', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('siloq_scanner_nonce'),
+            'signupUrl' => $this->get_signup_url(),
+        ));
     }
 
     /**

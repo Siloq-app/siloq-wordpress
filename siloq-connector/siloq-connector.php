@@ -178,6 +178,9 @@ class Siloq_Connector {
         }
         
         global $post;
+        if (!$post || !is_a($post, 'WP_Post')) {
+            return;
+        }
         
         // Check if page has Siloq-generated content
         $has_siloq_content = get_post_meta($post->ID, '_siloq_generated_from', true);
@@ -255,6 +258,9 @@ class Siloq_Connector {
         }
         
         global $post;
+        if (!$post || !is_a($post, 'WP_Post')) {
+            return;
+        }
         $schema_markup = get_post_meta($post->ID, '_siloq_schema_markup', true);
         
         if (!empty($schema_markup)) {
