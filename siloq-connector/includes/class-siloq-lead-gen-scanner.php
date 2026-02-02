@@ -134,7 +134,7 @@ class Siloq_Lead_Gen_Scanner {
                             type="url"
                             id="siloq-website-url"
                             name="website_url"
-                            placeholder="https://crystallizedcouture.com"
+                            placeholder="https://domain.com"
                             value=""
                             required
                             pattern="https?://.+"
@@ -147,7 +147,7 @@ class Siloq_Lead_Gen_Scanner {
                             type="email"
                             id="siloq-email"
                             name="email"
-                            placeholder="nicolette@crystallizedcouture.com"
+                            placeholder="name@domain.com"
                             value=""
                             required
                         />
