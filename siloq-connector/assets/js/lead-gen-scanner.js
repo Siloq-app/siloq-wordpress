@@ -273,9 +273,12 @@
      * Replace results area with full Keyword Cannibalization Report
      */
     function replaceWithFullReport(report) {
-        const signupUrl = siloqScanner.signupUrl || '#';
-        const sep = signupUrl.indexOf('?') >= 0 ? '&' : '?';
-        const ctaUrl = signupUrl + sep + (report.upgrade_cta && report.upgrade_cta.scan_id_param ? report.upgrade_cta.scan_id_param : 'scan_id') + '=' + encodeURIComponent(report.scan_id);
+        // Use current page origin so CTA goes to same site (e.g. localhost:3000 or your domain)
+        const baseUrl = window.location.origin;
+        const signupPath = '/signup?plan=blueprint';
+        const sep = signupPath.indexOf('?') >= 0 ? '&' : '?';
+        const scanIdParam = (report.upgrade_cta && report.upgrade_cta.scan_id_param) ? report.upgrade_cta.scan_id_param : 'scan_id';
+        const ctaUrl = baseUrl + signupPath + sep + scanIdParam + '=' + encodeURIComponent(report.scan_id);
 
         const summary = report.scan_summary || {};
         const details = report.keyword_cannibalization_details || [];
