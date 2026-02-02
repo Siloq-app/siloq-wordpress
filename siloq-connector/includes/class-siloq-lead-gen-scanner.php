@@ -108,13 +108,7 @@ class Siloq_Lead_Gen_Scanner {
         ?>
         <div class="siloq-lead-gen-wrap">
             <?php if ($atts['show_header'] === 'yes') : ?>
-            <header class="siloq-lead-gen-header">
-                <div class="siloq-lead-gen-header-inner">
-                    <span class="siloq-lead-gen-logo">Logo.</span>
-                    <button type="button" class="siloq-lead-gen-menu" aria-label="Menu">&#9776;</button>
-                    <a href="<?php echo esc_url($atts['contact_url']); ?>" class="siloq-lead-gen-contact">Contact Us</a>
-                </div>
-            </header>
+     
             <?php endif; ?>
 
             <?php if ($atts['show_page_title'] === 'yes') : ?>
