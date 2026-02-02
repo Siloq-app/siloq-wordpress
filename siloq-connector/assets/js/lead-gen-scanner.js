@@ -273,8 +273,15 @@
      * Replace results area with full Keyword Cannibalization Report
      */
     function replaceWithFullReport(report) {
-        // Use current page origin so CTA goes to same site (e.g. localhost:3000 or your domain)
-        const baseUrl = window.location.origin;
+        // CTA redirects to https://siloq.ai signup with scan_id (custom signup_url origin used if set)
+        let baseUrl = 'https://siloq.ai';
+        if (siloqScanner.signupUrl && siloqScanner.signupUrl !== '#') {
+            try {
+                baseUrl = new URL(siloqScanner.signupUrl).origin;
+            } catch (e) {
+                baseUrl = 'https://siloq.ai';
+            }
+        }
         const signupPath = '/signup?plan=blueprint';
         const sep = signupPath.indexOf('?') >= 0 ? '&' : '?';
         const scanIdParam = (report.upgrade_cta && report.upgrade_cta.scan_id_param) ? report.upgrade_cta.scan_id_param : 'scan_id';

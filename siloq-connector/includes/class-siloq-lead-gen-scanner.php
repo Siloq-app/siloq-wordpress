@@ -612,9 +612,7 @@ class Siloq_Lead_Gen_Scanner {
             return $custom_url;
         }
 
-        // Default to Siloq signup with BLUEPRINT plan
-        $base_url = get_option('siloq_api_base_url', 'https://api.siloq.io/v1');
-        $app_url = str_replace('/v1', '', str_replace('api.', 'app.', $base_url));
-        return $app_url . '/signup?plan=blueprint';
+        // Default to https://siloq.ai signup with BLUEPRINT plan
+        return 'https://siloq.ai/signup?plan=blueprint';
     }
 }
