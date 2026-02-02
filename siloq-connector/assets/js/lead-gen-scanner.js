@@ -273,14 +273,17 @@
      * Replace results area with full Keyword Cannibalization Report
      */
     function replaceWithFullReport(report) {
-        // CTA redirects to https://siloq.ai signup with scan_id (custom signup_url origin used if set)
-        let baseUrl = 'https://siloq.ai';
+        // CTA redirects to https://siloq.ai signup with scan_id (never localhost in production)
+        const PRODUCTION_SIGNUP_ORIGIN = 'https://siloq.ai';
+        let baseUrl = PRODUCTION_SIGNUP_ORIGIN;
         if (siloqScanner.signupUrl && siloqScanner.signupUrl !== '#') {
             try {
-                baseUrl = new URL(siloqScanner.signupUrl).origin;
-            } catch (e) {
-                baseUrl = 'https://siloq.ai';
-            }
+                var origin = new URL(siloqScanner.signupUrl).origin;
+                // Never use localhost so production doesn't redirect to dev URL
+                if (origin && origin.indexOf('localhost') === -1) {
+                    baseUrl = origin;
+                }
+            } catch (e) {}
         }
         const signupPath = '/signup?plan=blueprint';
         const sep = signupPath.indexOf('?') >= 0 ? '&' : '?';
