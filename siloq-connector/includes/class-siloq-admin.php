@@ -60,11 +60,17 @@ class Siloq_Admin {
                             <div class="siloq-step">
                                 <div class="siloq-step-number">1</div>
                                 <div class="siloq-step-content">
-                                    <h3><?php _e('Create a Siloq Account', 'siloq-connector'); ?></h3>
-                                    <p><?php _e('Sign up for free at app.siloq.ai and add your website.', 'siloq-connector'); ?></p>
-                                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/auth/register'); ?>" target="_blank" class="button button-primary">
-                                        <?php _e('Create Account →', 'siloq-connector'); ?>
-                                    </a>
+                                    <h3><?php _e('Log In to Siloq', 'siloq-connector'); ?></h3>
+                                    <p><?php _e('Sign in to your Siloq account to get your API key.', 'siloq-connector'); ?></p>
+                                    <div class="siloq-step-buttons">
+                                        <a href="<?php echo esc_url(self::DASHBOARD_URL . '/login'); ?>" target="_blank" class="button button-primary">
+                                            <?php _e('Sign In →', 'siloq-connector'); ?>
+                                        </a>
+                                        <span class="siloq-or"><?php _e('or', 'siloq-connector'); ?></span>
+                                        <a href="<?php echo esc_url(self::DASHBOARD_URL . '/signup'); ?>" target="_blank" class="button button-secondary">
+                                            <?php _e('Create Account', 'siloq-connector'); ?>
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -240,6 +246,8 @@ class Siloq_Admin {
                                     </td>
                                 </tr>
 
+                                <?php // Lead Gen settings hidden for V1 - uncomment for agency features ?>
+                                <?php /* 
                                 <tr>
                                     <th scope="row">
                                         <label for="siloq_signup_url">
@@ -279,6 +287,7 @@ class Siloq_Admin {
                                         </fieldset>
                                     </td>
                                 </tr>
+                                */ ?>
                             </table>
                             
                             <input type="hidden" name="siloq_show_advanced" value="<?php echo esc_attr($show_advanced); ?>" id="siloq_show_advanced">
@@ -328,6 +337,8 @@ class Siloq_Admin {
             .siloq-step-number { background: #f0c14b; color: #333; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
             .siloq-step-content h3 { margin: 0 0 5px 0; font-size: 15px; }
             .siloq-step-content p { margin: 0 0 10px 0; color: #666; }
+            .siloq-step-buttons { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+            .siloq-or { color: #666; font-size: 13px; }
             
             .siloq-connection-banner { padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
             .siloq-connection-banner.connected { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }

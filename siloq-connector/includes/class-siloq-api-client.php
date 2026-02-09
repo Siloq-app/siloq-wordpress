@@ -98,9 +98,11 @@ class Siloq_API_Client {
                 'data' => $body
             );
         }
+        // Backend may return error in 'error' or 'detail' field
+        $error_msg = isset($body['error']) ? $body['error'] : (isset($body['detail']) ? $body['detail'] : __('Authentication failed', 'siloq-connector'));
         return array(
             'success' => false,
-            'message' => isset($body['error']) ? $body['error'] : __('Authentication failed', 'siloq-connector')
+            'message' => $error_msg
         );
     }
     
@@ -141,7 +143,7 @@ class Siloq_API_Client {
         );
         
         // Send to Siloq API
-        $response = $this->make_request('POST', '/pages/sync', $page_data);
+        $response = $this->make_request('POST', '/pages/sync/', $page_data);
         
         if (is_wp_error($response)) {
             return array(
@@ -194,7 +196,7 @@ class Siloq_API_Client {
             );
         }
         
-        $response = $this->make_request('GET', "/pages/{$siloq_page_id}/schema", array());
+        $response = $this->make_request('GET', "/pages/{$siloq_page_id}/schema/", array());
         
         if (is_wp_error($response)) {
             return array(
@@ -264,7 +266,7 @@ class Siloq_API_Client {
             'job_type' => 'content_generation'
         ), $options);
         
-        $response = $this->make_request('POST', '/content-jobs', $job_data);
+        $response = $this->make_request('POST', '/content-jobs/', $job_data);
         
         if (is_wp_error($response)) {
             return array(
@@ -300,7 +302,7 @@ class Siloq_API_Client {
      * @return array Response data
      */
     public function get_content_job_status($job_id) {
-        $response = $this->make_request('GET', "/content-jobs/{$job_id}", array());
+        $response = $this->make_request('GET', "/content-jobs/{$job_id}/", array());
         
         if (is_wp_error($response)) {
             return array(
