@@ -11,6 +11,12 @@ if (!defined('ABSPATH')) {
 class Siloq_Admin {
     
     /**
+     * Default API URL for production
+     */
+    const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
+    const DASHBOARD_URL = 'https://app.siloq.ai';
+    
+    /**
      * Render settings page
      */
     public static function render_settings_page() {
@@ -20,179 +26,356 @@ class Siloq_Admin {
         }
         
         // Get current settings
-        $api_url = get_option('siloq_api_url', '');
+        $api_url = get_option('siloq_api_url', self::DEFAULT_API_URL);
         $api_key = get_option('siloq_api_key', '');
-        $auto_sync = get_option('siloq_auto_sync', 'no');
+        $auto_sync = get_option('siloq_auto_sync', 'yes');
         $signup_url = get_option('siloq_signup_url', '');
         $use_dummy_scan = get_option('siloq_use_dummy_scan', 'yes');
+        $show_advanced = get_option('siloq_show_advanced', 'no');
+        
+        // Check if connected
+        $is_connected = !empty($api_key) && !empty($api_url);
+        $connection_verified = get_transient('siloq_connection_verified');
         
         ?>
-        <div class="wrap">
-            <h1><?php _e('Siloq Settings', 'siloq-connector'); ?></h1>
+        <div class="wrap siloq-admin-wrap">
+            <div class="siloq-header">
+                <h1>
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <?php _e('Siloq Settings', 'siloq-connector'); ?>
+                </h1>
+                <p class="siloq-tagline"><?php _e('The SEO Architect — Eliminate keyword cannibalization and optimize your site structure.', 'siloq-connector'); ?></p>
+            </div>
+            
+            <?php settings_errors('siloq_settings'); ?>
+            
+            <?php if (!$is_connected): ?>
+                <!-- Setup Wizard for New Users -->
+                <div class="siloq-setup-wizard">
+                    <div class="siloq-setup-card">
+                        <h2><?php _e('🚀 Get Started with Siloq', 'siloq-connector'); ?></h2>
+                        <p><?php _e('Connect your WordPress site to Siloq in 3 easy steps:', 'siloq-connector'); ?></p>
+                        
+                        <div class="siloq-setup-steps">
+                            <div class="siloq-step">
+                                <div class="siloq-step-number">1</div>
+                                <div class="siloq-step-content">
+                                    <h3><?php _e('Create a Siloq Account', 'siloq-connector'); ?></h3>
+                                    <p><?php _e('Sign up for free at app.siloq.ai and add your website.', 'siloq-connector'); ?></p>
+                                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/auth/register'); ?>" target="_blank" class="button button-primary">
+                                        <?php _e('Create Account →', 'siloq-connector'); ?>
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <div class="siloq-step">
+                                <div class="siloq-step-number">2</div>
+                                <div class="siloq-step-content">
+                                    <h3><?php _e('Generate an API Key', 'siloq-connector'); ?></h3>
+                                    <p><?php _e('In your Siloq dashboard, go to Sites → click your site → Generate Token.', 'siloq-connector'); ?></p>
+                                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=sites'); ?>" target="_blank" class="button button-secondary">
+                                        <?php _e('Open Dashboard →', 'siloq-connector'); ?>
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <div class="siloq-step">
+                                <div class="siloq-step-number">3</div>
+                                <div class="siloq-step-content">
+                                    <h3><?php _e('Paste Your API Key Below', 'siloq-connector'); ?></h3>
+                                    <p><?php _e('Copy the API key from Siloq and paste it in the form below.', 'siloq-connector'); ?></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php else: ?>
+                <!-- Connection Status Banner -->
+                <div class="siloq-connection-banner <?php echo $connection_verified ? 'connected' : 'warning'; ?>">
+                    <?php if ($connection_verified): ?>
+                        <span class="dashicons dashicons-yes-alt"></span>
+                        <?php _e('Connected to Siloq', 'siloq-connector'); ?>
+                        <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard'); ?>" target="_blank" class="siloq-dashboard-link">
+                            <?php _e('Open Dashboard →', 'siloq-connector'); ?>
+                        </a>
+                    <?php else: ?>
+                        <span class="dashicons dashicons-warning"></span>
+                        <?php _e('API key configured — click "Test Connection" to verify', 'siloq-connector'); ?>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
             
             <div class="siloq-settings-container">
                 <form method="post" action="">
                     <?php wp_nonce_field('siloq_settings_nonce'); ?>
                     
-                    <table class="form-table">
-                        <tr>
-                            <th scope="row">
-                                <label for="siloq_api_url">
-                                    <?php _e('API URL', 'siloq-connector'); ?>
-                                    <span class="required">*</span>
-                                </label>
-                            </th>
-                            <td>
-                                <input 
-                                    type="url" 
-                                    id="siloq_api_url" 
-                                    name="siloq_api_url" 
-                                    value="<?php echo esc_attr($api_url); ?>" 
-                                    class="regular-text"
-                                    placeholder="https://api.siloq.com/api/v1"
-                                    required
-                                />
-                                <p class="description">
-                                    <?php _e('The base URL of your Siloq API endpoint (e.g., http://your-server-ip:3000/api/v1)', 'siloq-connector'); ?>
-                                </p>
-                            </td>
-                        </tr>
+                    <!-- Main Settings Card -->
+                    <div class="siloq-card">
+                        <h2><?php _e('Connection Settings', 'siloq-connector'); ?></h2>
                         
-                        <tr>
-                            <th scope="row">
-                                <label for="siloq_api_key">
-                                    <?php _e('API Key', 'siloq-connector'); ?>
-                                    <span class="required">*</span>
-                                </label>
-                            </th>
-                            <td>
-                                <input 
-                                    type="password" 
-                                    id="siloq_api_key" 
-                                    name="siloq_api_key" 
-                                    value="<?php echo esc_attr($api_key); ?>" 
-                                    class="regular-text"
-                                    placeholder="sk_..."
-                                    required
-                                />
-                                <p class="description">
-                                    <?php _e('Your Siloq API authentication key', 'siloq-connector'); ?>
-                                </p>
-                            </td>
-                        </tr>
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="siloq_api_key">
+                                        <?php _e('API Key', 'siloq-connector'); ?>
+                                        <span class="required">*</span>
+                                    </label>
+                                </th>
+                                <td>
+                                    <input 
+                                        type="password" 
+                                        id="siloq_api_key" 
+                                        name="siloq_api_key" 
+                                        value="<?php echo esc_attr($api_key); ?>" 
+                                        class="regular-text"
+                                        placeholder="sk_siloq_..."
+                                        required
+                                    />
+                                    <button type="button" id="siloq-toggle-key" class="button button-small" title="Show/Hide">
+                                        <span class="dashicons dashicons-visibility"></span>
+                                    </button>
+                                    <p class="description">
+                                        <?php _e('Your Siloq API key. ', 'siloq-connector'); ?>
+                                        <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=sites'); ?>" target="_blank">
+                                            <?php _e('Get your API key →', 'siloq-connector'); ?>
+                                        </a>
+                                    </p>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <th scope="row">
+                                    <?php _e('Auto-Sync', 'siloq-connector'); ?>
+                                </th>
+                                <td>
+                                    <fieldset>
+                                        <label>
+                                            <input
+                                                type="checkbox"
+                                                name="siloq_auto_sync"
+                                                value="yes"
+                                                <?php checked($auto_sync, 'yes'); ?>
+                                            />
+                                            <?php _e('Automatically sync pages when published or updated', 'siloq-connector'); ?>
+                                        </label>
+                                        <p class="description">
+                                            <?php _e('Recommended. Keeps your Siloq dashboard up-to-date with your latest content.', 'siloq-connector'); ?>
+                                        </p>
+                                    </fieldset>
+                                </td>
+                            </tr>
+                        </table>
                         
-                        <tr>
-                            <th scope="row">
-                                <?php _e('Auto-Sync', 'siloq-connector'); ?>
-                            </th>
-                            <td>
-                                <fieldset>
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            name="siloq_auto_sync"
-                                            value="yes"
-                                            <?php checked($auto_sync, 'yes'); ?>
-                                        />
-                                        <?php _e('Automatically sync pages when published or updated', 'siloq-connector'); ?>
-                                    </label>
-                                </fieldset>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <th scope="row">
-                                <label for="siloq_signup_url">
-                                    <?php _e('Lead Gen Signup URL', 'siloq-connector'); ?>
-                                </label>
-                            </th>
-                            <td>
-                                <input
-                                    type="url"
-                                    id="siloq_signup_url"
-                                    name="siloq_signup_url"
-                                    value="<?php echo esc_attr($signup_url); ?>"
-                                    class="regular-text"
-                                    placeholder="https://app.siloq.io/signup?plan=blueprint"
-                                />
-                                <p class="description">
-                                    <?php _e('The URL where users are redirected after viewing scan results. Leave empty to use the default Siloq signup URL. Use shortcode: [siloq_scanner]', 'siloq-connector'); ?>
-                                </p>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <th scope="row">
-                                <?php _e('Lead Gen Scanner', 'siloq-connector'); ?>
-                            </th>
-                            <td>
-                                <fieldset>
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            name="siloq_use_dummy_scan"
-                                            value="yes"
-                                            <?php checked($use_dummy_scan, 'yes'); ?>
-                                        />
-                                        <?php _e('Use dummy scan API (for testing without real backend)', 'siloq-connector'); ?>
-                                    </label>
-                                </fieldset>
-                                <p class="description">
-                                    <?php _e('When enabled, the Lead Gen scanner returns mock results. Disable and set API URL/Key above to use the real Siloq scan API.', 'siloq-connector'); ?>
-                                </p>
-                            </td>
-                        </tr>
-                    </table>
+                        <p class="submit">
+                            <button type="submit" name="siloq_save_settings" class="button button-primary button-large">
+                                <?php _e('Save Settings', 'siloq-connector'); ?>
+                            </button>
+                            
+                            <button type="button" id="siloq-test-connection" class="button button-secondary">
+                                <?php _e('Test Connection', 'siloq-connector'); ?>
+                            </button>
+                            
+                            <span id="siloq-connection-status" class="siloq-status-message"></span>
+                        </p>
+                    </div>
                     
-                    <p class="submit">
-                        <button type="submit" name="siloq_save_settings" class="button button-primary">
-                            <?php _e('Save Settings', 'siloq-connector'); ?>
-                        </button>
+                    <?php if ($is_connected): ?>
+                    <!-- Sync Actions Card -->
+                    <div class="siloq-card">
+                        <h2><?php _e('Sync Your Content', 'siloq-connector'); ?></h2>
+                        <p class="description"><?php _e('Sync your WordPress pages to Siloq for SEO analysis and optimization recommendations.', 'siloq-connector'); ?></p>
                         
-                        <button type="button" id="siloq-test-connection" class="button button-secondary">
-                            <?php _e('Test Connection', 'siloq-connector'); ?>
-                        </button>
+                        <p>
+                            <button type="button" id="siloq-sync-all-pages" class="button button-primary button-large">
+                                <?php _e('Sync All Pages', 'siloq-connector'); ?>
+                            </button>
+                            <span class="description" style="margin-left: 10px;">
+                                <?php _e('This may take a few minutes for large sites.', 'siloq-connector'); ?>
+                            </span>
+                        </p>
                         
-                        <span id="siloq-connection-status" class="siloq-status-message"></span>
-                    </p>
+                        <div id="siloq-sync-progress" class="siloq-sync-progress" style="display:none;">
+                            <p><strong><?php _e('Syncing pages...', 'siloq-connector'); ?></strong></p>
+                            <div class="siloq-progress-bar">
+                                <div class="siloq-progress-fill" style="width: 0%"></div>
+                            </div>
+                            <p class="siloq-progress-text">0 / 0</p>
+                        </div>
+                        
+                        <div id="siloq-sync-results" class="siloq-sync-results" style="display:none;"></div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <!-- Advanced Settings (Collapsible) -->
+                    <div class="siloq-card siloq-advanced-card">
+                        <h2>
+                            <button type="button" class="siloq-toggle-advanced">
+                                <span class="dashicons dashicons-admin-generic"></span>
+                                <?php _e('Advanced Settings', 'siloq-connector'); ?>
+                                <span class="dashicons dashicons-arrow-down-alt2"></span>
+                            </button>
+                        </h2>
+                        
+                        <div class="siloq-advanced-content" style="display: <?php echo $show_advanced === 'yes' ? 'block' : 'none'; ?>;">
+                            <table class="form-table">
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_api_url">
+                                            <?php _e('API URL', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <input 
+                                            type="url" 
+                                            id="siloq_api_url" 
+                                            name="siloq_api_url" 
+                                            value="<?php echo esc_attr($api_url); ?>" 
+                                            class="regular-text"
+                                            placeholder="<?php echo esc_attr(self::DEFAULT_API_URL); ?>"
+                                        />
+                                        <p class="description">
+                                            <?php _e('Only change this if you\'re using a self-hosted Siloq instance. Default: ', 'siloq-connector'); ?>
+                                            <code><?php echo esc_html(self::DEFAULT_API_URL); ?></code>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_signup_url">
+                                            <?php _e('Lead Gen Signup URL', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <input
+                                            type="url"
+                                            id="siloq_signup_url"
+                                            name="siloq_signup_url"
+                                            value="<?php echo esc_attr($signup_url); ?>"
+                                            class="regular-text"
+                                            placeholder="https://app.siloq.ai/signup"
+                                        />
+                                        <p class="description">
+                                            <?php _e('For agencies: Customize where users go after using the [siloq_scanner] shortcode.', 'siloq-connector'); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <?php _e('Lead Gen Scanner', 'siloq-connector'); ?>
+                                    </th>
+                                    <td>
+                                        <fieldset>
+                                            <label>
+                                                <input
+                                                    type="checkbox"
+                                                    name="siloq_use_dummy_scan"
+                                                    value="yes"
+                                                    <?php checked($use_dummy_scan, 'yes'); ?>
+                                                />
+                                                <?php _e('Use demo mode (returns sample results without calling API)', 'siloq-connector'); ?>
+                                            </label>
+                                        </fieldset>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <input type="hidden" name="siloq_show_advanced" value="<?php echo esc_attr($show_advanced); ?>" id="siloq_show_advanced">
+                        </div>
+                    </div>
                 </form>
                 
-                <hr>
-                
-                <h2><?php _e('Bulk Actions', 'siloq-connector'); ?></h2>
-                
-                <p>
-                    <button type="button" id="siloq-sync-all-pages" class="button button-secondary">
-                        <?php _e('Sync All Pages', 'siloq-connector'); ?>
-                    </button>
-                    <span class="description">
-                        <?php _e('Sync all published pages to Siloq. This may take a few minutes.', 'siloq-connector'); ?>
-                    </span>
-                </p>
-                
-                <div id="siloq-sync-progress" class="siloq-sync-progress" style="display:none;">
-                    <p><strong><?php _e('Syncing pages...', 'siloq-connector'); ?></strong></p>
-                    <div class="siloq-progress-bar">
-                        <div class="siloq-progress-fill" style="width: 0%"></div>
-                    </div>
-                    <p class="siloq-progress-text">0 / 0</p>
+                <!-- Help Card -->
+                <div class="siloq-card siloq-help-card">
+                    <h2><?php _e('Need Help?', 'siloq-connector'); ?></h2>
+                    <ul>
+                        <li>
+                            <a href="https://docs.siloq.ai" target="_blank">
+                                <span class="dashicons dashicons-book"></span>
+                                <?php _e('Documentation', 'siloq-connector'); ?>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="<?php echo esc_url(self::DASHBOARD_URL); ?>" target="_blank">
+                                <span class="dashicons dashicons-dashboard"></span>
+                                <?php _e('Siloq Dashboard', 'siloq-connector'); ?>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="mailto:support@siloq.ai">
+                                <span class="dashicons dashicons-email"></span>
+                                <?php _e('Contact Support', 'siloq-connector'); ?>
+                            </a>
+                        </li>
+                    </ul>
                 </div>
-                
-                <div id="siloq-sync-results" class="siloq-sync-results" style="display:none;"></div>
-                
-                <hr>
-                
-                <h2><?php _e('Documentation', 'siloq-connector'); ?></h2>
-                
-                <p>
-                    <?php _e('For more information about setting up and using the Siloq Connector plugin, please visit:', 'siloq-connector'); ?>
-                </p>
-                <ul>
-                    <li><a href="https://github.com/Siloq-seo/siloq-wordpress-plugin" target="_blank"><?php _e('Plugin Documentation', 'siloq-connector'); ?></a></li>
-                    <li><a href="https://siloq.com/docs" target="_blank"><?php _e('Siloq Platform Documentation', 'siloq-connector'); ?></a></li>
-                </ul>
             </div>
         </div>
+        
+        <style>
+            .siloq-admin-wrap { max-width: 900px; }
+            .siloq-header { margin-bottom: 20px; }
+            .siloq-header h1 { display: flex; align-items: center; gap: 10px; }
+            .siloq-logo { height: 32px; width: auto; }
+            .siloq-tagline { color: #666; font-size: 14px; margin-top: 5px; }
+            
+            .siloq-setup-wizard { margin-bottom: 30px; }
+            .siloq-setup-card { background: linear-gradient(135deg, #fff8e1 0%, #fff 100%); border: 1px solid #f0c14b; border-radius: 8px; padding: 25px; }
+            .siloq-setup-card h2 { margin-top: 0; color: #333; }
+            .siloq-setup-steps { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
+            .siloq-step { display: flex; gap: 15px; align-items: flex-start; }
+            .siloq-step-number { background: #f0c14b; color: #333; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+            .siloq-step-content h3 { margin: 0 0 5px 0; font-size: 15px; }
+            .siloq-step-content p { margin: 0 0 10px 0; color: #666; }
+            
+            .siloq-connection-banner { padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+            .siloq-connection-banner.connected { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+            .siloq-connection-banner.warning { background: #fff3cd; border: 1px solid #ffc107; color: #856404; }
+            .siloq-dashboard-link { margin-left: auto; }
+            
+            .siloq-card { background: #fff; border: 1px solid #ccd0d4; border-radius: 8px; padding: 20px 25px; margin-bottom: 20px; }
+            .siloq-card h2 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+            
+            .siloq-advanced-card h2 { border-bottom: none; padding-bottom: 0; }
+            .siloq-toggle-advanced { background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: #1d2327; padding: 0; }
+            .siloq-toggle-advanced:hover { color: #2271b1; }
+            
+            .siloq-help-card ul { list-style: none; padding: 0; margin: 0; }
+            .siloq-help-card li { margin-bottom: 10px; }
+            .siloq-help-card a { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #2271b1; }
+            .siloq-help-card a:hover { text-decoration: underline; }
+            
+            .siloq-progress-bar { background: #e0e0e0; border-radius: 4px; height: 20px; overflow: hidden; margin: 10px 0; }
+            .siloq-progress-fill { background: #f0c14b; height: 100%; transition: width 0.3s ease; }
+            
+            .siloq-sync-results { margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 4px; }
+            
+            #siloq-toggle-key { vertical-align: middle; margin-left: 5px; }
+            
+            .required { color: #d63638; }
+        </style>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            // Toggle API key visibility
+            $('#siloq-toggle-key').on('click', function() {
+                var input = $('#siloq_api_key');
+                var type = input.attr('type') === 'password' ? 'text' : 'password';
+                input.attr('type', type);
+                $(this).find('.dashicons').toggleClass('dashicons-visibility dashicons-hidden');
+            });
+            
+            // Toggle advanced settings
+            $('.siloq-toggle-advanced').on('click', function() {
+                var content = $('.siloq-advanced-content');
+                var icon = $(this).find('.dashicons-arrow-down-alt2, .dashicons-arrow-up-alt2');
+                content.slideToggle(200);
+                icon.toggleClass('dashicons-arrow-down-alt2 dashicons-arrow-up-alt2');
+                $('#siloq_show_advanced').val(content.is(':visible') ? 'yes' : 'no');
+            });
+        });
+        </script>
         <?php
     }
     
@@ -204,23 +387,22 @@ class Siloq_Admin {
             return;
         }
         
-        $api_url = isset($_POST['siloq_api_url']) ? sanitize_text_field($_POST['siloq_api_url']) : '';
+        $api_url = isset($_POST['siloq_api_url']) ? sanitize_text_field($_POST['siloq_api_url']) : self::DEFAULT_API_URL;
         $api_key = isset($_POST['siloq_api_key']) ? sanitize_text_field($_POST['siloq_api_key']) : '';
         $auto_sync = isset($_POST['siloq_auto_sync']) ? 'yes' : 'no';
         $signup_url = isset($_POST['siloq_signup_url']) ? esc_url_raw($_POST['siloq_signup_url']) : '';
         $use_dummy_scan = isset($_POST['siloq_use_dummy_scan']) ? 'yes' : 'no';
+        $show_advanced = isset($_POST['siloq_show_advanced']) ? sanitize_text_field($_POST['siloq_show_advanced']) : 'no';
         
-        // Validate (API URL/Key required only when not using dummy scan)
+        // Use default API URL if empty
+        if (empty($api_url)) {
+            $api_url = self::DEFAULT_API_URL;
+        }
+        
+        // Validate
         $errors = array();
-        if ($use_dummy_scan !== 'yes') {
-            if (empty($api_url)) {
-                $errors[] = __('API URL is required when not using dummy scan', 'siloq-connector');
-            } elseif (!filter_var($api_url, FILTER_VALIDATE_URL)) {
-                $errors[] = __('API URL is not valid', 'siloq-connector');
-            }
-            if (empty($api_key)) {
-                $errors[] = __('API Key is required when not using dummy scan', 'siloq-connector');
-            }
+        if (empty($api_key)) {
+            $errors[] = __('API Key is required. Get one from your Siloq dashboard.', 'siloq-connector');
         }
         
         if (!empty($errors)) {
@@ -242,11 +424,11 @@ class Siloq_Admin {
         update_option('siloq_auto_sync', $auto_sync);
         update_option('siloq_signup_url', $signup_url);
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
+        update_option('siloq_show_advanced', $show_advanced);
         
-        // If API credentials changed, clear cached sync statuses (optional)
+        // Clear connection verification if credentials changed
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {
-            // Could optionally clear all sync statuses here if needed
-            // This is a design decision - you may want to keep existing sync data
+            delete_transient('siloq_connection_verified');
         }
         
         add_settings_error(
@@ -278,7 +460,7 @@ class Siloq_Admin {
                     $pages_needing_resync = $sync_engine->get_pages_needing_resync();
                     if (!empty($pages_needing_resync)) {
                         ?>
-                        <button type="button" id="siloq-sync-outdated" class="button button-secondary">
+                        <button type="button" id="siloq-sync-outdated" class="button button-primary">
                             <?php printf(__('Sync %d Outdated Pages', 'siloq-connector'), count($pages_needing_resync)); ?>
                         </button>
                         <?php
@@ -287,7 +469,9 @@ class Siloq_Admin {
                 </p>
                 
                 <?php if (empty($pages_status)): ?>
-                    <p><?php _e('No pages found.', 'siloq-connector'); ?></p>
+                    <div class="notice notice-info">
+                        <p><?php _e('No pages found. Create some pages first, then sync them to Siloq.', 'siloq-connector'); ?></p>
+                    </div>
                 <?php else: ?>
                     <table class="wp-list-table widefat fixed striped">
                         <thead>
@@ -295,7 +479,6 @@ class Siloq_Admin {
                                 <th><?php _e('Page Title', 'siloq-connector'); ?></th>
                                 <th><?php _e('Status', 'siloq-connector'); ?></th>
                                 <th><?php _e('Last Synced', 'siloq-connector'); ?></th>
-                                <th><?php _e('Schema', 'siloq-connector'); ?></th>
                                 <th><?php _e('Actions', 'siloq-connector'); ?></th>
                             </tr>
                         </thead>
@@ -343,13 +526,6 @@ class Siloq_Admin {
                                         <?php echo esc_html($page['last_synced']); ?>
                                     </td>
                                     <td>
-                                        <?php if ($page['has_schema']): ?>
-                                            <span class="dashicons dashicons-yes-alt" style="color: green;" title="<?php _e('Schema markup present', 'siloq-connector'); ?>"></span>
-                                        <?php else: ?>
-                                            <span class="dashicons dashicons-minus" style="color: #999;" title="<?php _e('No schema markup', 'siloq-connector'); ?>"></span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
                                         <button 
                                             type="button" 
                                             class="button button-small siloq-sync-single" 
@@ -364,6 +540,14 @@ class Siloq_Admin {
                     </table>
                 <?php endif; ?>
             </div>
+            
+            <style>
+                .siloq-status-badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: 500; }
+                .siloq-status-success { background: #d4edda; color: #155724; }
+                .siloq-status-warning { background: #fff3cd; color: #856404; }
+                .siloq-status-error { background: #f8d7da; color: #721c24; }
+                .siloq-status-not-synced { background: #e9ecef; color: #495057; }
+            </style>
         </div>
         <?php
     }
@@ -399,7 +583,12 @@ class Siloq_Admin {
                 
                 <?php if (empty($pages)): ?>
                     <div class="notice notice-info">
-                        <p><?php _e('No AI-generated content available yet. Generate content for your pages first.', 'siloq-connector'); ?></p>
+                        <p><?php _e('No AI-generated content available yet. Generate content from your Siloq dashboard first.', 'siloq-connector'); ?></p>
+                        <p>
+                            <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=content'); ?>" target="_blank" class="button button-primary">
+                                <?php _e('Go to Content Hub →', 'siloq-connector'); ?>
+                            </a>
+                        </p>
                     </div>
                 <?php else: ?>
                     <table class="wp-list-table widefat fixed striped">
@@ -474,65 +663,6 @@ class Siloq_Admin {
                         </tbody>
                     </table>
                 <?php endif; ?>
-                
-                <hr>
-                
-                <h2><?php _e('Generate New Content', 'siloq-connector'); ?></h2>
-                
-                <p class="description">
-                    <?php _e('Select a page to generate AI-powered content using Siloq.', 'siloq-connector'); ?>
-                </p>
-                
-                <?php
-                // Get all published pages
-                $all_pages = get_posts(array(
-                    'post_type' => 'page',
-                    'posts_per_page' => -1,
-                    'post_status' => 'publish'
-                ));
-                ?>
-                
-                <table class="form-table">
-                    <tr>
-                        <th><?php _e('Select Page', 'siloq-connector'); ?></th>
-                        <td>
-                            <select id="siloq-generate-page-select" class="regular-text">
-                                <option value=""><?php _e('-- Select a page --', 'siloq-connector'); ?></option>
-                                <?php foreach ($all_pages as $p): ?>
-                                    <option value="<?php echo esc_attr($p->ID); ?>">
-                                        <?php echo esc_html($p->post_title); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            
-                            <button type="button" id="siloq-generate-content" class="button button-primary">
-                                <?php _e('Generate Content', 'siloq-connector'); ?>
-                            </button>
-                            
-                            <p class="description">
-                                <?php _e('This will create an AI content generation job. You will be notified when the content is ready.', 'siloq-connector'); ?>
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-                
-                <div id="siloq-generation-status" style="display:none;"></div>
-                
-                <hr>
-                
-                <h2><?php _e('Webhook Configuration', 'siloq-connector'); ?></h2>
-                
-                <p>
-                    <?php _e('Configure this webhook URL in your Siloq backend to receive real-time updates:', 'siloq-connector'); ?>
-                </p>
-                
-                <code style="display: block; padding: 10px; background: #f0f0f1; margin: 10px 0;">
-                    <?php echo esc_html(Siloq_Webhook_Handler::get_webhook_url()); ?>
-                </code>
-                
-                <p class="description">
-                    <?php _e('The webhook allows Siloq to notify WordPress when content is generated, schema is updated, or other events occur.', 'siloq-connector'); ?>
-                </p>
             </div>
         </div>
         <?php
