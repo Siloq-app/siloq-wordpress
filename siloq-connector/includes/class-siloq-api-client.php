@@ -136,9 +136,9 @@ class Siloq_API_Client {
             'parent_id' => $post->post_parent,
             'menu_order' => $post->menu_order,
             'meta' => array(
-                'yoast_title' => get_post_meta($post->ID, '_yoast_wpseo_title', true),
-                'yoast_description' => get_post_meta($post->ID, '_yoast_wpseo_metadesc', true),
-                'featured_image' => get_the_post_thumbnail_url($post->ID, 'full')
+                'yoast_title' => get_post_meta($post->ID, '_yoast_wpseo_title', true) ?: '',
+                'yoast_description' => get_post_meta($post->ID, '_yoast_wpseo_metadesc', true) ?: '',
+                'featured_image' => get_the_post_thumbnail_url($post->ID, 'full') ?: ''
             )
         );
         
