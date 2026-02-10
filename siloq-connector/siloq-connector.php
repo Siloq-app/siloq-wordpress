@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.1.2
+ * Version: 1.3.0
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.1.2');
+define('SILOQ_VERSION', '1.3.0');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -74,6 +74,8 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_check_job_status', array($this, 'ajax_check_job_status'));
         add_action('wp_ajax_siloq_restore_backup', array($this, 'ajax_restore_backup'));
         add_action('wp_ajax_siloq_sync_outdated', array($this, 'ajax_sync_outdated'));
+        add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
+        add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
         
         // Schema injection
         add_action('wp_head', array($this, 'inject_schema_markup'));
@@ -514,6 +516,112 @@ class Siloq_Connector {
         $result = $sync_engine->sync_outdated_pages($limit);
         
         wp_send_json_success($result);
+    }
+
+    /**
+     * AJAX: Get business profile from Siloq
+     */
+    public function ajax_get_business_profile() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        
+        $api_client = new Siloq_API_Client();
+        $site_id = $this->get_current_site_id();
+        
+        if (!$site_id) {
+            wp_send_json_error(array('message' => 'No site connected. Please sync your pages first.'));
+            return;
+        }
+        
+        $result = $api_client->get_business_profile($site_id);
+        
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+        
+        wp_send_json_success($result);
+    }
+
+    /**
+     * AJAX: Save business profile to Siloq
+     */
+    public function ajax_save_business_profile() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        
+        $api_client = new Siloq_API_Client();
+        $site_id = $this->get_current_site_id();
+        
+        if (!$site_id) {
+            wp_send_json_error(array('message' => 'No site connected. Please sync your pages first.'));
+            return;
+        }
+        
+        $profile_data = array(
+            'business_type' => isset($_POST['business_type']) ? sanitize_text_field($_POST['business_type']) : '',
+            'primary_services' => isset($_POST['primary_services']) ? array_map('sanitize_text_field', (array)$_POST['primary_services']) : array(),
+            'service_areas' => isset($_POST['service_areas']) ? array_map('sanitize_text_field', (array)$_POST['service_areas']) : array(),
+            'target_audience' => isset($_POST['target_audience']) ? sanitize_textarea_field($_POST['target_audience']) : '',
+            'business_description' => isset($_POST['business_description']) ? sanitize_textarea_field($_POST['business_description']) : '',
+        );
+        
+        $result = $api_client->save_business_profile($site_id, $profile_data);
+        
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+        
+        wp_send_json_success(array(
+            'message' => 'Business profile saved successfully!',
+            'profile' => $result
+        ));
+    }
+
+    /**
+     * Get the current site ID from Siloq
+     * This assumes pages have been synced and we can get the site ID from the API
+     */
+    private function get_current_site_id() {
+        // Check if we have a cached site ID
+        $site_id = get_transient('siloq_site_id');
+        if ($site_id) {
+            return $site_id;
+        }
+        
+        // Try to get it from the API
+        $api_client = new Siloq_API_Client();
+        $sites = $api_client->get_sites();
+        
+        if (is_wp_error($sites) || empty($sites)) {
+            return null;
+        }
+        
+        // Find the site matching this WordPress URL
+        $site_url = get_site_url();
+        foreach ($sites as $site) {
+            if (isset($site['url']) && strpos($site['url'], parse_url($site_url, PHP_URL_HOST)) !== false) {
+                set_transient('siloq_site_id', $site['id'], HOUR_IN_SECONDS);
+                return $site['id'];
+            }
+        }
+        
+        // If no match, use the first site (user might only have one)
+        if (!empty($sites[0]['id'])) {
+            set_transient('siloq_site_id', $sites[0]['id'], HOUR_IN_SECONDS);
+            return $sites[0]['id'];
+        }
+        
+        return null;
     }
 }
 

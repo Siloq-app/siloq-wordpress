@@ -450,4 +450,86 @@ class Siloq_API_Client {
         
         return true;
     }
+
+    /**
+     * Get list of user's sites
+     * 
+     * @return array|WP_Error
+     */
+    public function get_sites() {
+        $response = $this->make_request('GET', '/sites/');
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to get sites', 'siloq-connector')
+            );
+        }
+        
+        // Handle both array and paginated response
+        return isset($data['results']) ? $data['results'] : (is_array($data) ? $data : array());
+    }
+
+    /**
+     * Get business profile for a site
+     * 
+     * @param int $site_id Site ID
+     * @return array|WP_Error
+     */
+    public function get_business_profile($site_id) {
+        $response = $this->make_request('GET', "/sites/{$site_id}/profile/");
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to get business profile', 'siloq-connector')
+            );
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Save business profile for a site
+     * 
+     * @param int $site_id Site ID
+     * @param array $profile_data Profile data
+     * @return array|WP_Error
+     */
+    public function save_business_profile($site_id, $profile_data) {
+        $response = $this->make_request('PATCH', "/sites/{$site_id}/profile/", $profile_data);
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to save business profile', 'siloq-connector')
+            );
+        }
+        
+        return $data;
+    }
 }
