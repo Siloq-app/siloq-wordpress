@@ -174,9 +174,21 @@ class Siloq_API_Client {
         
         update_post_meta($post->ID, '_siloq_sync_status', 'error');
         
+        // Build detailed error message for debugging
+        $error_msg = '';
+        if (isset($body['error'])) {
+            $error_msg = $body['error'];
+        } elseif (isset($body['detail'])) {
+            $error_msg = $body['detail'];
+        } elseif (isset($body['message'])) {
+            $error_msg = $body['message'];
+        } else {
+            $error_msg = sprintf(__('Sync failed (HTTP %d)', 'siloq-connector'), $code);
+        }
+        
         return array(
             'success' => false,
-            'message' => isset($body['error']) ? $body['error'] : __('Sync failed', 'siloq-connector')
+            'message' => $error_msg
         );
     }
     
