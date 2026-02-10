@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.1.2
+ * Version: 1.2.0
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
