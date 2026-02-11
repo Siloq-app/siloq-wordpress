@@ -5,6 +5,39 @@ All notable changes to the Siloq WordPress Connector plugin will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-11
+
+### Added
+- **TALI - Theme-Aware Layout Intelligence**
+  - Automatically adapts Siloq-generated content to match WordPress theme styling
+  - Theme fingerprinting extracts colors, typography, spacing, and layout tokens
+  - Component discovery identifies supported Gutenberg blocks
+  - Authority block injection with claim anchors (`data-siloq-claim-id`)
+  - Support for service_city, blog_post, and project_post templates
+  - Access state enforcement (ENABLED/FROZEN) with receipt preservation
+  - Confidence-based draft fallback (< 90% confidence = Draft status)
+  - Admin UI for theme intelligence status and manual re-fingerprinting
+  - REST API endpoints for programmatic access
+
+### Technical Details
+- **New Files:**
+  - `includes/tali/class-siloq-tali.php` - Main TALI coordinator
+  - `includes/tali/class-siloq-tali-fingerprinter.php` - Theme token extraction
+  - `includes/tali/class-siloq-tali-component-mapper.php` - Block capability discovery
+  - `includes/tali/class-siloq-tali-block-injector.php` - Gutenberg block injection
+  - `includes/tali/views/admin-tali-settings.php` - Admin settings page
+  - `includes/tali/README.md` - Integration documentation
+- **Modified Files:**
+  - `siloq-connector.php` - Added TALI initialization and SILOQ_PLUGIN_FILE constant
+- **REST API Endpoints:**
+  - `POST /siloq/v1/tali/fingerprint` - Run theme fingerprint
+  - `GET /siloq/v1/tali/design-profile` - Get design profile
+  - `GET /siloq/v1/tali/capability-map` - Get capability map
+  - `POST /siloq/v1/tali/inject` - Inject authority content
+- **Output Files:**
+  - `wp-content/uploads/siloq-tali/design_profile_wp.json`
+  - `wp-content/uploads/siloq-tali/wp_component_capability_map.json`
+
 ## [1.1.0] - 2026-01-29
 
 ### Added
