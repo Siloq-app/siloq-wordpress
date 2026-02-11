@@ -18,10 +18,11 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.1.3');
+define('SILOQ_VERSION', '1.2.0');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
+define('SILOQ_PLUGIN_FILE', __FILE__);
 
 /**
  * Main Siloq Connector Class
@@ -89,9 +90,15 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
+        
+        // TALI - Theme-Aware Layout Intelligence
+        require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Initialize webhook handler
         new Siloq_Webhook_Handler();
+        
+        // Initialize TALI
+        siloq_tali();
 
         // Initialize lead gen scanner
         $api_client = new Siloq_API_Client();
