@@ -210,6 +210,74 @@ class Siloq_Admin {
                         
                         <div id="siloq-sync-results" class="siloq-sync-results" style="display:none;"></div>
                     </div>
+                    
+                    <!-- Business Profile Wizard -->
+                    <div class="siloq-card siloq-business-profile-card">
+                        <h2><?php _e('🏢 Business Profile', 'siloq-connector'); ?></h2>
+                        <p class="description"><?php _e('Tell Siloq about your business to get personalized content recommendations and silo suggestions.', 'siloq-connector'); ?></p>
+                        
+                        <div id="siloq-profile-loading" style="display:none;">
+                            <p><span class="spinner is-active" style="float:none;"></span> <?php _e('Loading profile...', 'siloq-connector'); ?></p>
+                        </div>
+                        
+                        <div id="siloq-profile-form" style="display:none;">
+                            <table class="form-table">
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_business_type"><?php _e('Business Type', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <select id="siloq_business_type" name="siloq_business_type" class="regular-text">
+                                            <option value=""><?php _e('Select your business type...', 'siloq-connector'); ?></option>
+                                            <option value="local_service"><?php _e('Local/Service Business', 'siloq-connector'); ?></option>
+                                            <option value="ecommerce"><?php _e('E-Commerce', 'siloq-connector'); ?></option>
+                                            <option value="content_blog"><?php _e('Content/Blog', 'siloq-connector'); ?></option>
+                                            <option value="saas"><?php _e('SaaS/Software', 'siloq-connector'); ?></option>
+                                            <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
+                                        </select>
+                                        <p class="description"><?php _e('Helps Siloq suggest the best content structure.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_primary_services"><?php _e('Services/Products', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <div id="siloq-services-list" class="siloq-tag-list"></div>
+                                        <div style="display:flex; gap:5px; margin-top:5px;">
+                                            <input type="text" id="siloq_new_service" placeholder="<?php _e('Add a service or product...', 'siloq-connector'); ?>" class="regular-text">
+                                            <button type="button" id="siloq-add-service" class="button"><?php _e('Add', 'siloq-connector'); ?></button>
+                                        </div>
+                                        <p class="description"><?php _e('Your main services or products. Siloq creates content silos around each one.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                                <tr id="siloq-service-areas-row" style="display:none;">
+                                    <th scope="row">
+                                        <label for="siloq_service_areas"><?php _e('Service Areas', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <div id="siloq-areas-list" class="siloq-tag-list"></div>
+                                        <div style="display:flex; gap:5px; margin-top:5px;">
+                                            <input type="text" id="siloq_new_area" placeholder="<?php _e('e.g., Kansas City, MO', 'siloq-connector'); ?>" class="regular-text">
+                                            <button type="button" id="siloq-add-area" class="button"><?php _e('Add', 'siloq-connector'); ?></button>
+                                        </div>
+                                        <p class="description"><?php _e('For local businesses: cities or areas you serve.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <p class="submit">
+                                <button type="button" id="siloq-save-profile" class="button button-primary">
+                                    <?php _e('Save Business Profile', 'siloq-connector'); ?>
+                                </button>
+                                <span id="siloq-profile-status" class="siloq-status-message"></span>
+                            </p>
+                        </div>
+                        
+                        <div id="siloq-profile-error" style="display:none;" class="notice notice-error inline">
+                            <p></p>
+                        </div>
+                    </div>
                     <?php endif; ?>
                     
                     <!-- Advanced Settings (Collapsible) -->
@@ -365,6 +433,14 @@ class Siloq_Admin {
             #siloq-toggle-key { vertical-align: middle; margin-left: 5px; }
             
             .required { color: #d63638; }
+            
+            /* Business Profile Styles */
+            .siloq-tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 5px; }
+            .siloq-tag { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; background: #f0f0f1; border-radius: 4px; font-size: 13px; }
+            .siloq-tag-remove { background: none; border: none; cursor: pointer; color: #666; font-size: 16px; line-height: 1; padding: 0; }
+            .siloq-tag-remove:hover { color: #d63638; }
+            .siloq-profile-complete { color: #46b450; display: flex; align-items: center; gap: 5px; }
+            .siloq-profile-incomplete { color: #dba617; display: flex; align-items: center; gap: 5px; }
         </style>
         
         <script>
@@ -384,6 +460,166 @@ class Siloq_Admin {
                 content.slideToggle(200);
                 icon.toggleClass('dashicons-arrow-down-alt2 dashicons-arrow-up-alt2');
                 $('#siloq_show_advanced').val(content.is(':visible') ? 'yes' : 'no');
+            });
+            
+            // Business Profile functionality
+            var siloqServices = [];
+            var siloqAreas = [];
+            
+            // Load business profile on page load
+            if ($('.siloq-business-profile-card').length) {
+                loadBusinessProfile();
+            }
+            
+            function loadBusinessProfile() {
+                $('#siloq-profile-loading').show();
+                $('#siloq-profile-form').hide();
+                $('#siloq-profile-error').hide();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'siloq_get_business_profile',
+                        nonce: siloqAjax.nonce
+                    },
+                    success: function(response) {
+                        $('#siloq-profile-loading').hide();
+                        if (response.success && response.data) {
+                            var profile = response.data;
+                            $('#siloq_business_type').val(profile.business_type || '');
+                            siloqServices = profile.primary_services || [];
+                            siloqAreas = profile.service_areas || [];
+                            renderServices();
+                            renderAreas();
+                            toggleServiceAreasRow();
+                            $('#siloq-profile-form').show();
+                        } else {
+                            $('#siloq-profile-error p').text(response.data ? response.data.message : 'Failed to load profile');
+                            $('#siloq-profile-error').show();
+                            $('#siloq-profile-form').show();
+                        }
+                    },
+                    error: function() {
+                        $('#siloq-profile-loading').hide();
+                        $('#siloq-profile-error p').text('Connection error. Please try again.');
+                        $('#siloq-profile-error').show();
+                        $('#siloq-profile-form').show();
+                    }
+                });
+            }
+            
+            function renderServices() {
+                var html = '';
+                siloqServices.forEach(function(service, index) {
+                    html += '<span class="siloq-tag">' + escapeHtml(service) + 
+                            '<button type="button" class="siloq-tag-remove" data-index="' + index + '" data-type="service">&times;</button></span>';
+                });
+                $('#siloq-services-list').html(html);
+            }
+            
+            function renderAreas() {
+                var html = '';
+                siloqAreas.forEach(function(area, index) {
+                    html += '<span class="siloq-tag">' + escapeHtml(area) + 
+                            '<button type="button" class="siloq-tag-remove" data-index="' + index + '" data-type="area">&times;</button></span>';
+                });
+                $('#siloq-areas-list').html(html);
+            }
+            
+            function escapeHtml(text) {
+                return $('<div>').text(text).html();
+            }
+            
+            function toggleServiceAreasRow() {
+                if ($('#siloq_business_type').val() === 'local_service') {
+                    $('#siloq-service-areas-row').show();
+                } else {
+                    $('#siloq-service-areas-row').hide();
+                }
+            }
+            
+            // Business type change
+            $('#siloq_business_type').on('change', toggleServiceAreasRow);
+            
+            // Add service
+            $('#siloq-add-service').on('click', function() {
+                var service = $('#siloq_new_service').val().trim();
+                if (service && siloqServices.indexOf(service) === -1) {
+                    siloqServices.push(service);
+                    renderServices();
+                    $('#siloq_new_service').val('');
+                }
+            });
+            
+            $('#siloq_new_service').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#siloq-add-service').click();
+                }
+            });
+            
+            // Add area
+            $('#siloq-add-area').on('click', function() {
+                var area = $('#siloq_new_area').val().trim();
+                if (area && siloqAreas.indexOf(area) === -1) {
+                    siloqAreas.push(area);
+                    renderAreas();
+                    $('#siloq_new_area').val('');
+                }
+            });
+            
+            $('#siloq_new_area').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $('#siloq-add-area').click();
+                }
+            });
+            
+            // Remove tag
+            $(document).on('click', '.siloq-tag-remove', function() {
+                var index = $(this).data('index');
+                var type = $(this).data('type');
+                if (type === 'service') {
+                    siloqServices.splice(index, 1);
+                    renderServices();
+                } else if (type === 'area') {
+                    siloqAreas.splice(index, 1);
+                    renderAreas();
+                }
+            });
+            
+            // Save profile
+            $('#siloq-save-profile').on('click', function() {
+                var $btn = $(this);
+                var $status = $('#siloq-profile-status');
+                
+                $btn.prop('disabled', true).text('<?php _e('Saving...', 'siloq-connector'); ?>');
+                $status.removeClass('success error').text('');
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'siloq_save_business_profile',
+                        nonce: siloqAjax.nonce,
+                        business_type: $('#siloq_business_type').val(),
+                        primary_services: siloqServices,
+                        service_areas: siloqAreas
+                    },
+                    success: function(response) {
+                        $btn.prop('disabled', false).text('<?php _e('Save Business Profile', 'siloq-connector'); ?>');
+                        if (response.success) {
+                            $status.addClass('success').html('<span class="dashicons dashicons-yes"></span> ' + response.data.message);
+                        } else {
+                            $status.addClass('error').text(response.data ? response.data.message : 'Failed to save');
+                        }
+                    },
+                    error: function() {
+                        $btn.prop('disabled', false).text('<?php _e('Save Business Profile', 'siloq-connector'); ?>');
+                        $status.addClass('error').text('Connection error. Please try again.');
+                    }
+                });
             });
         });
         </script>
