@@ -122,6 +122,14 @@ class Siloq_API_Client {
             );
         }
         
+        // Check if this is the homepage (front page)
+        $front_page_id = (int) get_option('page_on_front');
+        $is_homepage = ($front_page_id > 0 && $post->ID === $front_page_id);
+        
+        // Check for Yoast noindex setting
+        $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+        $is_noindex = ($yoast_noindex === '1' || $yoast_noindex === 1);
+        
         // Prepare page data
         $page_data = array(
             'wp_post_id' => $post->ID,
@@ -135,6 +143,8 @@ class Siloq_API_Client {
             'slug' => $post->post_name,
             'parent_id' => $post->post_parent,
             'menu_order' => $post->menu_order,
+            'is_homepage' => $is_homepage,
+            'is_noindex' => $is_noindex,
             'meta' => array(
                 'yoast_title' => get_post_meta($post->ID, '_yoast_wpseo_title', true) ?: '',
                 'yoast_description' => get_post_meta($post->ID, '_yoast_wpseo_metadesc', true) ?: '',
