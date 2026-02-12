@@ -111,7 +111,7 @@ Embed a website scanner on any page to capture leads and generate scan results:
 
 **Shortcode Options:**
 ```
-[siloq_scanner title="Free SEO Audit" button_text="Scan My Site" signup_url="https://app.siloq.io/signup?plan=blueprint"]
+[siloq_scanner title="Free SEO Audit" button_text="Scan My Site" signup_url="https://app.siloq.ai/signup?plan=blueprint"]
 ```
 
 **Configure Signup URL:**

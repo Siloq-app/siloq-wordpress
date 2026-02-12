@@ -360,10 +360,41 @@ class Siloq_API_Client {
         
         return $response;
     }
-    
+
+    /**
+     * Get dashboard stats from Siloq API
+     *
+     * @return array Dashboard stats
+     */
+    public function get_dashboard_stats() {
+        $response = $this->make_request('GET', '/dashboard/stats', array());
+
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
+            );
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code === 200 && isset($body['data'])) {
+            return array(
+                'success' => true,
+                'data' => $body['data']
+            );
+        }
+
+        return array(
+            'success' => false,
+            'message' => isset($body['error']) ? $body['error'] : __('Failed to get dashboard stats', 'siloq-connector')
+        );
+    }
+
     /**
      * Validate API credentials
-     * 
+     *
      * @param string $api_url API URL
      * @param string $api_key API Key
      * @return bool True if valid
@@ -372,17 +403,17 @@ class Siloq_API_Client {
         if (empty($api_url) || empty($api_key)) {
             return false;
         }
-        
+
         // Basic URL validation
         if (!filter_var($api_url, FILTER_VALIDATE_URL)) {
             return false;
         }
-        
+
         // Basic API key format validation (adjust as needed)
         if (strlen($api_key) < 20) {
             return false;
         }
-        
+
         return true;
     }
 }
