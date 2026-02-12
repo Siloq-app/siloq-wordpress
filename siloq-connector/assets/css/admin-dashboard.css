@@ -1,0 +1,1712 @@
+/* Siloq Dashboard Styles - Converted from Next.js/Tailwind */
+
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+/* Dashboard container - wraps entire dashboard to scope styles */
+.siloq-dashboard {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    min-height: calc(100vh - 32px);
+    margin: -20px -20px 0 -22px;
+    padding: 0;
+    color: #e2e8f0;
+    box-sizing: border-box;
+}
+
+/* Layout structure */
+.siloq-dashboard .dashboard-wrapper {
+    min-height: 100vh;
+}
+
+.siloq-dashboard .dashboard-header {
+    padding: 20px 32px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.siloq-dashboard .dashboard-body {
+    display: flex;
+}
+
+.siloq-dashboard .dashboard-sidebar {
+    width: 240px;
+    padding: 24px;
+    border-right: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.siloq-dashboard .dashboard-main {
+    flex: 1;
+    padding: 32px;
+    max-width: 1200px;
+}
+
+/* Header styles */
+.siloq-dashboard .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.siloq-dashboard .logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 18px;
+    color: white;
+}
+
+.siloq-dashboard .logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.siloq-dashboard .version-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+    background: rgba(99, 102, 241, 0.2);
+    border-radius: 4px;
+    color: #a5b4fc;
+    font-weight: 600;
+}
+
+.siloq-dashboard .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.siloq-dashboard .automation-dropdown-container {
+    position: relative;
+}
+
+.siloq-dashboard .automation-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.siloq-dashboard .automation-selector:hover {
+    border-color: rgba(71, 85, 105, 1);
+}
+
+.siloq-dashboard .automation-selector svg {
+    width: 14px;
+    height: 14px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .automation-label {
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+.siloq-dashboard .automation-mode-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.siloq-dashboard .automation-mode-manual {
+    background: rgba(100, 116, 139, 0.2);
+    color: #94a3b8;
+}
+
+.siloq-dashboard .automation-mode-semi {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.siloq-dashboard .automation-mode-full {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.siloq-dashboard .automation-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 12px;
+    padding: 8px;
+    width: 288px;
+    z-index: 50;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    display: none;
+}
+
+.siloq-dashboard .automation-dropdown.active {
+    display: block;
+}
+
+.siloq-dashboard .automation-option {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.siloq-dashboard .automation-option:hover {
+    background: rgba(51, 65, 85, 0.5);
+}
+
+.siloq-dashboard .automation-option.active {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.siloq-dashboard .automation-option-label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.siloq-dashboard .automation-option-desc {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.siloq-dashboard .site-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.siloq-dashboard .site-status-text {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .status-indicator {
+    width: 8px;
+    height: 8px;
+    background: #34d399;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+}
+
+/* Sidebar styles */
+.siloq-dashboard .nav-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.siloq-dashboard .nav-item:hover {
+    color: #e2e8f0;
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.siloq-dashboard .nav-item.active {
+    background: linear-gradient(90deg, #3b82f6, #6366f1);
+    color: white;
+}
+
+.siloq-dashboard .nav-item svg {
+    width: 18px;
+    height: 18px;
+}
+
+.siloq-dashboard .nav-badge {
+    position: absolute;
+    right: 12px;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+/* Card styles */
+.siloq-dashboard .card {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 16px;
+    padding: 28px;
+}
+
+.siloq-dashboard .card-hover {
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.siloq-dashboard .card-hover:hover {
+    transform: translateY(-2px);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+}
+
+/* Button styles */
+.siloq-dashboard .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.siloq-dashboard .btn-primary {
+    background: linear-gradient(90deg, #3b82f6, #6366f1);
+    color: white;
+}
+
+.siloq-dashboard .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
+}
+
+.siloq-dashboard .btn-secondary {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+}
+
+.siloq-dashboard .btn-secondary:hover {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+.siloq-dashboard .btn-approve {
+    background: linear-gradient(90deg, #10b981, #22c55e);
+    color: white;
+}
+
+.siloq-dashboard .btn-approve:hover {
+    box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+}
+
+.siloq-dashboard .btn-deny {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+.siloq-dashboard .btn-deny:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.siloq-dashboard .btn-small {
+    padding: 6px 16px;
+    font-size: 13px;
+}
+
+/* Grid layouts */
+.siloq-dashboard .grid-2 {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+}
+
+.siloq-dashboard .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.siloq-dashboard .grid-2-cols {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+/* Stat cards */
+.siloq-dashboard .stat-card {
+    padding: 24px;
+}
+
+.siloq-dashboard .stat-label {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.siloq-dashboard .stat-value {
+    font-size: 30px;
+    font-weight: 700;
+}
+
+.siloq-dashboard .stat-subtext {
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.siloq-dashboard .stat-red { color: #f87171; }
+.siloq-dashboard .stat-blue { color: #60a5fa; }
+.siloq-dashboard .stat-amber { color: #fbbf24; }
+
+/* Health Score */
+.siloq-dashboard .health-score-card {
+    text-align: center;
+}
+
+.siloq-dashboard .health-score-title {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.siloq-dashboard .health-score-circle {
+    position: relative;
+    width: 144px;
+    height: 144px;
+    margin: 0 auto 20px;
+}
+
+.siloq-dashboard .health-score-circle svg {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+}
+
+.siloq-dashboard .health-score-circle .bg-circle {
+    fill: none;
+    stroke: rgba(148, 163, 184, 0.1);
+    stroke-width: 8;
+}
+
+.siloq-dashboard .health-score-circle .progress-circle {
+    fill: none;
+    stroke: url(#scoreGradient);
+    stroke-width: 8;
+    stroke-linecap: round;
+}
+
+.siloq-dashboard .health-score-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.siloq-dashboard .health-score-number {
+    font-size: 40px;
+    font-weight: 700;
+}
+
+.siloq-dashboard .health-score-total {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .health-score-change {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #34d399;
+    font-size: 14px;
+}
+
+/* Banner */
+.siloq-dashboard .remediation-banner {
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.siloq-dashboard .banner-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.siloq-dashboard .banner-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.siloq-dashboard .banner-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.siloq-dashboard .banner-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .banner-text {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+/* Issue cards */
+.siloq-dashboard .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.siloq-dashboard .section-icon.red {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+}
+
+.siloq-dashboard .section-icon.indigo {
+    background: rgba(99, 102, 241, 0.1);
+    color: #818cf8;
+}
+
+.siloq-dashboard .section-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.siloq-dashboard .section-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.siloq-dashboard .section-subtitle {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .issue-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.siloq-dashboard .issue-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.siloq-dashboard .issue-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .severity-badge {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.siloq-dashboard .severity-high {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.siloq-dashboard .severity-medium {
+    background: linear-gradient(90deg, #f59e0b, #ea580c);
+    color: white;
+}
+
+.siloq-dashboard .severity-low {
+    background: linear-gradient(90deg, #10b981, #22c55e);
+    color: white;
+}
+
+.siloq-dashboard .keyword-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.siloq-dashboard .issue-meta {
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .issue-meta .highlight {
+    color: #f87171;
+    font-weight: 600;
+}
+
+.siloq-dashboard .page-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .page-tag {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 6px;
+    color: #a5b4fc;
+    font-family: 'Space Mono', monospace;
+}
+
+.siloq-dashboard .recommendation {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: #34d399;
+}
+
+.siloq-dashboard .recommendation svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Silo cards */
+.siloq-dashboard .silo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.siloq-dashboard .silo-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.siloq-dashboard .silo-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.siloq-dashboard .silo-header {
+    margin-bottom: 16px;
+}
+
+.siloq-dashboard .silo-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .silo-meta {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .silo-visual {
+    position: relative;
+    padding-left: 32px;
+}
+
+.siloq-dashboard .silo-line {
+    position: absolute;
+    left: 24px;
+    top: 40px;
+    bottom: 20px;
+    width: 2px;
+    background: linear-gradient(180deg, #6366f1, transparent);
+}
+
+.siloq-dashboard .silo-target {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .target-icon {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.siloq-dashboard .target-title {
+    font-size: 14px;
+    color: #e2e8f0;
+}
+
+.siloq-dashboard .silo-page {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .page-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+.siloq-dashboard .page-icon.published {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.silo-dashboard .page-icon.draft {
+    background: rgba(100, 116, 139, 0.5);
+}
+
+.siloq-dashboard .page-title {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .silo-more {
+    font-size: 11px;
+    color: #64748b;
+    margin-left: 28px;
+}
+
+.siloq-dashboard .silo-arrow {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: #64748b;
+}
+
+.siloq-dashboard .silo-arrow svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Risk badges */
+.siloq-dashboard .risk-safe {
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.siloq-dashboard .risk-destructive {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+/* Entity tags */
+.siloq-dashboard .entity-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    background: rgba(99, 102, 241, 0.15);
+    border-radius: 4px;
+    color: #a5b4fc;
+    display: inline-block;
+    margin-right: 6px;
+    margin-bottom: 4px;
+}
+
+/* Change cards */
+.siloq-dashboard .change-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    margin-bottom: 16px;
+}
+
+.siloq-dashboard .change-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .change-type {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.siloq-dashboard .change-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #f1f5f9;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .change-doctrine {
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .change-doctrine span {
+    color: #64748b;
+}
+
+.siloq-dashboard .change-impact {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: #34d399;
+}
+
+.siloq-dashboard .change-impact svg {
+    width: 14px;
+    height: 14px;
+}
+
+.siloq-dashboard .rollback-notice {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #fca5a5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.siloq-dashboard .rollback-notice svg {
+    width: 14px;
+    height: 14px;
+}
+
+.siloq-dashboard .change-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Queue stats */
+.siloq-dashboard .queue-stat {
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.siloq-dashboard .queue-stat.safe {
+    background: rgba(16, 185, 129, 0.05);
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.siloq-dashboard .queue-stat.destructive {
+    background: rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.siloq-dashboard .queue-stat-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .queue-stat.safe .queue-stat-label {
+    color: #34d399;
+}
+
+.siloq-dashboard .queue-stat.destructive .queue-stat-label {
+    color: #f87171;
+}
+
+.siloq-dashboard .queue-stat-value {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.siloq-dashboard .queue-stat.safe .queue-stat-value {
+    color: #34d399;
+}
+
+.siloq-dashboard .queue-stat.destructive .queue-stat-value {
+    color: #f87171;
+}
+
+/* Content action cards */
+.siloq-dashboard .content-action-card {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.siloq-dashboard .content-action-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
+}
+
+.siloq-dashboard .content-action-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.siloq-dashboard .content-action-icon.amber {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.siloq-dashboard .content-action-icon.indigo {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+}
+
+.siloq-dashboard .content-action-icon.red {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.siloq-dashboard .content-action-icon.emerald {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
+.siloq-dashboard .content-action-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.siloq-dashboard .content-action-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .content-action-desc {
+    font-size: 14px;
+    color: #94a3b8;
+    line-height: 1.6;
+}
+
+/* Terminal preview */
+.siloq-dashboard .terminal-preview {
+    background: rgba(15, 23, 42, 0.8);
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    margin-top: 32px;
+}
+
+.siloq-dashboard .terminal-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .terminal-content {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.siloq-dashboard .terminal-line {
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .terminal-line.green { color: #34d399; }
+.siloq-dashboard .terminal-line.blue { color: #60a5fa; }
+.siloq-dashboard .terminal-line.violet { color: #a78bfa; }
+.siloq-dashboard .terminal-line.amber { color: #fbbf24; }
+
+.siloq-dashboard .terminal-note {
+    margin-top: 16px;
+    font-size: 12px;
+    color: #64748b;
+    font-family: inherit;
+}
+
+/* Settings styles */
+.siloq-dashboard .settings-option {
+    padding: 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .settings-option:hover {
+    border-color: rgba(71, 85, 105, 1);
+}
+
+.siloq-dashboard .settings-option.active {
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px solid rgba(99, 102, 241, 0.5);
+}
+
+.siloq-dashboard .settings-option:not(.active) {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.siloq-dashboard .settings-option-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .settings-option-desc {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .settings-check {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.siloq-dashboard .settings-check svg {
+    width: 14px;
+    height: 14px;
+}
+
+.siloq-dashboard .settings-legend {
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.siloq-dashboard .settings-legend-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.siloq-dashboard .settings-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+}
+
+.siloq-dashboard .legend-column-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .legend-column-title.safe {
+    color: #34d399;
+}
+
+.siloq-dashboard .legend-column-title.destructive {
+    color: #f87171;
+}
+
+.siloq-dashboard .legend-list {
+    font-size: 14px;
+    color: #94a3b8;
+    line-height: 1.8;
+}
+
+/* Toggle switches */
+.siloq-dashboard .toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 8px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .toggle-label {
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+.siloq-dashboard .toggle-switch {
+    width: 40px;
+    height: 24px;
+    background: #475569;
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.siloq-dashboard .toggle-switch.active {
+    background: #6366f1;
+}
+
+.siloq-dashboard .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.siloq-dashboard .toggle-switch.active::after {
+    transform: translateX(16px);
+}
+
+/* Modal styles */
+.siloq-dashboard .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+
+.siloq-dashboard .modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.siloq-dashboard .modal-content {
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: scale(0.95);
+    transition: transform 0.3s;
+}
+
+.siloq-dashboard .modal-overlay.active .modal-content {
+    transform: scale(1);
+}
+
+.siloq-dashboard .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .modal-title {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.siloq-dashboard .modal-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.siloq-dashboard .modal-close:hover {
+    color: #e2e8f0;
+}
+
+.siloq-dashboard .modal-close svg {
+    width: 20px;
+    height: 20px;
+}
+
+.siloq-dashboard .modal-alert {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .modal-alert-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f87171;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .modal-alert-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .modal-alert-text {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+.siloq-dashboard .modal-steps {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .modal-step {
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.siloq-dashboard .modal-step:last-child {
+    margin-bottom: 0;
+}
+
+.siloq-dashboard .modal-step-number {
+    color: #34d399;
+    margin-right: 8px;
+}
+
+.siloq-dashboard .modal-step code {
+    background: rgba(99, 102, 241, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #a5b4fc;
+    font-family: 'Space Mono', monospace;
+}
+
+.siloq-dashboard .modal-outcome {
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .modal-outcome-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #34d399;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .modal-outcome-text {
+    font-size: 14px;
+    color: #e2e8f0;
+}
+
+.siloq-dashboard .modal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.siloq-dashboard .modal-actions .btn {
+    flex: 1;
+}
+
+/* Form styles */
+.siloq-dashboard .form-group {
+    margin-bottom: 20px;
+}
+
+.siloq-dashboard .form-label {
+    font-size: 14px;
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.siloq-dashboard .form-select,
+.siloq-dashboard .form-input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 14px;
+}
+
+.siloq-dashboard .form-select option {
+    background: #1e293b;
+}
+
+.siloq-dashboard .form-input::placeholder {
+    color: #64748b;
+}
+
+.siloq-dashboard .form-hint {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 6px;
+}
+
+.siloq-dashboard .form-info-box {
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+.siloq-dashboard .form-info-title {
+    font-size: 12px;
+    color: #a5b4fc;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.siloq-dashboard .form-info-list {
+    font-size: 14px;
+    color: #94a3b8;
+    line-height: 1.6;
+}
+
+/* Silo Planner specific */
+.siloq-dashboard .silo-planner-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+}
+
+.siloq-dashboard .silo-planner-title {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.siloq-dashboard .target-page-card {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), rgba(234, 88, 12, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+}
+
+.siloq-dashboard .target-page-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.siloq-dashboard .target-page-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #f59e0b, #ea580c);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.siloq-dashboard .target-page-info {
+    flex: 1;
+}
+
+.siloq-dashboard .target-page-label {
+    font-size: 11px;
+    color: #fbbf24;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .target-page-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .target-page-url {
+    font-size: 14px;
+    color: #94a3b8;
+    font-family: 'Space Mono', monospace;
+}
+
+.siloq-dashboard .supporting-pages-container {
+    padding-left: 24px;
+    border-left: 2px solid rgba(99, 102, 241, 0.3);
+}
+
+.siloq-dashboard .supporting-pages-label {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 12px;
+    margin-left: 8px;
+}
+
+.siloq-dashboard .supporting-page-item {
+    background: rgba(15, 23, 42, 0.4);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.siloq-dashboard .supporting-page-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.siloq-dashboard .supporting-page-status {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.siloq-dashboard .supporting-page-status.published {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.siloq-dashboard .supporting-page-status.suggested {
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.siloq-dashboard .supporting-page-status.draft {
+    background: rgba(100, 116, 139, 0.5);
+}
+
+.siloq-dashboard .supporting-page-title {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.siloq-dashboard .supporting-page-url {
+    font-size: 12px;
+    color: #64748b;
+    font-family: 'Space Mono', monospace;
+}
+
+.siloq-dashboard .supporting-page-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.siloq-dashboard .link-status {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.siloq-dashboard .link-status.linked {
+    color: #34d399;
+}
+
+.siloq-dashboard .link-status svg {
+    width: 12px;
+    height: 12px;
+}
+
+.siloq-dashboard .status-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.siloq-dashboard .status-badge.published {
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+}
+
+.siloq-dashboard .status-badge.suggested {
+    background: rgba(245, 158, 11, 0.1);
+    color: #fbbf24;
+}
+
+.siloq-dashboard .status-badge.draft {
+    background: rgba(100, 116, 139, 0.5);
+    color: #94a3b8;
+}
+
+.siloq-dashboard .generate-cta {
+    border: 2px dashed rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.siloq-dashboard .generate-cta:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.siloq-dashboard .generate-cta svg {
+    width: 20px;
+    height: 20px;
+    color: #818cf8;
+    margin: 0 auto 8px;
+}
+
+.siloq-dashboard .generate-cta-title {
+    font-size: 14px;
+    color: #a5b4fc;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.siloq-dashboard .generate-cta-desc {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Tab content visibility */
+.siloq-dashboard .tab-content {
+    display: none;
+}
+
+.siloq-dashboard .tab-content.active {
+    display: block;
+}
+
+/* API Token display styles - overrides for Tailwind classes from API */
+.siloq-dashboard .bg-muted {
+    background: rgba(51, 65, 85, 0.4);
+}
+
+.siloq-dashboard .token-display,
+.siloq-dashboard .bg-muted.flex-1.break-all.rounded.px-2.py-1.font-mono.text-sm {
+    flex: 1;
+    overflow-wrap: break-word;
+    word-break: break-all;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px !important;
+    line-height: 1.4;
+    max-width: 280px;
+}
+
+.siloq-dashboard .text-sm {
+    font-size: 11px !important;
+}
+
+.siloq-dashboard .token-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(51, 65, 85, 0.3);
+    border-radius: 8px;
+}
+
+/* Utility classes */
+.siloq-dashboard .mb-2 { margin-bottom: 8px; }
+.siloq-dashboard .mb-4 { margin-bottom: 16px; }
+.siloq-dashboard .mb-6 { margin-bottom: 24px; }
+.siloq-dashboard .mb-8 { margin-bottom: 32px; }
+.siloq-dashboard .mt-4 { margin-top: 16px; }
+.siloq-dashboard .mt-8 { margin-top: 32px; }
+.siloq-dashboard .mr-1 { margin-right: 4px; }
+.siloq-dashboard .ml-2 { margin-left: 8px; }
+.siloq-dashboard .ml-7 { margin-left: 28px; }
+
+.siloq-dashboard .flex { display: flex; }
+.siloq-dashboard .flex-1 { flex: 1; }
+.siloq-dashboard .items-center { align-items: center; }
+.siloq-dashboard .justify-between { justify-content: space-between; }
+.siloq-dashboard .gap-2 { gap: 8px; }
+.siloq-dashboard .gap-3 { gap: 12px; }
+.siloq-dashboard .gap-4 { gap: 16px; }
+.siloq-dashboard .gap-5 { gap: 20px; }
+
+.siloq-dashboard .whitespace-nowrap { white-space: nowrap; }
+.siloq-dashboard .relative { position: relative; }
+
+/* Scrollbar styles */
+.siloq-dashboard::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.siloq-dashboard::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.siloq-dashboard::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.3);
+    border-radius: 4px;
+}
+
+.siloq-dashboard::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.5);
+}
+
+/* Hide WordPress admin elements within dashboard */
+.siloq-dashboard #wpfooter,
+.siloq-dashboard .notice,
+.siloq-dashboard .wrap h1,
+.siloq-dashboard .wrap h2 {
+    display: none;
+}
+
+.siloq-dashboard .wrap {
+    margin: 0;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 1200px) {
+    .siloq-dashboard .grid-2 {
+        grid-template-columns: 1fr;
+    }
+    
+    .siloq-dashboard .silo-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media screen and (max-width: 782px) {
+    .siloq-dashboard {
+        margin: -10px -10px 0 -10px;
+    }
+    
+    .siloq-dashboard .dashboard-header {
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+    }
+    
+    .siloq-dashboard .dashboard-body {
+        flex-direction: column;
+    }
+    
+    .siloq-dashboard .dashboard-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+        padding: 16px;
+    }
+    
+    .siloq-dashboard .dashboard-main {
+        padding: 16px;
+    }
+    
+    .siloq-dashboard .grid-3 {
+        grid-template-columns: 1fr;
+    }
+    
+    .siloq-dashboard .grid-2-cols {
+        grid-template-columns: 1fr;
+    }
+    
+    .siloq-dashboard .silo-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .siloq-dashboard .settings-legend-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .siloq-dashboard .remediation-banner {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+    }
+    
+    .siloq-dashboard .modal-content {
+        width: 95%;
+        padding: 20px;
+    }
+}
