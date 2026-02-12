@@ -376,37 +376,70 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Get sync status for all pages
+     * Get sync status for all content (pages, posts, products)
      * 
-     * @return array Array of page sync statuses
+     * @return array Array of content sync statuses
      */
     public function get_all_sync_status() {
-        $pages = get_posts(array(
-            'post_type' => 'page',
+        // Query ALL content types: pages, posts, and WooCommerce products
+        $post_types = array('page', 'post');
+        if (post_type_exists('product')) {
+            $post_types[] = 'product';
+        }
+        
+        $posts = get_posts(array(
+            'post_type' => $post_types,
             'posts_per_page' => -1,
             'post_status' => array('publish', 'draft')
         ));
         
         $status_data = array();
         
-        foreach ($pages as $page) {
-            $last_synced = get_post_meta($page->ID, '_siloq_last_synced', true);
-            $sync_status = get_post_meta($page->ID, '_siloq_sync_status', true);
-            $has_schema = !empty(get_post_meta($page->ID, '_siloq_schema_markup', true));
-            $siloq_page_id = get_post_meta($page->ID, '_siloq_page_id', true);
+        foreach ($posts as $post) {
+            $last_synced = get_post_meta($post->ID, '_siloq_last_synced', true);
+            $sync_status = get_post_meta($post->ID, '_siloq_sync_status', true);
+            $has_schema = !empty(get_post_meta($post->ID, '_siloq_schema_markup', true));
+            $siloq_page_id = get_post_meta($post->ID, '_siloq_page_id', true);
             
             $status_data[] = array(
-                'id' => $page->ID,
-                'title' => $page->post_title,
-                'url' => get_permalink($page->ID),
-                'edit_url' => get_edit_post_link($page->ID, 'raw'),
-                'status' => $page->post_status,
+                'id' => $post->ID,
+                'title' => $post->post_title,
+                'url' => get_permalink($post->ID),
+                'edit_url' => get_edit_post_link($post->ID, 'raw'),
+                'status' => $post->post_status,
+                'post_type' => $post->post_type,
                 'last_synced' => $last_synced ? $last_synced : __('Never', 'siloq-connector'),
                 'sync_status' => $sync_status ? $sync_status : 'not_synced',
                 'has_schema' => $has_schema,
                 'siloq_page_id' => $siloq_page_id,
-                'modified' => $page->post_modified
+                'modified' => $post->post_modified
             );
+        }
+        
+        // Also include WooCommerce product categories
+        if (taxonomy_exists('product_cat')) {
+            $categories = get_terms(array(
+                'taxonomy' => 'product_cat',
+                'hide_empty' => false,
+            ));
+            
+            if (!is_wp_error($categories)) {
+                foreach ($categories as $cat) {
+                    $status_data[] = array(
+                        'id' => 'term_' . $cat->term_id,
+                        'title' => $cat->name,
+                        'url' => get_term_link($cat),
+                        'edit_url' => get_edit_term_link($cat->term_id, 'product_cat'),
+                        'status' => 'publish',
+                        'post_type' => 'product_cat',
+                        'last_synced' => __('N/A', 'siloq-connector'),
+                        'sync_status' => 'not_synced',
+                        'has_schema' => false,
+                        'siloq_page_id' => null,
+                        'modified' => null
+                    );
+                }
+            }
         }
         
         return $status_data;
@@ -456,22 +489,28 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Get pages that need re-sync
+     * Get content that needs re-sync (pages, posts, products)
      * 
      * @return array Array of post IDs
      */
     public function get_pages_needing_resync() {
-        $pages = get_posts(array(
-            'post_type' => 'page',
+        // Query ALL content types
+        $post_types = array('page', 'post');
+        if (post_type_exists('product')) {
+            $post_types[] = 'product';
+        }
+        
+        $posts = get_posts(array(
+            'post_type' => $post_types,
             'post_status' => 'publish',
             'posts_per_page' => -1
         ));
         
         $needs_resync = array();
         
-        foreach ($pages as $page) {
-            if ($this->needs_resync($page->ID)) {
-                $needs_resync[] = $page->ID;
+        foreach ($posts as $post) {
+            if ($this->needs_resync($post->ID)) {
+                $needs_resync[] = $post->ID;
             }
         }
         
