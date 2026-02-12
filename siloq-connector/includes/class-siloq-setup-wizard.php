@@ -26,8 +26,24 @@ class Siloq_Setup_Wizard {
         $this->api_client = new Siloq_API_Client();
 
         add_action('admin_menu', array($this, 'add_wizard_page'), 5);
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_wizard_scripts'));
         add_action('wp_ajax_siloq_save_wizard_step', array($this, 'ajax_save_wizard_step'));
         add_action('wp_ajax_siloq_complete_wizard', array($this, 'ajax_complete_wizard'));
+    }
+
+    /**
+     * Enqueue wizard scripts
+     */
+    public function enqueue_wizard_scripts($hook) {
+        if (strpos($hook, 'siloq-setup-wizard') === false) {
+            return;
+        }
+
+        // Ensure jQuery is loaded
+        wp_enqueue_script('jquery');
+
+        // Add ajaxurl to page
+        wp_add_inline_script('jquery', 'var ajaxurl = "' . admin_url('admin-ajax.php') . '";');
     }
 
     /**
@@ -58,7 +74,15 @@ class Siloq_Setup_Wizard {
         $current_step = isset($_GET['step']) ? sanitize_text_field($_GET['step']) : 'welcome';
         $wizard_data = get_option('siloq_wizard_data', array());
 
+        // Prevent browser caching
+        header('Cache-Control: no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: Wed, 11 Jan 1984 05:00:00 GMT');
+
         ?>
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
         <div class="wrap siloq-setup-wizard">
             <h1><?php _e('Siloq Setup Wizard', 'siloq-connector'); ?></h1>
 
