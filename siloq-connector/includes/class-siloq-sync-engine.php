@@ -1,8 +1,7 @@
 <?php
 /**
  * Siloq Sync Engine
- * Handles synchronization of WordPress content with Siloq platform
- * Supports: Pages, Posts, WooCommerce Products, WooCommerce Categories
+ * Handles synchronization of WordPress pages with Siloq platform
  */
 
 if (!defined('ABSPATH')) {
@@ -17,11 +16,6 @@ class Siloq_Sync_Engine {
     private $api_client;
     
     /**
-     * Supported post types for sync
-     */
-    private $supported_post_types = array('page', 'post', 'product');
-    
-    /**
      * Constructor
      */
     public function __construct() {
@@ -29,27 +23,7 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Check if WooCommerce is active
-     */
-    private function is_woocommerce_active() {
-        return class_exists('WooCommerce');
-    }
-    
-    /**
-     * Get post types to sync based on what's available
-     */
-    private function get_syncable_post_types() {
-        $types = array('page', 'post');
-        
-        if ($this->is_woocommerce_active()) {
-            $types[] = 'product';
-        }
-        
-        return $types;
-    }
-    
-    /**
-     * Sync a single post/page/product
+     * Sync a single page
      * 
      * @param int $post_id WordPress post ID
      * @param bool $force_schema Whether to force schema fetch even if sync fails
@@ -58,26 +32,18 @@ class Siloq_Sync_Engine {
     public function sync_page($post_id, $force_schema = false) {
         // Validate post
         $post = get_post($post_id);
-        if (!$post) {
+        if (!$post || $post->post_type !== 'page') {
             return array(
                 'success' => false,
-                'message' => __('Invalid post ID', 'siloq-connector')
+                'message' => __('Invalid page ID', 'siloq-connector')
             );
         }
         
-        // Check if post type is supported
-        if (!in_array($post->post_type, $this->get_syncable_post_types())) {
-            return array(
-                'success' => false,
-                'message' => sprintf(__('Post type "%s" is not supported', 'siloq-connector'), $post->post_type)
-            );
-        }
-        
-        // Check if post is published
+        // Check if page is published
         if ($post->post_status !== 'publish') {
             return array(
                 'success' => false,
-                'message' => __('Only published content can be synced', 'siloq-connector')
+                'message' => __('Only published pages can be synced', 'siloq-connector')
             );
         }
         
@@ -98,10 +64,12 @@ class Siloq_Sync_Engine {
         // If successful, also fetch schema markup
         if ($result['success']) {
             $schema_result = $this->api_client->get_schema_markup($post_id);
+            // Note: Schema fetch failure doesn't fail the sync
             if (!$schema_result['success'] && defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('[Siloq] Schema fetch failed for post ' . $post_id . ': ' . $schema_result['message']);
             }
         } elseif ($force_schema) {
+            // Optionally try to fetch schema even if sync failed
             $this->api_client->get_schema_markup($post_id);
         }
         
@@ -109,54 +77,26 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Sync a WooCommerce product category (taxonomy term)
-     * 
-     * @param int $term_id Term ID
-     * @return array Result with success status and message
-     */
-    public function sync_product_category($term_id) {
-        if (!$this->is_woocommerce_active()) {
-            return array(
-                'success' => false,
-                'message' => __('WooCommerce is not active', 'siloq-connector')
-            );
-        }
-        
-        $term = get_term($term_id, 'product_cat');
-        if (!$term || is_wp_error($term)) {
-            return array(
-                'success' => false,
-                'message' => __('Invalid category ID', 'siloq-connector')
-            );
-        }
-        
-        // Check if API is configured
-        $api_url = get_option('siloq_api_url');
-        $api_key = get_option('siloq_api_key');
-        
-        if (empty($api_url) || empty($api_key)) {
-            return array(
-                'success' => false,
-                'message' => __('Siloq API is not configured', 'siloq-connector')
-            );
-        }
-        
-        // Sync via API
-        $result = $this->api_client->sync_taxonomy_term($term_id, 'product_cat');
-        
-        return $result;
-    }
-    
-    /**
-     * Sync all published content (pages, posts, products, categories)
+     * Sync all published pages
      * 
      * @param int $offset Starting offset for batch processing
-     * @param int $limit Maximum number of items to sync (0 = all)
+     * @param int $limit Maximum number of pages to sync (0 = all)
      * @return array Results with counts and details
      */
     public function sync_all_pages($offset = 0, $limit = 0) {
+        $args = array(
+            'post_type' => 'page',
+            'post_status' => 'publish',
+            'posts_per_page' => $limit > 0 ? $limit : -1,
+            'offset' => $offset,
+            'orderby' => 'ID',
+            'order' => 'ASC'
+        );
+        
+        $pages = get_posts($args);
+        
         $results = array(
-            'total' => 0,
+            'total' => count($pages),
             'synced' => 0,
             'failed' => 0,
             'skipped' => 0,
@@ -165,51 +105,30 @@ class Siloq_Sync_Engine {
             'has_more' => false
         );
         
-        // Get all syncable post types
-        $post_types = $this->get_syncable_post_types();
-        
-        // Query all content
-        $args = array(
-            'post_type' => $post_types,
-            'post_status' => 'publish',
-            'posts_per_page' => $limit > 0 ? $limit : -1,
-            'offset' => $offset,
-            'orderby' => 'ID',
-            'order' => 'ASC'
-        );
-        
-        $posts = get_posts($args);
-        $results['total'] = count($posts);
-        
-        // Check if there are more posts
+        // Check if there are more pages
         if ($limit > 0) {
-            $total_count = 0;
-            foreach ($post_types as $type) {
-                $count_obj = wp_count_posts($type);
-                $total_count += isset($count_obj->publish) ? $count_obj->publish : 0;
-            }
-            $results['has_more'] = ($offset + count($posts)) < $total_count;
-            $results['total_available'] = $total_count;
+            $total_pages = wp_count_posts('page')->publish;
+            $results['has_more'] = ($offset + count($pages)) < $total_pages;
+            $results['total_available'] = $total_pages;
         }
         
-        // Sync each post
-        foreach ($posts as $post) {
+        foreach ($pages as $page) {
+            // Skip if API is not configured
             $api_url = get_option('siloq_api_url');
             $api_key = get_option('siloq_api_key');
             
             if (empty($api_url) || empty($api_key)) {
                 $results['skipped']++;
                 $results['details'][] = array(
-                    'id' => $post->ID,
-                    'title' => $post->post_title,
-                    'type' => $post->post_type,
+                    'id' => $page->ID,
+                    'title' => $page->post_title,
                     'status' => 'skipped',
                     'message' => __('API not configured', 'siloq-connector')
                 );
                 continue;
             }
             
-            $result = $this->sync_page($post->ID);
+            $result = $this->sync_page($page->ID);
             
             if ($result['success']) {
                 $results['synced']++;
@@ -220,76 +139,14 @@ class Siloq_Sync_Engine {
             }
             
             $results['details'][] = array(
-                'id' => $post->ID,
-                'title' => $post->post_title,
-                'type' => $post->post_type,
+                'id' => $page->ID,
+                'title' => $page->post_title,
                 'status' => $status,
                 'message' => $result['message']
             );
             
-            usleep(100000); // 0.1 second delay
-        }
-        
-        // Also sync WooCommerce product categories if WooCommerce is active
-        if ($this->is_woocommerce_active() && $offset === 0) {
-            $category_results = $this->sync_all_product_categories();
-            $results['categories'] = $category_results;
-            $results['synced'] += $category_results['synced'];
-            $results['failed'] += $category_results['failed'];
-            $results['total'] += $category_results['total'];
-        }
-        
-        return $results;
-    }
-    
-    /**
-     * Sync all WooCommerce product categories
-     * 
-     * @return array Results
-     */
-    public function sync_all_product_categories() {
-        $results = array(
-            'total' => 0,
-            'synced' => 0,
-            'failed' => 0,
-            'details' => array()
-        );
-        
-        if (!$this->is_woocommerce_active()) {
-            return $results;
-        }
-        
-        $categories = get_terms(array(
-            'taxonomy' => 'product_cat',
-            'hide_empty' => false,
-        ));
-        
-        if (is_wp_error($categories)) {
-            return $results;
-        }
-        
-        $results['total'] = count($categories);
-        
-        foreach ($categories as $category) {
-            $result = $this->sync_product_category($category->term_id);
-            
-            if ($result['success']) {
-                $results['synced']++;
-                $status = 'success';
-            } else {
-                $results['failed']++;
-                $status = 'error';
-            }
-            
-            $results['details'][] = array(
-                'id' => $category->term_id,
-                'name' => $category->name,
-                'type' => 'product_cat',
-                'status' => $status,
-                'message' => $result['message']
-            );
-            
-            usleep(100000); // 0.1 second delay
+            // Small delay to avoid overwhelming the API
+            usleep(100000); // 0.1 second
         }
         
         return $results;
@@ -303,6 +160,7 @@ class Siloq_Sync_Engine {
      * @return array Result with success status
      */
     public function import_content($post_id, $job_id) {
+        // Get job status
         $job_result = $this->api_client->get_content_job_status($job_id);
         
         if (!$job_result['success']) {
@@ -311,6 +169,7 @@ class Siloq_Sync_Engine {
         
         $job_data = $job_result['data'];
         
+        // Check if job is completed
         if ($job_data['status'] !== 'completed') {
             return array(
                 'success' => false,
@@ -321,6 +180,7 @@ class Siloq_Sync_Engine {
             );
         }
         
+        // Check if we have content
         if (empty($job_data['content'])) {
             return array(
                 'success' => false,
@@ -328,14 +188,12 @@ class Siloq_Sync_Engine {
             );
         }
         
-        $original_post = get_post($post_id);
-        $post_type = $original_post ? $original_post->post_type : 'page';
-        
+        // Create a draft post with the new content
         $new_post_id = wp_insert_post(array(
             'post_title' => $job_data['title'] ?? get_the_title($post_id) . ' (Generated)',
             'post_content' => $job_data['content'],
-            'post_status' => 'draft',
-            'post_type' => $post_type,
+            'post_status' => 'draft', // Always create as draft for review
+            'post_type' => 'page',
             'post_parent' => get_post_field('post_parent', $post_id)
         ));
         
@@ -346,14 +204,17 @@ class Siloq_Sync_Engine {
             );
         }
         
+        // Store metadata
         update_post_meta($new_post_id, '_siloq_generated_from', $post_id);
         update_post_meta($new_post_id, '_siloq_content_job_id', $job_id);
         update_post_meta($new_post_id, '_siloq_imported_at', current_time('mysql'));
         
+        // Store schema if available
         if (!empty($job_data['schema_markup'])) {
             update_post_meta($new_post_id, '_siloq_schema_markup', $job_data['schema_markup']);
         }
         
+        // Store FAQs if available
         if (!empty($job_data['faq_items'])) {
             update_post_meta($new_post_id, '_siloq_faq_items', $job_data['faq_items']);
         }
@@ -369,78 +230,47 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Get sync status for all content
+     * Get sync status for all pages
      * 
-     * @return array Array of sync statuses
+     * @return array Array of page sync statuses
      */
     public function get_all_sync_status() {
-        $post_types = $this->get_syncable_post_types();
-        
-        $posts = get_posts(array(
-            'post_type' => $post_types,
+        $pages = get_posts(array(
+            'post_type' => 'page',
             'posts_per_page' => -1,
             'post_status' => array('publish', 'draft')
         ));
         
         $status_data = array();
         
-        foreach ($posts as $post) {
-            $last_synced = get_post_meta($post->ID, '_siloq_last_synced', true);
-            $sync_status = get_post_meta($post->ID, '_siloq_sync_status', true);
-            $has_schema = !empty(get_post_meta($post->ID, '_siloq_schema_markup', true));
-            $siloq_page_id = get_post_meta($post->ID, '_siloq_page_id', true);
+        foreach ($pages as $page) {
+            $last_synced = get_post_meta($page->ID, '_siloq_last_synced', true);
+            $sync_status = get_post_meta($page->ID, '_siloq_sync_status', true);
+            $has_schema = !empty(get_post_meta($page->ID, '_siloq_schema_markup', true));
+            $siloq_page_id = get_post_meta($page->ID, '_siloq_page_id', true);
             
             $status_data[] = array(
-                'id' => $post->ID,
-                'title' => $post->post_title,
-                'url' => get_permalink($post->ID),
-                'edit_url' => get_edit_post_link($post->ID, 'raw'),
-                'post_type' => $post->post_type,
-                'status' => $post->post_status,
+                'id' => $page->ID,
+                'title' => $page->post_title,
+                'url' => get_permalink($page->ID),
+                'edit_url' => get_edit_post_link($page->ID, 'raw'),
+                'status' => $page->post_status,
                 'last_synced' => $last_synced ? $last_synced : __('Never', 'siloq-connector'),
                 'sync_status' => $sync_status ? $sync_status : 'not_synced',
                 'has_schema' => $has_schema,
                 'siloq_page_id' => $siloq_page_id,
-                'modified' => $post->post_modified
+                'modified' => $page->post_modified
             );
-        }
-        
-        // Add WooCommerce categories
-        if ($this->is_woocommerce_active()) {
-            $categories = get_terms(array(
-                'taxonomy' => 'product_cat',
-                'hide_empty' => false,
-            ));
-            
-            if (!is_wp_error($categories)) {
-                foreach ($categories as $category) {
-                    $last_synced = get_term_meta($category->term_id, '_siloq_last_synced', true);
-                    $sync_status = get_term_meta($category->term_id, '_siloq_sync_status', true);
-                    $siloq_page_id = get_term_meta($category->term_id, '_siloq_page_id', true);
-                    
-                    $status_data[] = array(
-                        'id' => 'cat_' . $category->term_id,
-                        'term_id' => $category->term_id,
-                        'title' => $category->name,
-                        'url' => get_term_link($category),
-                        'edit_url' => get_edit_term_link($category->term_id, 'product_cat'),
-                        'post_type' => 'product_cat',
-                        'status' => 'publish',
-                        'last_synced' => $last_synced ? $last_synced : __('Never', 'siloq-connector'),
-                        'sync_status' => $sync_status ? $sync_status : 'not_synced',
-                        'has_schema' => false,
-                        'siloq_page_id' => $siloq_page_id,
-                        'modified' => null
-                    );
-                }
-            }
         }
         
         return $status_data;
     }
     
     /**
-     * Clear sync metadata for a post
+     * Clear sync metadata for a page
+     * 
+     * @param int $post_id WordPress post ID
+     * @return bool Success status
      */
     public function clear_sync_data($post_id) {
         delete_post_meta($post_id, '_siloq_last_synced');
@@ -455,13 +285,17 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Check if content needs re-sync
+     * Check if a page needs re-sync
+     * (if modified after last sync)
+     * 
+     * @param int $post_id WordPress post ID
+     * @return bool True if needs re-sync
      */
     public function needs_resync($post_id) {
         $last_synced = get_post_meta($post_id, '_siloq_last_synced', true);
         
         if (empty($last_synced)) {
-            return true;
+            return true; // Never synced
         }
         
         $post = get_post($post_id);
@@ -476,22 +310,22 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Get content that needs re-sync
+     * Get pages that need re-sync
+     * 
+     * @return array Array of post IDs
      */
     public function get_pages_needing_resync() {
-        $post_types = $this->get_syncable_post_types();
-        
-        $posts = get_posts(array(
-            'post_type' => $post_types,
+        $pages = get_posts(array(
+            'post_type' => 'page',
             'post_status' => 'publish',
             'posts_per_page' => -1
         ));
         
         $needs_resync = array();
         
-        foreach ($posts as $post) {
-            if ($this->needs_resync($post->ID)) {
-                $needs_resync[] = $post->ID;
+        foreach ($pages as $page) {
+            if ($this->needs_resync($page->ID)) {
+                $needs_resync[] = $page->ID;
             }
         }
         
@@ -499,30 +333,34 @@ class Siloq_Sync_Engine {
     }
     
     /**
-     * Sync content that needs re-sync
+     * Sync pages that need re-sync
+     * 
+     * @param int $limit Maximum number of pages to sync
+     * @return array Results
      */
     public function sync_outdated_pages($limit = 10) {
-        $post_ids = $this->get_pages_needing_resync();
+        $page_ids = $this->get_pages_needing_resync();
         
-        if (empty($post_ids)) {
+        if (empty($page_ids)) {
             return array(
                 'success' => true,
-                'message' => __('All content is up to date', 'siloq-connector'),
+                'message' => __('All pages are up to date', 'siloq-connector'),
                 'synced' => 0
             );
         }
         
-        $post_ids = array_slice($post_ids, 0, $limit);
+        // Limit the number of pages to sync
+        $page_ids = array_slice($page_ids, 0, $limit);
         
         $results = array(
-            'total' => count($post_ids),
+            'total' => count($page_ids),
             'synced' => 0,
             'failed' => 0,
             'details' => array()
         );
         
-        foreach ($post_ids as $post_id) {
-            $result = $this->sync_page($post_id);
+        foreach ($page_ids as $page_id) {
+            $result = $this->sync_page($page_id);
             
             if ($result['success']) {
                 $results['synced']++;
@@ -531,13 +369,13 @@ class Siloq_Sync_Engine {
             }
             
             $results['details'][] = array(
-                'id' => $post_id,
-                'title' => get_the_title($post_id),
+                'id' => $page_id,
+                'title' => get_the_title($page_id),
                 'status' => $result['success'] ? 'success' : 'error',
                 'message' => $result['message']
             );
             
-            usleep(100000);
+            usleep(100000); // 0.1 second delay
         }
         
         return $results;

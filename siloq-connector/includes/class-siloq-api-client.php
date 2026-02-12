@@ -91,8 +91,7 @@ class Siloq_API_Client {
         }
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $code = wp_remote_retrieve_response_code($response);
-        // Backend returns 'valid' field (not 'authenticated')
-        if ($code === 200 && isset($body['valid']) && $body['valid']) {
+        if ($code === 200 && isset($body['authenticated']) && $body['authenticated']) {
             return array(
                 'success' => true,
                 'message' => __('Connection successful!', 'siloq-connector'),
@@ -127,8 +126,9 @@ class Siloq_API_Client {
         $front_page_id = (int) get_option('page_on_front');
         $is_homepage = ($front_page_id > 0 && $post->ID === $front_page_id);
         
-        // Check noindex status across ALL major SEO plugins
-        $is_noindex = $this->check_noindex_status($post->ID);
+        // Check for Yoast noindex setting
+        $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
+        $is_noindex = ($yoast_noindex === '1' || $yoast_noindex === 1);
         
         // Prepare page data
         $page_data = array(
@@ -138,7 +138,6 @@ class Siloq_API_Client {
             'content' => $post->post_content,
             'excerpt' => $post->post_excerpt,
             'status' => $post->post_status,
-            'post_type' => $post->post_type, // page, post, product, etc.
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
@@ -146,24 +145,12 @@ class Siloq_API_Client {
             'menu_order' => $post->menu_order,
             'is_homepage' => $is_homepage,
             'is_noindex' => $is_noindex,
-            'meta' => $this->get_seo_meta($post->ID)
+            'meta' => array(
+                'yoast_title' => get_post_meta($post->ID, '_yoast_wpseo_title', true) ?: '',
+                'yoast_description' => get_post_meta($post->ID, '_yoast_wpseo_metadesc', true) ?: '',
+                'featured_image' => get_the_post_thumbnail_url($post->ID, 'full') ?: ''
+            )
         );
-        
-        // Add WooCommerce product-specific data
-        if ($post->post_type === 'product' && class_exists('WooCommerce')) {
-            $product = wc_get_product($post->ID);
-            if ($product) {
-                $page_data['product_data'] = array(
-                    'price' => $product->get_price(),
-                    'regular_price' => $product->get_regular_price(),
-                    'sale_price' => $product->get_sale_price(),
-                    'sku' => $product->get_sku(),
-                    'stock_status' => $product->get_stock_status(),
-                    'categories' => wp_get_post_terms($post->ID, 'product_cat', array('fields' => 'names')),
-                    'tags' => wp_get_post_terms($post->ID, 'product_tag', array('fields' => 'names')),
-                );
-            }
-        }
         
         // Send to Siloq API
         $response = $this->make_request('POST', '/pages/sync/', $page_data);
@@ -198,140 +185,6 @@ class Siloq_API_Client {
         update_post_meta($post->ID, '_siloq_sync_status', 'error');
         
         // Build detailed error message for debugging
-        $error_msg = '';
-        if (isset($body['error'])) {
-            $error_msg = $body['error'];
-        } elseif (isset($body['detail'])) {
-            $error_msg = $body['detail'];
-        } elseif (isset($body['message'])) {
-            $error_msg = $body['message'];
-        } elseif (is_array($body) && !empty($body)) {
-            // DRF validation errors: {"field": ["error message"]}
-            $errors = array();
-            foreach ($body as $field => $messages) {
-                if (is_array($messages)) {
-                    $errors[] = $field . ': ' . implode(', ', $messages);
-                } else {
-                    $errors[] = $field . ': ' . $messages;
-                }
-            }
-            $error_msg = implode('; ', $errors);
-        } else {
-            $error_msg = sprintf(__('Sync failed (HTTP %d)', 'siloq-connector'), $code);
-        }
-        
-        return array(
-            'success' => false,
-            'message' => $error_msg
-        );
-    }
-    
-    /**
-     * Sync a taxonomy term (e.g., WooCommerce product category) to Siloq
-     * 
-     * @param int $term_id WordPress term ID
-     * @param string $taxonomy Taxonomy name (e.g., 'product_cat')
-     * @return array Response data
-     */
-    public function sync_taxonomy_term($term_id, $taxonomy = 'product_cat') {
-        $term = get_term($term_id, $taxonomy);
-        
-        if (!$term || is_wp_error($term)) {
-            return array(
-                'success' => false,
-                'message' => __('Term not found', 'siloq-connector')
-            );
-        }
-        
-        // Get term link (URL)
-        $term_link = get_term_link($term);
-        if (is_wp_error($term_link)) {
-            $term_link = '';
-        }
-        
-        // Get term description
-        $description = term_description($term_id, $taxonomy);
-        
-        // Check for Yoast SEO term meta
-        $yoast_title = get_term_meta($term_id, '_yoast_wpseo_title', true);
-        $yoast_desc = get_term_meta($term_id, '_yoast_wpseo_metadesc', true);
-        
-        // Get parent term info
-        $parent_id = $term->parent;
-        $parent_name = '';
-        if ($parent_id > 0) {
-            $parent_term = get_term($parent_id, $taxonomy);
-            if ($parent_term && !is_wp_error($parent_term)) {
-                $parent_name = $parent_term->name;
-            }
-        }
-        
-        // Prepare term data (sent as a "page" with special type)
-        $term_data = array(
-            'wp_post_id' => 'term_' . $term_id, // Use term_ prefix to distinguish
-            'wp_term_id' => $term_id,
-            'url' => $term_link,
-            'title' => $term->name,
-            'content' => $description,
-            'excerpt' => wp_trim_words(strip_tags($description), 30),
-            'status' => 'publish',
-            'post_type' => $taxonomy, // product_cat, category, etc.
-            'published_at' => null,
-            'modified_at' => null,
-            'slug' => $term->slug,
-            'parent_id' => $parent_id,
-            'parent_name' => $parent_name,
-            'menu_order' => 0,
-            'is_homepage' => false,
-            'is_noindex' => false,
-            'is_taxonomy' => true,
-            'term_count' => $term->count, // Number of posts/products in this term
-            'meta' => array(
-                'yoast_title' => $yoast_title ?: '',
-                'yoast_description' => $yoast_desc ?: '',
-                'featured_image' => '' // Could add category thumbnail if needed
-            )
-        );
-        
-        // Add category thumbnail if WooCommerce
-        if ($taxonomy === 'product_cat' && function_exists('get_term_meta')) {
-            $thumbnail_id = get_term_meta($term_id, 'thumbnail_id', true);
-            if ($thumbnail_id) {
-                $term_data['meta']['featured_image'] = wp_get_attachment_url($thumbnail_id);
-            }
-        }
-        
-        // Send to Siloq API
-        $response = $this->make_request('POST', '/pages/sync/', $term_data);
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 200 || $code === 201) {
-            // Update sync metadata on term
-            update_term_meta($term_id, '_siloq_last_synced', current_time('mysql'));
-            update_term_meta($term_id, '_siloq_sync_status', 'synced');
-            
-            if (isset($body['page_id'])) {
-                update_term_meta($term_id, '_siloq_page_id', $body['page_id']);
-            }
-            
-            return array(
-                'success' => true,
-                'message' => __('Category synced successfully', 'siloq-connector'),
-                'data' => $body
-            );
-        }
-        
-        update_term_meta($term_id, '_siloq_sync_status', 'error');
-        
         $error_msg = '';
         if (isset($body['error'])) {
             $error_msg = $body['error'];
@@ -584,165 +437,6 @@ class Siloq_API_Client {
     }
     
     /**
-     * Get SEO meta (title, description) from whatever SEO plugin is active.
-     * Supports: Yoast, AIOSEO, RankMath, SEOPress, The SEO Framework, and more.
-     * 
-     * @param int $post_id WordPress post ID
-     * @return array SEO meta data
-     */
-    private function get_seo_meta($post_id) {
-        $meta = array(
-            'seo_title' => '',
-            'seo_description' => '',
-            'featured_image' => get_the_post_thumbnail_url($post_id, 'full') ?: '',
-            'seo_plugin' => 'none'
-        );
-        
-        // 1. Yoast SEO
-        $yoast_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
-        $yoast_desc = get_post_meta($post_id, '_yoast_wpseo_metadesc', true);
-        if ($yoast_title || $yoast_desc) {
-            $meta['seo_title'] = $yoast_title ?: '';
-            $meta['seo_description'] = $yoast_desc ?: '';
-            $meta['seo_plugin'] = 'yoast';
-            return $meta;
-        }
-        
-        // 2. All in One SEO (AIOSEO)
-        $aioseo_title = get_post_meta($post_id, '_aioseo_title', true);
-        $aioseo_desc = get_post_meta($post_id, '_aioseo_description', true);
-        if ($aioseo_title || $aioseo_desc) {
-            $meta['seo_title'] = $aioseo_title ?: '';
-            $meta['seo_description'] = $aioseo_desc ?: '';
-            $meta['seo_plugin'] = 'aioseo';
-            return $meta;
-        }
-        
-        // 3. Rank Math
-        $rm_title = get_post_meta($post_id, 'rank_math_title', true);
-        $rm_desc = get_post_meta($post_id, 'rank_math_description', true);
-        if ($rm_title || $rm_desc) {
-            $meta['seo_title'] = $rm_title ?: '';
-            $meta['seo_description'] = $rm_desc ?: '';
-            $meta['seo_plugin'] = 'rankmath';
-            return $meta;
-        }
-        
-        // 4. SEOPress
-        $sp_title = get_post_meta($post_id, '_seopress_titles_title', true);
-        $sp_desc = get_post_meta($post_id, '_seopress_titles_desc', true);
-        if ($sp_title || $sp_desc) {
-            $meta['seo_title'] = $sp_title ?: '';
-            $meta['seo_description'] = $sp_desc ?: '';
-            $meta['seo_plugin'] = 'seopress';
-            return $meta;
-        }
-        
-        // 5. The SEO Framework
-        $tsf_title = get_post_meta($post_id, '_genesis_title', true);
-        $tsf_desc = get_post_meta($post_id, '_genesis_description', true);
-        if ($tsf_title || $tsf_desc) {
-            $meta['seo_title'] = $tsf_title ?: '';
-            $meta['seo_description'] = $tsf_desc ?: '';
-            $meta['seo_plugin'] = 'theseoframework';
-            return $meta;
-        }
-        
-        // 6. Slim SEO (uses default WP fields, no custom meta)
-        
-        // 7. SmartCrawl
-        $sc_title = get_post_meta($post_id, '_wds_title', true);
-        $sc_desc = get_post_meta($post_id, '_wds_metadesc', true);
-        if ($sc_title || $sc_desc) {
-            $meta['seo_title'] = $sc_title ?: '';
-            $meta['seo_description'] = $sc_desc ?: '';
-            $meta['seo_plugin'] = 'smartcrawl';
-            return $meta;
-        }
-        
-        return $meta;
-    }
-    
-    /**
-     * Check if a post/page is set to noindex across ALL major SEO plugins.
-     * Supports: Yoast, AIOSEO, RankMath, SEOPress, The SEO Framework, Slim SEO
-     * 
-     * @param int $post_id WordPress post ID
-     * @return bool True if noindex is set
-     */
-    private function check_noindex_status($post_id) {
-        // 1. Yoast SEO
-        $yoast = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
-        if ($yoast === '1' || $yoast === 1) {
-            return true;
-        }
-        
-        // 2. All in One SEO (AIOSEO)
-        $aioseo = get_post_meta($post_id, '_aioseo_noindex', true);
-        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) {
-            return true;
-        }
-        // AIOSEO also stores in a serialized array
-        $aioseo_data = get_post_meta($post_id, '_aioseo_og_article_section', true); // Check if AIOSEO is active
-        $aioseo_robots = get_post_meta($post_id, '_aioseo_robots_noindex', true);
-        if ($aioseo_robots) {
-            return true;
-        }
-        
-        // 3. Rank Math
-        $rankmath = get_post_meta($post_id, 'rank_math_robots', true);
-        if (is_array($rankmath) && in_array('noindex', $rankmath)) {
-            return true;
-        }
-        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) {
-            return true;
-        }
-        
-        // 4. SEOPress
-        $seopress = get_post_meta($post_id, '_seopress_robots_index', true);
-        if ($seopress === 'yes' || $seopress === '1') {
-            return true;
-        }
-        
-        // 5. The SEO Framework
-        $tsf = get_post_meta($post_id, '_genesis_noindex', true);
-        if ($tsf === '1' || $tsf === 1) {
-            return true;
-        }
-        $tsf_exclude = get_post_meta($post_id, 'exclude_from_archive', true);
-        if ($tsf_exclude === '1') {
-            return true;
-        }
-        
-        // 6. Slim SEO
-        $slim = get_post_meta($post_id, 'slim_seo_robots', true);
-        if (is_array($slim) && in_array('noindex', $slim)) {
-            return true;
-        }
-        
-        // 7. SmartCrawl
-        $smartcrawl = get_post_meta($post_id, '_wds_meta-robots-noindex', true);
-        if ($smartcrawl === '1') {
-            return true;
-        }
-        
-        // 8. Squirrly SEO
-        $squirrly = get_post_meta($post_id, '_sq_robots_noindex', true);
-        if ($squirrly === '1' || $squirrly === 1) {
-            return true;
-        }
-        
-        // 9. Check WordPress core robots filter (WP 5.7+)
-        // This catches any plugin using the wp_robots filter
-        if (function_exists('wp_robots')) {
-            // Note: This would require rendering the page, so we skip for performance
-            // The above plugin checks should cover 95%+ of cases
-        }
-        
-        return false;
-    }
-    
-    /**
      * Validate API credentials
      * 
      * @param string $api_url API URL
@@ -765,5 +459,87 @@ class Siloq_API_Client {
         }
         
         return true;
+    }
+
+    /**
+     * Get list of user's sites
+     * 
+     * @return array|WP_Error
+     */
+    public function get_sites() {
+        $response = $this->make_request('GET', '/sites/');
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to get sites', 'siloq-connector')
+            );
+        }
+        
+        // Handle both array and paginated response
+        return isset($data['results']) ? $data['results'] : (is_array($data) ? $data : array());
+    }
+
+    /**
+     * Get business profile for a site
+     * 
+     * @param int $site_id Site ID
+     * @return array|WP_Error
+     */
+    public function get_business_profile($site_id) {
+        $response = $this->make_request('GET', "/sites/{$site_id}/profile/");
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to get business profile', 'siloq-connector')
+            );
+        }
+        
+        return $data;
+    }
+
+    /**
+     * Save business profile for a site
+     * 
+     * @param int $site_id Site ID
+     * @param array $profile_data Profile data
+     * @return array|WP_Error
+     */
+    public function save_business_profile($site_id, $profile_data) {
+        $response = $this->make_request('PATCH', "/sites/{$site_id}/profile/", $profile_data);
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        
+        if ($code !== 200) {
+            return new WP_Error(
+                'siloq_api_error',
+                isset($data['detail']) ? $data['detail'] : __('Failed to save business profile', 'siloq-connector')
+            );
+        }
+        
+        return $data;
     }
 }
