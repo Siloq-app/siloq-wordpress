@@ -91,7 +91,8 @@ class Siloq_API_Client {
         }
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $code = wp_remote_retrieve_response_code($response);
-        if ($code === 200 && isset($body['authenticated']) && $body['authenticated']) {
+        // Backend returns 'valid' field (not 'authenticated')
+        if ($code === 200 && isset($body['valid']) && $body['valid']) {
             return array(
                 'success' => true,
                 'message' => __('Connection successful!', 'siloq-connector'),
