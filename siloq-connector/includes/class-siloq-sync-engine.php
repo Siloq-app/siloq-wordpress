@@ -233,7 +233,10 @@ class Siloq_Sync_Engine {
             
             $result = $this->sync_page($page->ID);
             
-            if ($result['success']) {
+            if (isset($result['skipped']) && $result['skipped']) {
+                $results['skipped']++;
+                $status = 'skipped';
+            } elseif ($result['success']) {
                 $results['synced']++;
                 $status = 'success';
             } else {

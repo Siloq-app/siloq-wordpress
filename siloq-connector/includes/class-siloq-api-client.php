@@ -108,6 +108,56 @@ class Siloq_API_Client {
     }
     
     /**
+     * Check if a post is marked noindex across ALL major SEO plugins
+     * Supports: Yoast, AIOSEO, RankMath, SEOPress, The SEO Framework, Squirrly
+     * 
+     * @param int $post_id WordPress post ID
+     * @return bool True if noindex
+     */
+    private function check_noindex_status($post_id) {
+        // 1. Yoast SEO
+        $yoast = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
+        if ($yoast === '1' || $yoast === 1) return true;
+        
+        // 2. All In One SEO (AIOSEO)
+        $aioseo = get_post_meta($post_id, '_aioseo_noindex', true);
+        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
+        // AIOSEO also stores in robots_noindex
+        $aioseo2 = get_post_meta($post_id, '_aioseo_robots_noindex', true);
+        if ($aioseo2 === '1' || $aioseo2 === 1 || $aioseo2 === true) return true;
+        
+        // 3. Rank Math
+        $rankmath = get_post_meta($post_id, 'rank_math_robots', true);
+        if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
+        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
+        
+        // 4. SEOPress
+        $seopress = get_post_meta($post_id, '_seopress_robots_index', true);
+        if ($seopress === 'yes' || $seopress === '1') return true; // SEOPress uses 'yes' for noindex
+        
+        // 5. The SEO Framework
+        $tsf = get_post_meta($post_id, '_genesis_noindex', true);
+        if ($tsf === '1' || $tsf === 1) return true;
+        $tsf2 = get_post_meta($post_id, 'exclude_from_archive', true);
+        if ($tsf2 === '1') return true;
+        
+        // 6. Squirrly SEO
+        $squirrly = get_post_meta($post_id, '_sq_noindex', true);
+        if ($squirrly === '1' || $squirrly === 1) return true;
+        
+        // 7. WooCommerce hidden products (if applicable)
+        if (get_post_type($post_id) === 'product') {
+            $visibility = get_post_meta($post_id, '_visibility', true);
+            if ($visibility === 'hidden') return true;
+            // WooCommerce 3.0+ uses taxonomy for visibility
+            $terms = wp_get_post_terms($post_id, 'product_visibility', array('fields' => 'slugs'));
+            if (!is_wp_error($terms) && in_array('exclude-from-search', $terms)) return true;
+        }
+        
+        return false;
+    }
+    
+    /**
      * Sync a page to Siloq
      * 
      * @param int $post_id WordPress post ID
@@ -127,9 +177,17 @@ class Siloq_API_Client {
         $front_page_id = (int) get_option('page_on_front');
         $is_homepage = ($front_page_id > 0 && $post->ID === $front_page_id);
         
-        // Check for Yoast noindex setting
-        $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
-        $is_noindex = ($yoast_noindex === '1' || $yoast_noindex === 1);
+        // Check noindex across ALL major SEO plugins
+        $is_noindex = $this->check_noindex_status($post->ID);
+        
+        // SKIP noindex pages entirely - don't waste API calls on pages we won't analyze
+        if ($is_noindex) {
+            return array(
+                'success' => true,
+                'message' => __('Skipped (noindex page)', 'siloq-connector'),
+                'skipped' => true
+            );
+        }
         
         // Prepare page data
         $page_data = array(
