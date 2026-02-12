@@ -139,6 +139,7 @@ class Siloq_API_Client {
             'content' => $post->post_content,
             'excerpt' => $post->post_excerpt,
             'status' => $post->post_status,
+            'post_type' => $post->post_type, // page, post, product, etc.
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
@@ -152,6 +153,22 @@ class Siloq_API_Client {
                 'featured_image' => get_the_post_thumbnail_url($post->ID, 'full') ?: ''
             )
         );
+        
+        // Add WooCommerce product-specific data
+        if ($post->post_type === 'product' && class_exists('WooCommerce')) {
+            $product = wc_get_product($post->ID);
+            if ($product) {
+                $page_data['product_data'] = array(
+                    'price' => $product->get_price(),
+                    'regular_price' => $product->get_regular_price(),
+                    'sale_price' => $product->get_sale_price(),
+                    'sku' => $product->get_sku(),
+                    'stock_status' => $product->get_stock_status(),
+                    'categories' => wp_get_post_terms($post->ID, 'product_cat', array('fields' => 'names')),
+                    'tags' => wp_get_post_terms($post->ID, 'product_tag', array('fields' => 'names')),
+                );
+            }
+        }
         
         // Send to Siloq API
         $response = $this->make_request('POST', '/pages/sync/', $page_data);
@@ -186,6 +203,129 @@ class Siloq_API_Client {
         update_post_meta($post->ID, '_siloq_sync_status', 'error');
         
         // Build detailed error message for debugging
+        $error_msg = '';
+        if (isset($body['error'])) {
+            $error_msg = $body['error'];
+        } elseif (isset($body['detail'])) {
+            $error_msg = $body['detail'];
+        } elseif (isset($body['message'])) {
+            $error_msg = $body['message'];
+        } else {
+            $error_msg = sprintf(__('Sync failed (HTTP %d)', 'siloq-connector'), $code);
+        }
+        
+        return array(
+            'success' => false,
+            'message' => $error_msg
+        );
+    }
+    
+    /**
+     * Sync a taxonomy term (e.g., WooCommerce product category) to Siloq
+     * 
+     * @param int $term_id WordPress term ID
+     * @param string $taxonomy Taxonomy name (e.g., 'product_cat')
+     * @return array Response data
+     */
+    public function sync_taxonomy_term($term_id, $taxonomy = 'product_cat') {
+        $term = get_term($term_id, $taxonomy);
+        
+        if (!$term || is_wp_error($term)) {
+            return array(
+                'success' => false,
+                'message' => __('Term not found', 'siloq-connector')
+            );
+        }
+        
+        // Get term link (URL)
+        $term_link = get_term_link($term);
+        if (is_wp_error($term_link)) {
+            $term_link = '';
+        }
+        
+        // Get term description
+        $description = term_description($term_id, $taxonomy);
+        
+        // Check for Yoast SEO term meta
+        $yoast_title = get_term_meta($term_id, '_yoast_wpseo_title', true);
+        $yoast_desc = get_term_meta($term_id, '_yoast_wpseo_metadesc', true);
+        
+        // Get parent term info
+        $parent_id = $term->parent;
+        $parent_name = '';
+        if ($parent_id > 0) {
+            $parent_term = get_term($parent_id, $taxonomy);
+            if ($parent_term && !is_wp_error($parent_term)) {
+                $parent_name = $parent_term->name;
+            }
+        }
+        
+        // Prepare term data (sent as a "page" with special type)
+        $term_data = array(
+            'wp_post_id' => 'term_' . $term_id, // Use term_ prefix to distinguish
+            'wp_term_id' => $term_id,
+            'url' => $term_link,
+            'title' => $term->name,
+            'content' => $description,
+            'excerpt' => wp_trim_words(strip_tags($description), 30),
+            'status' => 'publish',
+            'post_type' => $taxonomy, // product_cat, category, etc.
+            'published_at' => null,
+            'modified_at' => null,
+            'slug' => $term->slug,
+            'parent_id' => $parent_id,
+            'parent_name' => $parent_name,
+            'menu_order' => 0,
+            'is_homepage' => false,
+            'is_noindex' => false,
+            'is_taxonomy' => true,
+            'term_count' => $term->count, // Number of posts/products in this term
+            'meta' => array(
+                'yoast_title' => $yoast_title ?: '',
+                'yoast_description' => $yoast_desc ?: '',
+                'featured_image' => '' // Could add category thumbnail if needed
+            )
+        );
+        
+        // Add category thumbnail if WooCommerce
+        if ($taxonomy === 'product_cat' && function_exists('get_term_meta')) {
+            $thumbnail_id = get_term_meta($term_id, 'thumbnail_id', true);
+            if ($thumbnail_id) {
+                $term_data['meta']['featured_image'] = wp_get_attachment_url($thumbnail_id);
+            }
+        }
+        
+        // Send to Siloq API
+        $response = $this->make_request('POST', '/pages/sync/', $term_data);
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
+            );
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+        
+        if ($code === 200 || $code === 201) {
+            // Update sync metadata on term
+            update_term_meta($term_id, '_siloq_last_synced', current_time('mysql'));
+            update_term_meta($term_id, '_siloq_sync_status', 'synced');
+            
+            if (isset($body['page_id'])) {
+                update_term_meta($term_id, '_siloq_page_id', $body['page_id']);
+            }
+            
+            return array(
+                'success' => true,
+                'message' => __('Category synced successfully', 'siloq-connector'),
+                'data' => $body
+            );
+        }
+        
+        update_term_meta($term_id, '_siloq_sync_status', 'error');
+        
         $error_msg = '';
         if (isset($body['error'])) {
             $error_msg = $body['error'];
