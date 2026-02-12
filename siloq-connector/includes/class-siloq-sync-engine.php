@@ -32,18 +32,22 @@ class Siloq_Sync_Engine {
     public function sync_page($post_id, $force_schema = false) {
         // Validate post
         $post = get_post($post_id);
-        if (!$post || $post->post_type !== 'page') {
+        
+        // Accept pages, posts, and WooCommerce products
+        $allowed_types = array('page', 'post', 'product');
+        
+        if (!$post || !in_array($post->post_type, $allowed_types)) {
             return array(
                 'success' => false,
-                'message' => __('Invalid page ID', 'siloq-connector')
+                'message' => sprintf(__('Unsupported content type: %s', 'siloq-connector'), $post ? $post->post_type : 'unknown')
             );
         }
         
-        // Check if page is published
+        // Check if published
         if ($post->post_status !== 'publish') {
             return array(
                 'success' => false,
-                'message' => __('Only published pages can be synced', 'siloq-connector')
+                'message' => __('Only published content can be synced', 'siloq-connector')
             );
         }
         
