@@ -77,6 +77,96 @@ class Siloq_Sync_Engine {
     }
     
     /**
+     * Sync a taxonomy term (e.g., product category) to Siloq
+     * 
+     * @param int $term_id Term ID
+     * @param string $taxonomy Taxonomy name (e.g., 'product_cat')
+     * @return array Result with success status
+     */
+    public function sync_taxonomy_term($term_id, $taxonomy = 'product_cat') {
+        $term = get_term($term_id, $taxonomy);
+        
+        if (!$term || is_wp_error($term)) {
+            return array(
+                'success' => false,
+                'message' => __('Invalid term', 'siloq-connector')
+            );
+        }
+        
+        // Check if API is configured
+        $api_url = get_option('siloq_api_url');
+        $api_key = get_option('siloq_api_key');
+        
+        if (empty($api_url) || empty($api_key)) {
+            return array(
+                'success' => false,
+                'message' => __('Siloq API is not configured', 'siloq-connector')
+            );
+        }
+        
+        // Build term data to sync (as a "page" with special type)
+        $term_link = get_term_link($term);
+        $description = term_description($term_id, $taxonomy);
+        
+        // Get Yoast SEO term meta if available
+        $yoast_title = get_term_meta($term_id, '_yoast_wpseo_title', true);
+        $yoast_desc = get_term_meta($term_id, '_yoast_wpseo_metadesc', true);
+        
+        $term_data = array(
+            'wp_post_id' => 'term_' . $term_id,
+            'url' => is_wp_error($term_link) ? '' : $term_link,
+            'title' => $term->name,
+            'content' => $description ?: '',
+            'excerpt' => wp_trim_words(strip_tags($description), 30),
+            'status' => 'publish',
+            'post_type' => $taxonomy,
+            'slug' => $term->slug,
+            'parent_id' => $term->parent,
+            'is_homepage' => false,
+            'is_noindex' => false,
+            'meta' => array(
+                'yoast_title' => $yoast_title ?: '',
+                'yoast_description' => $yoast_desc ?: '',
+            )
+        );
+        
+        // Add category thumbnail if WooCommerce
+        if ($taxonomy === 'product_cat' && function_exists('get_term_meta')) {
+            $thumbnail_id = get_term_meta($term_id, 'thumbnail_id', true);
+            if ($thumbnail_id) {
+                $term_data['meta']['featured_image'] = wp_get_attachment_url($thumbnail_id);
+            }
+        }
+        
+        // Send to API
+        $response = $this->api_client->request('POST', '/pages/sync/', $term_data);
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
+            );
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code === 200 || $code === 201) {
+            return array(
+                'success' => true,
+                'message' => __('Category synced successfully', 'siloq-connector'),
+                'data' => $body
+            );
+        }
+        
+        $error_msg = isset($body['error']) ? $body['error'] : (isset($body['detail']) ? $body['detail'] : __('Sync failed', 'siloq-connector'));
+        return array(
+            'success' => false,
+            'message' => $error_msg
+        );
+    }
+    
+    /**
      * Sync all published pages
      * 
      * @param int $offset Starting offset for batch processing
@@ -84,8 +174,16 @@ class Siloq_Sync_Engine {
      * @return array Results with counts and details
      */
     public function sync_all_pages($offset = 0, $limit = 0) {
+        // Sync ALL content types: pages, posts, and WooCommerce products
+        $post_types = array('page', 'post');
+        
+        // Add WooCommerce product if available
+        if (post_type_exists('product')) {
+            $post_types[] = 'product';
+        }
+        
         $args = array(
-            'post_type' => 'page',
+            'post_type' => $post_types,
             'post_status' => 'publish',
             'posts_per_page' => $limit > 0 ? $limit : -1,
             'offset' => $offset,
@@ -102,14 +200,19 @@ class Siloq_Sync_Engine {
             'skipped' => 0,
             'details' => array(),
             'offset' => $offset,
-            'has_more' => false
+            'has_more' => false,
+            'content_types_synced' => $post_types
         );
         
-        // Check if there are more pages
+        // Check if there are more items
         if ($limit > 0) {
-            $total_pages = wp_count_posts('page')->publish;
-            $results['has_more'] = ($offset + count($pages)) < $total_pages;
-            $results['total_available'] = $total_pages;
+            $total_count = 0;
+            foreach ($post_types as $pt) {
+                $counts = wp_count_posts($pt);
+                $total_count += isset($counts->publish) ? $counts->publish : 0;
+            }
+            $results['has_more'] = ($offset + count($pages)) < $total_count;
+            $results['total_available'] = $total_count;
         }
         
         foreach ($pages as $page) {
@@ -141,12 +244,48 @@ class Siloq_Sync_Engine {
             $results['details'][] = array(
                 'id' => $page->ID,
                 'title' => $page->post_title,
+                'post_type' => $page->post_type,
                 'status' => $status,
                 'message' => $result['message']
             );
             
             // Small delay to avoid overwhelming the API
             usleep(100000); // 0.1 second
+        }
+        
+        // Also sync WooCommerce product categories if available
+        if (taxonomy_exists('product_cat')) {
+            $categories = get_terms(array(
+                'taxonomy' => 'product_cat',
+                'hide_empty' => false,
+            ));
+            
+            if (!is_wp_error($categories) && !empty($categories)) {
+                $results['categories_synced'] = 0;
+                $results['categories_failed'] = 0;
+                
+                foreach ($categories as $category) {
+                    $cat_result = $this->sync_taxonomy_term($category->term_id, 'product_cat');
+                    
+                    if ($cat_result['success']) {
+                        $results['categories_synced']++;
+                        $results['synced']++;
+                    } else {
+                        $results['categories_failed']++;
+                        $results['failed']++;
+                    }
+                    
+                    $results['details'][] = array(
+                        'id' => 'cat_' . $category->term_id,
+                        'title' => $category->name,
+                        'post_type' => 'product_cat',
+                        'status' => $cat_result['success'] ? 'success' : 'error',
+                        'message' => $cat_result['message']
+                    );
+                    
+                    usleep(100000);
+                }
+            }
         }
         
         return $results;
