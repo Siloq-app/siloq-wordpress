@@ -197,6 +197,7 @@ class Siloq_API_Client {
             'content' => $post->post_content,
             'excerpt' => $post->post_excerpt,
             'status' => $post->post_status,
+            'post_type' => $post->post_type,  // page, post, or product
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
