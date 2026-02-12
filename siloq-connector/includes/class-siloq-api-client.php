@@ -205,6 +205,17 @@ class Siloq_API_Client {
             $error_msg = $body['detail'];
         } elseif (isset($body['message'])) {
             $error_msg = $body['message'];
+        } elseif (is_array($body) && !empty($body)) {
+            // DRF validation errors: {"field": ["error message"]}
+            $errors = array();
+            foreach ($body as $field => $messages) {
+                if (is_array($messages)) {
+                    $errors[] = $field . ': ' . implode(', ', $messages);
+                } else {
+                    $errors[] = $field . ': ' . $messages;
+                }
+            }
+            $error_msg = implode('; ', $errors);
         } else {
             $error_msg = sprintf(__('Sync failed (HTTP %d)', 'siloq-connector'), $code);
         }
