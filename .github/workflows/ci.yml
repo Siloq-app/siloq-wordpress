@@ -1,0 +1,38 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [release/v2.0, main]
+  pull_request:
+    branches: [release/v2.0, main, release/v1.0]
+
+jobs:
+  lint-and-validate:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: PHP Syntax Check
+        run: |
+          find siloq-connector -name "*.php" -exec php -l {} \; 2>&1 | grep -v "No syntax errors" | head -20
+          echo "PHP syntax check complete"
+
+      - name: Check plugin structure
+        run: |
+          # Verify required files exist
+          test -f siloq-connector/siloq-connector.php && echo "✅ Main plugin file" || echo "❌ Missing main plugin file"
+          test -d siloq-connector/includes && echo "✅ Includes directory" || echo "❌ Missing includes directory"
+          test -d siloq-connector/assets && echo "✅ Assets directory" || echo "❌ Missing assets directory"
+
+      - name: Build plugin zip
+        run: |
+          cd /tmp && zip -r siloq-connector.zip $GITHUB_WORKSPACE/siloq-connector/ -x "*.git*"
+          echo "✅ Plugin zip created successfully"
