@@ -23,8 +23,13 @@ class Siloq_API_Client {
     /**
      * Constructor
      */
+    /**
+     * Default production API URL
+     */
+    const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
+
     public function __construct() {
-        $this->api_url = rtrim(get_option('siloq_api_url'), '/');
+        $this->api_url = rtrim(get_option('siloq_api_url', self::DEFAULT_API_URL), '/');
         $this->api_key = get_option('siloq_api_key');
     }
     

@@ -52,7 +52,7 @@ class Siloq_Sync_Engine {
         }
         
         // Check if API is configured
-        $api_url = get_option('siloq_api_url');
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key');
         
         if (empty($api_url) || empty($api_key)) {
@@ -98,7 +98,7 @@ class Siloq_Sync_Engine {
         }
         
         // Check if API is configured
-        $api_url = get_option('siloq_api_url');
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key');
         
         if (empty($api_url) || empty($api_key)) {
@@ -221,7 +221,7 @@ class Siloq_Sync_Engine {
         
         foreach ($pages as $page) {
             // Skip if API is not configured
-            $api_url = get_option('siloq_api_url');
+            $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
             $api_key = get_option('siloq_api_key');
             
             if (empty($api_url) || empty($api_key)) {

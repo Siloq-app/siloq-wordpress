@@ -16,8 +16,9 @@
             const $button = $(this);
             const $form = $button.closest('form');
             const $status = $('#siloq-connection-status');
+            const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
             // Read from the same form by name (works even if IDs differ)
-            const apiUrl = ($form.length ? $form.find('input[name="siloq_api_url"]') : $('input[name="siloq_api_url"]')).val();
+            const apiUrl = (($form.length ? $form.find('input[name="siloq_api_url"]') : $('input[name="siloq_api_url"]')).val() || '').trim() || DEFAULT_API_URL;
             const apiKey = ($form.length ? $form.find('input[name="siloq_api_key"]') : $('input[name="siloq_api_key"]')).val();
             
             // Disable button and show loading
@@ -485,22 +486,25 @@
          * Handle settings form submission with validation
          */
         $('form[action=""]').on('submit', function(e) {
-            const apiUrl = $('#siloq_api_url').val();
             const apiKey = $('#siloq_api_key').val();
             
-            if (!apiUrl || !apiKey) {
+            // Only the API key is required — API URL has a server-side default
+            if (!apiKey) {
                 e.preventDefault();
-                alert('Please fill in all required fields.');
+                alert('Please enter your API Key.');
                 return false;
             }
             
-            // Basic URL validation
-            try {
-                new URL(apiUrl);
-            } catch (err) {
-                e.preventDefault();
-                alert('Please enter a valid API URL.');
-                return false;
+            // Validate API URL only if user explicitly set one
+            const apiUrl = $('#siloq_api_url').val();
+            if (apiUrl) {
+                try {
+                    new URL(apiUrl);
+                } catch (err) {
+                    e.preventDefault();
+                    alert('Please enter a valid API URL.');
+                    return false;
+                }
             }
         });
         
