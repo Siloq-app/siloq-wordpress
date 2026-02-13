@@ -55,7 +55,7 @@
         });
         
         /**
-         * Sync All Pages
+         * Sync All Pages (batched to handle large sites)
          */
         $('#siloq-sync-all-pages').on('click', function(e) {
             e.preventDefault();
@@ -67,6 +67,7 @@
             const $button = $(this);
             const $progress = $('#siloq-sync-progress');
             const $results = $('#siloq-sync-results');
+            const BATCH_SIZE = 50;
             
             // Disable button and show progress
             $button.prop('disabled', true).addClass('siloq-syncing');
@@ -75,32 +76,71 @@
             
             // Reset progress bar
             $('.siloq-progress-fill').css('width', '0%');
-            $('.siloq-progress-text').text('0 / 0');
+            $('.siloq-progress-text').text('Starting sync...');
             
-            // Make AJAX request
-            $.ajax({
-                url: siloqAjax.ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'siloq_sync_all',
-                    nonce: siloqAjax.nonce
-                },
-                success: function(response) {
-                    $button.prop('disabled', false).removeClass('siloq-syncing');
-                    $progress.hide();
-                    
-                    if (response.success) {
-                        displaySyncResults(response.data);
-                    } else {
-                        alert('Error: ' + (response.data.message || 'Unknown error'));
+            var totalSynced = 0;
+            var totalFailed = 0;
+            var totalSkipped = 0;
+            var allDetails = [];
+            
+            function syncBatch(offset) {
+                $.ajax({
+                    url: siloqAjax.ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'siloq_sync_all',
+                        nonce: siloqAjax.nonce,
+                        offset: offset,
+                        batch_size: BATCH_SIZE
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var data = response.data;
+                            totalSynced += data.synced || 0;
+                            totalFailed += data.failed || 0;
+                            totalSkipped += data.skipped || 0;
+                            if (data.details) {
+                                allDetails = allDetails.concat(data.details);
+                            }
+                            
+                            // Update progress
+                            var processed = offset + (data.total || 0);
+                            var totalAvail = data.total_available || processed;
+                            var pct = totalAvail > 0 ? Math.min(100, Math.round((processed / totalAvail) * 100)) : 100;
+                            $('.siloq-progress-fill').css('width', pct + '%');
+                            $('.siloq-progress-text').text(processed + ' / ' + totalAvail + ' pages processed');
+                            
+                            // If more batches, continue
+                            if (data.has_more) {
+                                syncBatch(offset + BATCH_SIZE);
+                            } else {
+                                // Done!
+                                $button.prop('disabled', false).removeClass('siloq-syncing');
+                                $progress.hide();
+                                displaySyncResults({
+                                    total: totalSynced + totalFailed + totalSkipped,
+                                    synced: totalSynced,
+                                    failed: totalFailed,
+                                    skipped: totalSkipped,
+                                    details: allDetails
+                                });
+                            }
+                        } else {
+                            $button.prop('disabled', false).removeClass('siloq-syncing');
+                            $progress.hide();
+                            alert('Error: ' + (response.data.message || 'Unknown error'));
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $button.prop('disabled', false).removeClass('siloq-syncing');
+                        $progress.hide();
+                        alert('Sync error at batch offset ' + offset + ': ' + error);
                     }
-                },
-                error: function(xhr, status, error) {
-                    $button.prop('disabled', false).removeClass('siloq-syncing');
-                    $progress.hide();
-                    alert('Error: ' + error);
-                }
-            });
+                });
+            }
+            
+            // Start first batch
+            syncBatch(0);
         });
         
         /**

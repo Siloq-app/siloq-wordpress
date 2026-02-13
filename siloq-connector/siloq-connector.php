@@ -336,7 +336,7 @@ class Siloq_Connector {
     }
     
     /**
-     * AJAX: Sync all pages
+     * AJAX: Sync all pages (batched to avoid PHP timeout)
      */
     public function ajax_sync_all_pages() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
@@ -346,8 +346,17 @@ class Siloq_Connector {
             return;
         }
         
+        // Extend execution time for large sites
+        @set_time_limit(300);
+        
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 50;
+        if ($batch_size < 1 || $batch_size > 200) {
+            $batch_size = 50;
+        }
+        
         $sync_engine = new Siloq_Sync_Engine();
-        $result = $sync_engine->sync_all_pages();
+        $result = $sync_engine->sync_all_pages($offset, $batch_size);
         
         wp_send_json_success($result);
     }
