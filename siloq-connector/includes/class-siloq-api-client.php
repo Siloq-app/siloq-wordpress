@@ -188,15 +188,15 @@ class Siloq_API_Client {
         // Sync noindex pages WITH the flag so the API can update them
         // (Previously we skipped them, but that left stale pages in the DB as is_noindex=false)
         
-        // Prepare page data
+        // Prepare page data — skip heavy content for noindex pages (just update the flag)
         $page_data = array(
             'wp_post_id' => $post->ID,
             'url' => get_permalink($post->ID),
             'title' => $post->post_title,
-            'content' => $post->post_content,
-            'excerpt' => $post->post_excerpt,
+            'content' => $is_noindex ? '' : $post->post_content,
+            'excerpt' => $is_noindex ? '' : $post->post_excerpt,
             'status' => $post->post_status,
-            'post_type' => $post->post_type,  // page, post, or product
+            'post_type' => $post->post_type,
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
@@ -434,7 +434,7 @@ class Siloq_API_Client {
                 'Accept' => 'application/json',
                 'User-Agent' => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION
             ),
-            'timeout' => 30,
+            'timeout' => 60,
             'sslverify' => true
         );
         
