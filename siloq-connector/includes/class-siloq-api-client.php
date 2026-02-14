@@ -185,14 +185,8 @@ class Siloq_API_Client {
         // Check noindex across ALL major SEO plugins
         $is_noindex = $this->check_noindex_status($post->ID);
         
-        // SKIP noindex pages entirely - don't waste API calls on pages we won't analyze
-        if ($is_noindex) {
-            return array(
-                'success' => true,
-                'message' => __('Skipped (noindex page)', 'siloq-connector'),
-                'skipped' => true
-            );
-        }
+        // Sync noindex pages WITH the flag so the API can update them
+        // (Previously we skipped them, but that left stale pages in the DB as is_noindex=false)
         
         // Prepare page data
         $page_data = array(
