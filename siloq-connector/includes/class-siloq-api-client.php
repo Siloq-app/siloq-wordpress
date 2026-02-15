@@ -133,12 +133,14 @@ class Siloq_API_Client {
         // AIOSEO 4.x uses custom table wp_aioseo_posts
         global $wpdb;
         $aioseo_table = $wpdb->prefix . 'aioseo_posts';
-        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
-            $aioseo_robots = $wpdb->get_var($wpdb->prepare(
-                "SELECT robots_noindex FROM {$aioseo_table} WHERE post_id = %d LIMIT 1",
-                $post_id
-            ));
-            if ($aioseo_robots === '1' || $aioseo_robots === 1) return true;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '" . esc_sql($aioseo_table) . "'");
+        if ($table_exists === $aioseo_table) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+            $aioseo_robots = $wpdb->get_var(
+                $wpdb->prepare("SELECT robots_noindex FROM `" . esc_sql($aioseo_table) . "` WHERE post_id = %d LIMIT 1", $post_id)
+            );
+            if ($aioseo_robots === '1' || intval($aioseo_robots) === 1) return true;
         }
         
         // 3. Rank Math

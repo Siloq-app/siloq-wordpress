@@ -199,12 +199,14 @@ class Siloq_Sync_Engine {
         // AIOSEO 4.x stores in custom table wp_aioseo_terms
         global $wpdb;
         $aioseo_table = $wpdb->prefix . 'aioseo_terms';
-        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
-            $aioseo_robots = $wpdb->get_var($wpdb->prepare(
-                "SELECT robots_noindex FROM {$aioseo_table} WHERE term_id = %d LIMIT 1",
-                $term_id
-            ));
-            if ($aioseo_robots === '1' || $aioseo_robots === 1) return true;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '" . esc_sql($aioseo_table) . "'");
+        if ($table_exists === $aioseo_table) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+            $aioseo_robots = $wpdb->get_var(
+                $wpdb->prepare("SELECT robots_noindex FROM `" . esc_sql($aioseo_table) . "` WHERE term_id = %d LIMIT 1", $term_id)
+            );
+            if ($aioseo_robots === '1' || intval($aioseo_robots) === 1) return true;
         }
         // AIOSEO global taxonomy setting (Search Appearance > Taxonomies)
         $aioseo_options = get_option('aioseo_options', '');
