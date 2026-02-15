@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.4.9
+ * Version: 1.4.10
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.4.9');
+define('SILOQ_VERSION', '1.4.10');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -601,13 +601,20 @@ class Siloq_Connector {
      * Gets site_id from the auth/verify endpoint which works with API key auth
      */
     private function get_current_site_id() {
-        // Check if we have a cached site ID
-        $site_id = get_transient('siloq_site_id');
+        // 1. Check persistent option first (survives restarts, no expiry)
+        $site_id = get_option('siloq_site_id');
         if ($site_id) {
             return $site_id;
         }
         
-        // Get site_id from auth/verify endpoint (works with API key)
+        // 2. Check transient (legacy, kept for backward compat)
+        $site_id = get_transient('siloq_site_id');
+        if ($site_id) {
+            update_option('siloq_site_id', $site_id);
+            return $site_id;
+        }
+        
+        // 3. Fetch from auth/verify endpoint
         $api_client = new Siloq_API_Client();
         $result = $api_client->test_connection();
         
@@ -623,6 +630,7 @@ class Siloq_Connector {
         if (!$site_id) {
             return null;
         }
+        update_option('siloq_site_id', $site_id);
         set_transient('siloq_site_id', $site_id, HOUR_IN_SECONDS);
         return $site_id;
     }
