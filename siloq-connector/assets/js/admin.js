@@ -486,22 +486,44 @@
             let html = '';
             
             // Summary
-            html += '<div class="siloq-result-summary">';
-            html += '<strong>Sync Complete</strong><br>';
-            html += 'Total: ' + data.total + ' | ';
-            html += 'Synced: <span style="color: #00a32a;">' + data.synced + '</span> | ';
-            html += 'Failed: <span style="color: #d63638;">' + data.failed + '</span>';
+            html += '<div class="siloq-result-summary" style="padding: 12px 16px; background: #f0f6fc; border-left: 4px solid #2271b1; border-radius: 4px;">';
+            html += '<strong style="font-size: 14px;">✅ Sync Complete</strong><br>';
+            html += '<span style="color: #00a32a; font-weight: 600;">' + data.synced + ' synced</span>';
+            if (data.skipped > 0) {
+                html += ' &nbsp;·&nbsp; <span style="color: #996800;">' + data.skipped + ' skipped</span>';
+            }
+            if (data.failed > 0) {
+                html += ' &nbsp;·&nbsp; <span style="color: #d63638; font-weight: 600;">' + data.failed + ' failed</span>';
+            }
+            html += ' &nbsp;·&nbsp; ' + data.total + ' total';
             html += '</div>';
             
-            // Details
+            // Only show details for failed/errored items (successes don't need attention)
             if (data.details && data.details.length > 0) {
-                html += '<h3>Details</h3>';
-                data.details.forEach(function(item) {
-                    html += '<div class="siloq-result-item ' + item.status + '">';
-                    html += '<strong>' + item.title + '</strong><br>';
-                    html += '<small>' + item.message + '</small>';
-                    html += '</div>';
-                });
+                var failed = data.details.filter(function(d) { return d.status === 'error'; });
+                var skipped = data.details.filter(function(d) { return d.status === 'skipped'; });
+                
+                if (failed.length > 0) {
+                    html += '<details style="margin-top: 10px;">';
+                    html += '<summary style="cursor: pointer; font-weight: 600; color: #d63638; padding: 6px 0;">⚠ ' + failed.length + ' failed — click to see details</summary>';
+                    html += '<div style="max-height: 300px; overflow-y: auto; margin-top: 8px;">';
+                    failed.forEach(function(item) {
+                        html += '<div class="siloq-result-item error" style="padding: 6px 10px; margin: 4px 0; background: #fcf0f1; border-radius: 3px; font-size: 13px;">';
+                        html += '<strong>' + item.title + '</strong> — <small>' + item.message + '</small>';
+                        html += '</div>';
+                    });
+                    html += '</div></details>';
+                }
+                
+                if (skipped.length > 0) {
+                    html += '<details style="margin-top: 6px;">';
+                    html += '<summary style="cursor: pointer; color: #996800; padding: 6px 0;">' + skipped.length + ' skipped (noindex/unpublished)</summary>';
+                    html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 8px;">';
+                    skipped.forEach(function(item) {
+                        html += '<div style="padding: 4px 10px; font-size: 12px; color: #666;">' + item.title + '</div>';
+                    });
+                    html += '</div></details>';
+                }
             }
             
             $results.html(html).show();

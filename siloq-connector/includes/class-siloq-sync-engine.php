@@ -248,13 +248,16 @@ class Siloq_Sync_Engine {
                 $status = 'error';
             }
             
-            $results['details'][] = array(
-                'id' => $page->ID,
-                'title' => $page->post_title,
-                'post_type' => $page->post_type,
-                'status' => $status,
-                'message' => $result['message']
-            );
+            // Only include non-success details to keep response small for large sites
+            if ($status !== 'success') {
+                $results['details'][] = array(
+                    'id' => $page->ID,
+                    'title' => $page->post_title,
+                    'post_type' => $page->post_type,
+                    'status' => $status,
+                    'message' => $result['message']
+                );
+            }
             
             // Small delay to avoid overwhelming the API
             usleep(100000); // 0.1 second
@@ -282,13 +285,15 @@ class Siloq_Sync_Engine {
                         $results['failed']++;
                     }
                     
-                    $results['details'][] = array(
-                        'id' => 'cat_' . $category->term_id,
-                        'title' => $category->name,
-                        'post_type' => 'product_cat',
-                        'status' => $cat_result['success'] ? 'success' : 'error',
-                        'message' => $cat_result['message']
-                    );
+                    if (!$cat_result['success']) {
+                        $results['details'][] = array(
+                            'id' => 'cat_' . $category->term_id,
+                            'title' => $category->name,
+                            'post_type' => 'product_cat',
+                            'status' => 'error',
+                            'message' => $cat_result['message']
+                        );
+                    }
                     
                     usleep(100000);
                 }
