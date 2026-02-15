@@ -130,6 +130,16 @@ class Siloq_API_Client {
         // AIOSEO also stores in robots_noindex
         $aioseo2 = get_post_meta($post_id, '_aioseo_robots_noindex', true);
         if ($aioseo2 === '1' || $aioseo2 === 1 || $aioseo2 === true) return true;
+        // AIOSEO 4.x uses custom table wp_aioseo_posts
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
+            $aioseo_robots = $wpdb->get_var($wpdb->prepare(
+                "SELECT robots_noindex FROM {$aioseo_table} WHERE post_id = %d LIMIT 1",
+                $post_id
+            ));
+            if ($aioseo_robots === '1' || $aioseo_robots === 1) return true;
+        }
         
         // 3. Rank Math
         $rankmath = get_post_meta($post_id, 'rank_math_robots', true);

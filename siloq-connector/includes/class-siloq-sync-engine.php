@@ -193,9 +193,28 @@ class Siloq_Sync_Engine {
         if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
         if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
 
-        // 3. All In One SEO
+        // 3. All In One SEO (AIOSEO) — uses its own wp_aioseo_terms table
         $aioseo = get_term_meta($term_id, '_aioseo_noindex', true);
         if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
+        // AIOSEO 4.x stores in custom table wp_aioseo_terms
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_terms';
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
+            $aioseo_robots = $wpdb->get_var($wpdb->prepare(
+                "SELECT robots_noindex FROM {$aioseo_table} WHERE term_id = %d LIMIT 1",
+                $term_id
+            ));
+            if ($aioseo_robots === '1' || $aioseo_robots === 1) return true;
+        }
+        // AIOSEO global taxonomy setting (Search Appearance > Taxonomies)
+        $aioseo_options = get_option('aioseo_options', '');
+        if (is_string($aioseo_options) && !empty($aioseo_options)) {
+            $aioseo_opts = json_decode($aioseo_options, true);
+            if (isset($aioseo_opts['searchAppearance']['taxonomies'][$taxonomy]['advanced']['robotsMeta']['noindex'])
+                && $aioseo_opts['searchAppearance']['taxonomies'][$taxonomy]['advanced']['robotsMeta']['noindex']) {
+                return true;
+            }
+        }
 
         // 4. SEOPress
         $seopress = get_term_meta($term_id, '_seopress_robots_index', true);
