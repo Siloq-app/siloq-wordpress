@@ -116,18 +116,21 @@ class Siloq_Sync_Engine {
         $yoast_title = get_term_meta($term_id, '_yoast_wpseo_title', true);
         $yoast_desc = get_term_meta($term_id, '_yoast_wpseo_metadesc', true);
         
+        // Check noindex status for taxonomy terms
+        $is_noindex = $this->check_term_noindex_status($term_id, $taxonomy);
+
         $term_data = array(
             'wp_post_id' => 'term_' . $term_id,
             'url' => is_wp_error($term_link) ? '' : $term_link,
             'title' => $term->name,
-            'content' => $description ?: '',
-            'excerpt' => wp_trim_words(strip_tags($description), 30),
+            'content' => $is_noindex ? '' : ($description ?: ''),
+            'excerpt' => $is_noindex ? '' : wp_trim_words(strip_tags($description), 30),
             'status' => 'publish',
             'post_type' => $taxonomy,
             'slug' => $term->slug,
             'parent_id' => $term->parent,
             'is_homepage' => false,
-            'is_noindex' => false,
+            'is_noindex' => $is_noindex,
             'meta' => array(
                 'yoast_title' => $yoast_title ?: '',
                 'yoast_description' => $yoast_desc ?: '',
@@ -170,6 +173,45 @@ class Siloq_Sync_Engine {
         );
     }
     
+    /**
+     * Check noindex status for a taxonomy term across major SEO plugins.
+     *
+     * @param int    $term_id  Term ID.
+     * @param string $taxonomy Taxonomy name.
+     * @return bool True if the term archive is set to noindex.
+     */
+    private function check_term_noindex_status($term_id, $taxonomy) {
+        // 1. Yoast SEO — stores term noindex in wpseo_taxonomy_meta option
+        $wpseo_taxonomy_meta = get_option('wpseo_taxonomy_meta', array());
+        if (isset($wpseo_taxonomy_meta[$taxonomy][$term_id]['wpseo_noindex'])
+            && $wpseo_taxonomy_meta[$taxonomy][$term_id]['wpseo_noindex'] === 'noindex') {
+            return true;
+        }
+
+        // 2. Rank Math — stores in term meta
+        $rankmath = get_term_meta($term_id, 'rank_math_robots', true);
+        if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
+        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
+
+        // 3. All In One SEO
+        $aioseo = get_term_meta($term_id, '_aioseo_noindex', true);
+        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
+
+        // 4. SEOPress
+        $seopress = get_term_meta($term_id, '_seopress_robots_index', true);
+        if ($seopress === 'yes' || $seopress === '1') return true;
+
+        // 5. The SEO Framework
+        $tsf = get_term_meta($term_id, 'autodescription-term-settings', true);
+        if (is_array($tsf) && !empty($tsf['noindex'])) return true;
+
+        // 6. Check if entire taxonomy is set to noindex (Yoast global setting)
+        $wpseo_titles = get_option('wpseo_titles', array());
+        if (!empty($wpseo_titles['noindex-tax-' . $taxonomy])) return true;
+
+        return false;
+    }
+
     /**
      * Sync all published pages
      * 
