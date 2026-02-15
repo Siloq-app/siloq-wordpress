@@ -289,6 +289,120 @@ class Siloq_Webhook_Handler {
     }
     
     /**
+     * Handle content.create_draft event — creates a new WordPress draft post
+     */
+    private function handle_content_create_draft($data) {
+        // Validate required fields
+        $required = array('title', 'content', 'slug', 'siloq_page_id');
+        foreach ($required as $field) {
+            if (empty($data[$field])) {
+                return new WP_Error(
+                    'missing_data',
+                    sprintf(__('Missing required field: %s', 'siloq-connector'), $field),
+                    array('status' => 400)
+                );
+            }
+        }
+
+        $siloq_page_id = intval($data['siloq_page_id']);
+        if ($siloq_page_id <= 0) {
+            return new WP_Error(
+                'invalid_page_id',
+                __('Invalid siloq_page_id', 'siloq-connector'),
+                array('status' => 400)
+            );
+        }
+
+        // Determine post type
+        $post_type = 'post';
+        if (!empty($data['post_type']) && in_array($data['post_type'], array('post', 'page'), true)) {
+            $post_type = $data['post_type'];
+        }
+
+        // Create the draft post
+        $post_id = wp_insert_post(array(
+            'post_title'   => sanitize_text_field($data['title']),
+            'post_content' => wp_kses_post($data['content']),
+            'post_name'    => sanitize_title($data['slug']),
+            'post_status'  => 'draft',
+            'post_type'    => $post_type,
+        ), true);
+
+        if (is_wp_error($post_id)) {
+            return new WP_Error(
+                'post_creation_failed',
+                sprintf(__('Failed to create post: %s', 'siloq-connector'), $post_id->get_error_message()),
+                array('status' => 500)
+            );
+        }
+
+        // Store siloq_page_id
+        update_post_meta($post_id, '_siloq_page_id', $siloq_page_id);
+
+        // Store meta description via AIOSEO if available
+        if (!empty($data['meta_description'])) {
+            $meta_desc = sanitize_text_field($data['meta_description']);
+
+            // Try AIOSEO table
+            global $wpdb;
+            $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+            if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
+                $existing = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$aioseo_table} WHERE post_id = %d",
+                    $post_id
+                ));
+                if ($existing) {
+                    $wpdb->update($aioseo_table, array('description' => $meta_desc), array('post_id' => $post_id));
+                } else {
+                    $wpdb->insert($aioseo_table, array(
+                        'post_id'     => $post_id,
+                        'description' => $meta_desc,
+                    ));
+                }
+            }
+
+            // Also store as post meta fallback
+            update_post_meta($post_id, '_aioseo_description', $meta_desc);
+        }
+
+        // Sideload featured image if provided
+        if (!empty($data['featured_image_url'])) {
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+
+            $image_id = media_sideload_image($data['featured_image_url'], $post_id, null, 'id');
+            if (!is_wp_error($image_id)) {
+                set_post_thumbnail($post_id, $image_id);
+            } else {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf('[Siloq Webhook] Failed to sideload featured image: %s', $image_id->get_error_message()));
+                }
+            }
+        }
+
+        $edit_url = admin_url("post.php?post={$post_id}&action=edit");
+
+        // Notify admin
+        $this->send_admin_notification(
+            $post_id,
+            __('Siloq: New Draft Created', 'siloq-connector'),
+            sprintf(
+                __('A new draft "%s" has been created from Siloq. Edit it here: %s', 'siloq-connector'),
+                get_the_title($post_id),
+                $edit_url
+            )
+        );
+
+        return rest_ensure_response(array(
+            'success'    => true,
+            'message'    => __('Draft post created successfully', 'siloq-connector'),
+            'wp_post_id' => $post_id,
+            'edit_url'   => $edit_url,
+        ));
+    }
+
+    /**
      * Send admin notification
      */
     private function send_admin_notification($post_id, $subject, $message) {
