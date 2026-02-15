@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.2
+ * Version: 1.5.3
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.5.2');
+define('SILOQ_VERSION', '1.5.3');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -92,12 +92,22 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
 
+        // Load TALI (Theme-Aware Layout Intelligence)
+        if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
+        }
+
         // Initialize webhook handler
         new Siloq_Webhook_Handler();
 
         // Initialize lead gen scanner
         $api_client = new Siloq_API_Client();
         new Siloq_Lead_Gen_Scanner($api_client);
+
+        // Initialize TALI
+        if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
+            Siloq_TALI::get_instance();
+        }
     }
     
     /**

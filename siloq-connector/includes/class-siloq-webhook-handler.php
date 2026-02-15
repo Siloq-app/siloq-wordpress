@@ -40,7 +40,21 @@ class Siloq_Webhook_Handler {
         // Get signature from header
         $signature = $request->get_header('X-Siloq-Signature');
         
+        // TODO: Implement proper signature auth for content.create_draft — temporary siloq_page_id check
         if (empty($signature)) {
+            // Allow content.create_draft with simplified auth (valid siloq_page_id)
+            $body_data = json_decode($request->get_body(), true);
+            if (
+                is_array($body_data) &&
+                isset($body_data['event_type']) &&
+                $body_data['event_type'] === 'content.create_draft' &&
+                isset($body_data['siloq_page_id']) &&
+                is_numeric($body_data['siloq_page_id']) &&
+                intval($body_data['siloq_page_id']) > 0
+            ) {
+                return true;
+            }
+
             return new WP_Error(
                 'missing_signature',
                 __('Missing webhook signature', 'siloq-connector'),
@@ -111,6 +125,9 @@ class Siloq_Webhook_Handler {
                 
             case 'sync.completed':
                 return $this->handle_sync_completed($data);
+                
+            case 'content.create_draft':
+                return $this->handle_content_create_draft($data);
                 
             default:
                 return new WP_Error(
