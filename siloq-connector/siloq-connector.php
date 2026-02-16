@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.4
+ * Version: 1.5.5
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.5.4');
+define('SILOQ_VERSION', '1.5.5');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -123,6 +123,16 @@ class Siloq_Connector {
             array('Siloq_Admin', 'render_settings_page'),
             'dashicons-networking',
             80
+        );
+        
+        // Explicit first submenu replaces auto-generated parent duplicate
+        add_submenu_page(
+            'siloq-settings',
+            __('Setup', 'siloq-connector'),
+            __('Setup', 'siloq-connector'),
+            'manage_options',
+            'siloq-settings',
+            array('Siloq_Admin', 'render_settings_page')
         );
         
         add_submenu_page(

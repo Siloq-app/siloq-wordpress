@@ -98,7 +98,7 @@ class Siloq_TALI {
         add_action('customize_save_after', array($this, 'run_fingerprint'));
         
         // Admin menu for manual re-fingerprint
-        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_menu', array($this, 'add_admin_menu'), 20);
         
         // AJAX handlers
         add_action('wp_ajax_siloq_rerun_fingerprint', array($this, 'ajax_rerun_fingerprint'));
