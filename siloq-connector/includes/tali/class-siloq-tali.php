@@ -91,7 +91,7 @@ class Siloq_TALI {
      */
     private function init_hooks() {
         // Run fingerprint on plugin activation
-        register_activation_hook(SILOQ_PLUGIN_FILE, array($this, 'run_fingerprint'));
+        register_activation_hook(SILOQ_PLUGIN_DIR . 'siloq-connector.php', array($this, 'run_fingerprint'));
         
         // Run fingerprint on theme switch
         add_action('switch_theme', array($this, 'run_fingerprint'));
