@@ -246,6 +246,11 @@ class Siloq_API_Client {
                 update_post_meta($post->ID, '_siloq_page_id', $body['page_id']);
             }
             
+            // Persist site_id so Business Profile and other features work
+            if (!empty($body['site_id'])) {
+                update_option('siloq_site_id', $body['site_id']);
+            }
+            
             return array(
                 'success' => true,
                 'message' => __('Page synced successfully', 'siloq-connector'),
