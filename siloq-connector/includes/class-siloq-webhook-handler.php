@@ -129,6 +129,12 @@ class Siloq_Webhook_Handler {
             case 'content.create_draft':
                 return $this->handle_content_create_draft($data);
                 
+            case 'redirect.create':
+                return $this->handle_redirect_create($data);
+                
+            case 'page.update_meta':
+                return $this->handle_page_update_meta($data);
+                
             default:
                 return new WP_Error(
                     'unknown_event',
@@ -416,6 +422,309 @@ class Siloq_Webhook_Handler {
         
         // Send email
         wp_mail($admin_email, $subject, $body);
+    }
+    
+    /**
+     * Handle redirect.create event
+     */
+    private function handle_redirect_create($data) {
+        // Validate required fields
+        if (empty($data['from_url']) || empty($data['to_url'])) {
+            return new WP_Error(
+                'missing_data',
+                __('Missing required fields: from_url and to_url', 'siloq-connector'),
+                array('status' => 400)
+            );
+        }
+
+        $from_url = sanitize_text_field($data['from_url']);
+        $to_url = sanitize_text_field($data['to_url']);
+        $redirect_type = isset($data['type']) ? intval($data['type']) : 301;
+
+        // Ensure valid redirect type
+        if (!in_array($redirect_type, array(301, 302, 307, 308))) {
+            $redirect_type = 301;
+        }
+
+        $method = 'none';
+        $redirect_id = null;
+
+        // Check if Redirection plugin is active
+        if (class_exists('Red_Item')) {
+            try {
+                $redirect = Red_Item::create(array(
+                    'url' => $from_url,
+                    'match_type' => 'url',
+                    'action_type' => 'url',
+                    'action_data' => array('url' => $to_url),
+                    'action_code' => $redirect_type,
+                    'group_id' => 1, // Default group
+                ));
+                
+                if ($redirect) {
+                    $method = 'redirection';
+                    $redirect_id = $redirect->get_id();
+                }
+            } catch (Exception $e) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf('[Siloq Webhook] Redirection plugin error: %s', $e->getMessage()));
+                }
+            }
+        }
+
+        // Check if AIOSEO is active and has redirect manager
+        if ($method === 'none' && function_exists('aioseo') && method_exists(aioseo(), 'redirects')) {
+            try {
+                $redirect = aioseo()->redirects->addRedirect(array(
+                    'sourceUrl' => $from_url,
+                    'targetUrl' => $to_url,
+                    'redirectType' => $redirect_type,
+                    'enabled' => true,
+                ));
+                
+                if ($redirect) {
+                    $method = 'aioseo';
+                    $redirect_id = isset($redirect->id) ? $redirect->id : null;
+                }
+            } catch (Exception $e) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf('[Siloq Webhook] AIOSEO redirect error: %s', $e->getMessage()));
+                }
+            }
+        }
+
+        // Fallback: Add to .htaccess
+        if ($method === 'none') {
+            $htaccess_result = $this->add_htaccess_redirect($from_url, $to_url, $redirect_type);
+            if ($htaccess_result['success']) {
+                $method = 'htaccess';
+            } else {
+                $method = 'manual';
+            }
+        }
+
+        // Store in siloq_redirects option for backup tracking
+        $siloq_redirects = get_option('siloq_redirects', array());
+        $siloq_redirects[] = array(
+            'from_url' => $from_url,
+            'to_url' => $to_url,
+            'type' => $redirect_type,
+            'method' => $method,
+            'redirect_id' => $redirect_id,
+            'created_at' => current_time('mysql'),
+        );
+        update_option('siloq_redirects', $siloq_redirects);
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'method' => $method,
+            'redirect_id' => $redirect_id,
+            'message' => sprintf(__('Redirect created via %s', 'siloq-connector'), $method),
+        ));
+    }
+
+    /**
+     * Handle page.update_meta event
+     */
+    private function handle_page_update_meta($data) {
+        // Validate required fields
+        if (empty($data['url'])) {
+            return new WP_Error(
+                'missing_data',
+                __('Missing required field: url', 'siloq-connector'),
+                array('status' => 400)
+            );
+        }
+
+        $url = esc_url_raw($data['url']);
+        $post_id = $this->find_post_by_url($url);
+
+        if (!$post_id) {
+            return new WP_Error(
+                'post_not_found',
+                __('Post not found for the provided URL', 'siloq-connector'),
+                array('status' => 404)
+            );
+        }
+
+        $updated_fields = array();
+
+        // Update post title
+        if (!empty($data['title'])) {
+            $new_title = sanitize_text_field($data['title']);
+            wp_update_post(array(
+                'ID' => $post_id,
+                'post_title' => $new_title,
+            ));
+            $updated_fields[] = 'title';
+        }
+
+        // Update AIOSEO meta title
+        if (!empty($data['title'])) {
+            $this->update_aioseo_field($post_id, 'title', sanitize_text_field($data['title']));
+        }
+
+        // Update AIOSEO meta description
+        if (!empty($data['meta_description'])) {
+            $this->update_aioseo_field($post_id, 'description', sanitize_text_field($data['meta_description']));
+            $updated_fields[] = 'meta_description';
+        }
+
+        // Update H1 in content
+        if (!empty($data['h1'])) {
+            $post = get_post($post_id);
+            $content = $post->post_content;
+            $new_h1 = sanitize_text_field($data['h1']);
+
+            // Check if content starts with H1
+            if (preg_match('/^<h1[^>]*>.*?<\/h1>/i', $content)) {
+                // Replace existing H1
+                $content = preg_replace(
+                    '/^<h1[^>]*>.*?<\/h1>/i',
+                    '<h1>' . esc_html($new_h1) . '</h1>',
+                    $content
+                );
+                wp_update_post(array(
+                    'ID' => $post_id,
+                    'post_content' => $content,
+                ));
+                $updated_fields[] = 'h1';
+            } elseif (preg_match('/<h1[^>]*>.*?<\/h1>/i', $content)) {
+                // H1 exists but not at the start - replace first occurrence
+                $content = preg_replace(
+                    '/<h1[^>]*>.*?<\/h1>/i',
+                    '<h1>' . esc_html($new_h1) . '</h1>',
+                    $content,
+                    1
+                );
+                wp_update_post(array(
+                    'ID' => $post_id,
+                    'post_content' => $content,
+                ));
+                $updated_fields[] = 'h1';
+            } else {
+                // No H1 found - note it needs manual update
+                $updated_fields[] = 'h1_manual_required';
+            }
+        }
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'post_id' => $post_id,
+            'updated_fields' => $updated_fields,
+            'message' => sprintf(__('Updated %d fields for post %d', 'siloq-connector'), count($updated_fields), $post_id),
+        ));
+    }
+
+    /**
+     * Find post by URL
+     */
+    private function find_post_by_url($url) {
+        // Try url_to_postid first
+        $post_id = url_to_postid($url);
+        if ($post_id) {
+            return $post_id;
+        }
+        
+        // Try by slug
+        $path = parse_url($url, PHP_URL_PATH);
+        $slug = trim($path, '/');
+        $slug = basename($slug); // Get last segment
+        
+        $posts = get_posts(array(
+            'name' => $slug,
+            'post_type' => array('page', 'post', 'product'),
+            'post_status' => array('publish', 'draft', 'pending', 'private'),
+            'numberposts' => 1,
+        ));
+        
+        return !empty($posts) ? $posts[0]->ID : 0;
+    }
+
+    /**
+     * Update AIOSEO field (title or description)
+     */
+    private function update_aioseo_field($post_id, $field, $value) {
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+
+        // Check if AIOSEO table exists
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $aioseo_table)) === $aioseo_table) {
+            // Check if row exists
+            $existing = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$aioseo_table} WHERE post_id = %d",
+                $post_id
+            ));
+
+            if ($existing) {
+                // Update existing row
+                $wpdb->update(
+                    $aioseo_table,
+                    array($field => $value),
+                    array('post_id' => $post_id),
+                    array('%s'),
+                    array('%d')
+                );
+            } else {
+                // Insert new row
+                $wpdb->insert(
+                    $aioseo_table,
+                    array(
+                        'post_id' => $post_id,
+                        $field => $value,
+                    ),
+                    array('%d', '%s')
+                );
+            }
+        }
+
+        // Also store as post meta fallback
+        $meta_key = '_aioseo_' . $field;
+        update_post_meta($post_id, $meta_key, $value);
+    }
+
+    /**
+     * Add redirect to .htaccess
+     */
+    private function add_htaccess_redirect($from, $to, $type = 301) {
+        $htaccess = ABSPATH . '.htaccess';
+
+        if (!file_exists($htaccess) || !is_writable($htaccess)) {
+            return array(
+                'success' => false,
+                'message' => __('.htaccess file not writable', 'siloq-connector'),
+            );
+        }
+
+        $content = file_get_contents($htaccess);
+        $redirect_line = "Redirect {$type} {$from} {$to}";
+
+        // Check if redirect already exists
+        if (strpos($content, $redirect_line) !== false) {
+            return array(
+                'success' => true,
+                'message' => __('Redirect already exists', 'siloq-connector'),
+            );
+        }
+
+        // Add before WordPress rewrite rules
+        if (strpos($content, '# BEGIN WordPress') !== false) {
+            $content = str_replace(
+                '# BEGIN WordPress',
+                $redirect_line . "\n# BEGIN WordPress",
+                $content
+            );
+        } else {
+            // If no WordPress section, add at the end
+            $content .= "\n" . $redirect_line . "\n";
+        }
+
+        file_put_contents($htaccess, $content);
+
+        return array(
+            'success' => true,
+            'message' => __('Redirect added to .htaccess', 'siloq-connector'),
+        );
     }
     
     /**
