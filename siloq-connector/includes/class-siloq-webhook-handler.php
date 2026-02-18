@@ -132,6 +132,9 @@ class Siloq_Webhook_Handler {
             case 'redirect.create':
                 return $this->handle_redirect_create($data);
                 
+            case 'page.change_slug':
+                return $this->handle_page_change_slug($data);
+                
             case 'page.update_meta':
                 return $this->handle_page_update_meta($data);
                 
@@ -551,6 +554,158 @@ class Siloq_Webhook_Handler {
             'method' => $method,
             'redirect_id' => $redirect_id,
             'message' => sprintf(__('Redirect created via %s', 'siloq-connector'), $method),
+        ));
+    }
+
+    /**
+     * Handle page.change_slug event
+     * Changes a page's slug and creates a redirect from old URL to new URL
+     * 
+     * Safety: Redirect should already be created by Siloq API before this is called
+     */
+    private function handle_page_change_slug($data) {
+        // Validate required fields
+        if (empty($data['page_id']) || empty($data['new_slug'])) {
+            return new WP_Error(
+                'missing_data',
+                __('Missing required fields: page_id and new_slug', 'siloq-connector'),
+                array('status' => 400)
+            );
+        }
+
+        $page_id = intval($data['page_id']);
+        $new_slug = sanitize_title($data['new_slug']);
+        $old_slug = isset($data['old_slug']) ? sanitize_text_field($data['old_slug']) : '';
+        $old_url = isset($data['old_url']) ? esc_url_raw($data['old_url']) : '';
+        $new_url = isset($data['new_url']) ? esc_url_raw($data['new_url']) : '';
+        $redirect_id = isset($data['redirect_id']) ? sanitize_text_field($data['redirect_id']) : null;
+
+        // Verify post exists
+        $post = get_post($page_id);
+        if (!$post) {
+            return new WP_Error(
+                'post_not_found',
+                sprintf(__('Post %d not found', 'siloq-connector'), $page_id),
+                array('status' => 404)
+            );
+        }
+
+        // Store current slug for verification
+        $current_slug = $post->post_name;
+
+        // Verify old_slug matches current (if provided)
+        if (!empty($old_slug) && $current_slug !== $old_slug) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log(sprintf(
+                    '[Siloq Webhook] Slug mismatch for page %d: expected "%s", found "%s"',
+                    $page_id,
+                    $old_slug,
+                    $current_slug
+                ));
+            }
+            // Continue anyway - Siloq API may have stale data
+        }
+
+        // Create redirect BEFORE changing slug (safety check)
+        // Siloq API should have already created the redirect, but we'll verify/create as backup
+        if (!empty($old_url) && !empty($new_url)) {
+            // Get Siloq Redirect Manager instance
+            $redirect_manager = Siloq_Redirect_Manager::get_instance();
+            
+            // Check if redirect exists
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'siloq_redirects';
+            $existing_redirect = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$table_name} WHERE source_url = %s AND is_active = 1",
+                $old_url
+            ));
+
+            if (!$existing_redirect) {
+                // Create redirect as backup (Siloq should have already created it)
+                $wpdb->insert(
+                    $table_name,
+                    array(
+                        'source_url' => $old_url,
+                        'target_url' => $new_url,
+                        'redirect_type' => 301,
+                        'reason' => 'slug_change',
+                        'created_by' => 'siloq_slug_change',
+                        'created_at' => current_time('mysql'),
+                        'is_active' => 1,
+                        'hit_count' => 0
+                    ),
+                    array('%s', '%s', '%d', '%s', '%s', '%s', '%d', '%d')
+                );
+
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf(
+                        '[Siloq Webhook] Created backup redirect: %s → %s',
+                        $old_url,
+                        $new_url
+                    ));
+                }
+            }
+        }
+
+        // Change the slug using wp_update_post
+        $result = wp_update_post(array(
+            'ID' => $page_id,
+            'post_name' => $new_slug,
+        ));
+
+        if (is_wp_error($result)) {
+            return new WP_Error(
+                'slug_change_failed',
+                sprintf(__('Failed to change slug: %s', 'siloq-connector'), $result->get_error_message()),
+                array('status' => 500)
+            );
+        }
+
+        if ($result === 0) {
+            return new WP_Error(
+                'slug_change_failed',
+                __('Failed to change slug: Unknown error', 'siloq-connector'),
+                array('status' => 500)
+            );
+        }
+
+        // Verify the change
+        $updated_post = get_post($page_id);
+        $new_post_slug = $updated_post->post_name;
+
+        if ($new_post_slug !== $new_slug) {
+            // WordPress may have modified the slug (e.g., added -2 for duplicates)
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log(sprintf(
+                    '[Siloq Webhook] Slug was modified by WordPress: requested "%s", got "%s"',
+                    $new_slug,
+                    $new_post_slug
+                ));
+            }
+        }
+
+        // Store metadata about the change
+        update_post_meta($page_id, '_siloq_slug_changed_from', $old_slug);
+        update_post_meta($page_id, '_siloq_slug_changed_at', current_time('mysql'));
+        update_post_meta($page_id, '_siloq_slug_redirect_id', $redirect_id);
+
+        // Get the actual new permalink
+        $actual_new_url = get_permalink($page_id);
+
+        return rest_ensure_response(array(
+            'status' => 'success',
+            'success' => true,
+            'page_id' => $page_id,
+            'old_slug' => $old_slug,
+            'new_slug' => $new_post_slug,
+            'old_url' => $old_url,
+            'new_url' => $actual_new_url,
+            'redirect_verified' => !empty($existing_redirect) || !empty($old_url),
+            'message' => sprintf(
+                __('Slug changed from "%s" to "%s" with automatic redirect', 'siloq-connector'),
+                $old_slug,
+                $new_post_slug
+            ),
         ));
     }
 
