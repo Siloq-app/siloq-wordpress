@@ -437,15 +437,46 @@ class Siloq_Webhook_Handler {
             );
         }
 
+        global $wpdb;
+        
         $from_url = sanitize_text_field($data['from_url']);
         $to_url = sanitize_text_field($data['to_url']);
         $redirect_type = isset($data['type']) ? intval($data['type']) : 301;
+        $reason = isset($data['reason']) ? sanitize_text_field($data['reason']) : 'Webhook redirect';
 
         // Ensure valid redirect type
         if (!in_array($redirect_type, array(301, 302, 307, 308))) {
             $redirect_type = 301;
         }
 
+        // Use native Siloq redirect manager (priority 1)
+        $table_name = $wpdb->prefix . 'siloq_redirects';
+        $result = $wpdb->insert(
+            $table_name,
+            array(
+                'source_url' => $from_url,
+                'target_url' => $to_url,
+                'redirect_type' => $redirect_type,
+                'reason' => $reason,
+                'created_by' => 'siloq_webhook',
+                'created_at' => current_time('mysql'),
+                'is_active' => 1,
+                'hit_count' => 0
+            ),
+            array('%s', '%s', '%d', '%s', '%s', '%s', '%d', '%d')
+        );
+        
+        if ($result !== false) {
+            $redirect_id = $wpdb->insert_id;
+            return rest_ensure_response(array(
+                'success' => true,
+                'method' => 'siloq_native',
+                'redirect_id' => $redirect_id,
+                'message' => __('Redirect created via Siloq native engine', 'siloq-connector'),
+            ));
+        }
+        
+        // Fallback: Try third-party plugins if native method fails
         $method = 'none';
         $redirect_id = null;
 
@@ -493,7 +524,7 @@ class Siloq_Webhook_Handler {
             }
         }
 
-        // Fallback: Add to .htaccess
+        // Final fallback: Add to .htaccess
         if ($method === 'none') {
             $htaccess_result = $this->add_htaccess_redirect($from_url, $to_url, $redirect_type);
             if ($htaccess_result['success']) {

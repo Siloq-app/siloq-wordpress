@@ -92,6 +92,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
 
         // Load TALI (Theme-Aware Layout Intelligence)
         if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
@@ -109,6 +110,9 @@ class Siloq_Connector {
         if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
             Siloq_TALI::get_instance();
         }
+
+        // Initialize redirect manager
+        Siloq_Redirect_Manager::get_instance();
     }
     
     /**
@@ -677,6 +681,10 @@ function siloq_activate() {
     add_option('siloq_api_key', '');
     add_option('siloq_auto_sync', 'no');
     add_option('siloq_use_dummy_scan', 'yes');
+    
+    // Create redirects table
+    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+    Siloq_Redirect_Manager::create_table();
     
     // Flush rewrite rules
     flush_rewrite_rules();
