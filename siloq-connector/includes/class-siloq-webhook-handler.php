@@ -31,6 +31,12 @@ class Siloq_Webhook_Handler {
             'callback' => array($this, 'handle_webhook'),
             'permission_callback' => array($this, 'verify_webhook_signature')
         ));
+
+        register_rest_route('siloq/v1', '/schema/check', array(
+            'methods'             => 'GET',
+            'callback'            => array('Siloq_Schema_Manager', 'rest_check_conflict'),
+            'permission_callback' => '__return_true',
+        ));
     }
     
     /**
@@ -216,29 +222,24 @@ class Siloq_Webhook_Handler {
         }
         
         $schema_markup = $data['schema_markup'];
-        
-        // Validate JSON if it's a string
-        if (is_string($schema_markup)) {
-            $decoded = json_decode($schema_markup, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                return new WP_Error(
-                    'invalid_json',
-                    __('Invalid JSON in schema markup', 'siloq-connector'),
-                    array('status' => 400)
-                );
-            }
-            // Re-encode for consistent storage
-            $schema_markup = json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        // Use Siloq_Schema_Manager to inject with conflict detection
+        $mode = !empty($data['mode']) ? sanitize_text_field($data['mode']) : 'auto';
+        $result = Siloq_Schema_Manager::inject_schema($post_id, $schema_markup, $mode);
+
+        if (!$result['success'] && isset($result['error'])) {
+            return new WP_Error('schema_error', $result['error'], ['status' => 400]);
         }
-        
-        // Update schema markup
-        update_post_meta($post_id, '_siloq_schema_markup', $schema_markup);
-        update_post_meta($post_id, '_siloq_schema_updated_at', current_time('mysql'));
-        
-        return rest_ensure_response(array(
-            'success' => true,
-            'message' => __('Schema markup updated', 'siloq-connector')
-        ));
+
+        return rest_ensure_response([
+            'success'  => $result['success'],
+            'action'   => $result['action'] ?? 'unknown',
+            'conflict' => $result['conflict'] ?? null,
+            'post_id'  => $post_id,
+            'message'  => $result['action'] === 'enhanced'
+                ? 'Schema enhanced — added to existing SEO plugin schema'
+                : 'Schema injected successfully',
+        ]);
     }
     
     /**
