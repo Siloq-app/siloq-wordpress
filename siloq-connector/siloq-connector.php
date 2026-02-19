@@ -78,8 +78,11 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
         
-        // Schema injection
+        // Schema injection (legacy meta key _siloq_schema_markup)
         add_action('wp_head', array($this, 'inject_schema_markup'));
+
+        // Schema Manager output (new meta key _siloq_schema, runs first at priority 5)
+        add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'), 5);
     }
     
     /**
@@ -93,6 +96,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
 
         // Load TALI (Theme-Aware Layout Intelligence)
         if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
