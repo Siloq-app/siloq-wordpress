@@ -134,6 +134,9 @@ class Siloq_Webhook_Handler {
                 
             case 'page.update_meta':
                 return $this->handle_page_update_meta($data);
+
+            case 'content.apply_content':
+                return $this->handle_apply_content($data);
                 
             default:
                 return new WP_Error(
@@ -187,16 +190,22 @@ class Siloq_Webhook_Handler {
      * Handle schema.updated event
      */
     private function handle_schema_updated($data) {
-        if (empty($data['wp_post_id']) || empty($data['schema_markup'])) {
-            return new WP_Error(
-                'missing_data',
-                __('Missing required data', 'siloq-connector'),
-                array('status' => 400)
-            );
+        if (empty($data['schema_markup'])) {
+            return new WP_Error('missing_data', __('Missing required data: schema_markup', 'siloq-connector'), array('status' => 400));
         }
-        
-        $post_id = intval($data['wp_post_id']);
-        
+
+        // Accept either wp_post_id or url
+        $post_id = null;
+        if (!empty($data['wp_post_id'])) {
+            $post_id = intval($data['wp_post_id']);
+        } elseif (!empty($data['url'])) {
+            $post_id = $this->find_post_by_url(esc_url_raw($data['url']));
+        }
+
+        if (!$post_id) {
+            return new WP_Error('missing_data', __('Missing required data: provide wp_post_id or url', 'siloq-connector'), array('status' => 400));
+        }
+
         // Validate post exists
         if (!get_post($post_id)) {
             return new WP_Error(
@@ -763,5 +772,70 @@ class Siloq_Webhook_Handler {
      */
     public static function get_webhook_url() {
         return rest_url('siloq/v1/webhook');
+    }
+
+    /**
+     * Handle content.apply_content event — find/replace or append content in post body.
+     *
+     * Payload: { url, field, before, after }
+     * - If before == "Not present": append `after` before the last CTA section, or at end if none found
+     * - Else: find `before` text in content and replace with `after`; append if not found
+     */
+    private function handle_apply_content($data) {
+        if (empty($data['url'])) {
+            return new WP_Error('missing_data', __('Missing required field: url', 'siloq-connector'), array('status' => 400));
+        }
+        if (empty($data['after'])) {
+            return new WP_Error('missing_data', __('Missing required field: after', 'siloq-connector'), array('status' => 400));
+        }
+
+        $url    = esc_url_raw($data['url']);
+        $before = isset($data['before']) ? $data['before'] : 'Not present';
+        $after  = wp_kses_post($data['after']);
+
+        $post_id = $this->find_post_by_url($url);
+        if (!$post_id) {
+            return new WP_Error('post_not_found', __('Post not found for the provided URL', 'siloq-connector'), array('status' => 404));
+        }
+
+        $post    = get_post($post_id);
+        $content = $post->post_content;
+        $method  = 'append';
+
+        if ($before === 'Not present') {
+            // Append before last CTA section, or at end
+            $cta_pattern = '/<(?:div|section)[^>]*class="[^"]*(?:cta|contact|call-to-action)[^"]*"[^>]*>/i';
+            if (preg_match_all($cta_pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
+                $last_match = end($matches[0]);
+                $insert_pos = $last_match[1];
+                $content = substr($content, 0, $insert_pos) . "\n" . $after . "\n" . substr($content, $insert_pos);
+            } elseif (preg_match_all('/(?:Contact Us|Get a Free Quote|Call Us|Schedule)/i', $content, $matches, PREG_OFFSET_CAPTURE)) {
+                $last_match  = end($matches[0]);
+                $line_start  = strrpos(substr($content, 0, $last_match[1]), "\n");
+                $insert_pos  = ($line_start !== false) ? $line_start : $last_match[1];
+                $content     = substr($content, 0, $insert_pos) . "\n" . $after . "\n" . substr($content, $insert_pos);
+            } else {
+                $content .= "\n" . $after;
+            }
+            $method = 'append_before_cta';
+        } else {
+            // Find and replace
+            if (stripos($content, $before) !== false) {
+                $content = str_ireplace($before, $after, $content);
+                $method  = 'replace';
+            } else {
+                $content .= "\n" . $after;
+                $method   = 'append_fallback';
+            }
+        }
+
+        wp_update_post(array('ID' => $post_id, 'post_content' => $content));
+
+        return rest_ensure_response(array(
+            'success'        => true,
+            'method'         => $method,
+            'post_id'        => $post_id,
+            'updated_fields' => array('content_body'),
+        ));
     }
 }
