@@ -23,8 +23,13 @@ class Siloq_API_Client {
     /**
      * Constructor
      */
+    /**
+     * Default production API URL
+     */
+    const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
+
     public function __construct() {
-        $this->api_url = rtrim(get_option('siloq_api_url'), '/');
+        $this->api_url = rtrim(get_option('siloq_api_url', self::DEFAULT_API_URL), '/');
         $this->api_key = get_option('siloq_api_key');
     }
     
@@ -91,7 +96,8 @@ class Siloq_API_Client {
         }
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $code = wp_remote_retrieve_response_code($response);
-        if ($code === 200 && isset($body['authenticated']) && $body['authenticated']) {
+        // Backend returns 'valid' field (not 'authenticated')
+        if ($code === 200 && isset($body['valid']) && $body['valid']) {
             return array(
                 'success' => true,
                 'message' => __('Connection successful!', 'siloq-connector'),
@@ -104,6 +110,68 @@ class Siloq_API_Client {
             'success' => false,
             'message' => $error_msg
         );
+    }
+    
+    /**
+     * Check if a post is marked noindex across ALL major SEO plugins
+     * Supports: Yoast, AIOSEO, RankMath, SEOPress, The SEO Framework, Squirrly
+     * 
+     * @param int $post_id WordPress post ID
+     * @return bool True if noindex
+     */
+    private function check_noindex_status($post_id) {
+        // 1. Yoast SEO
+        $yoast = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
+        if ($yoast === '1' || $yoast === 1) return true;
+        
+        // 2. All In One SEO (AIOSEO)
+        $aioseo = get_post_meta($post_id, '_aioseo_noindex', true);
+        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
+        // AIOSEO also stores in robots_noindex
+        $aioseo2 = get_post_meta($post_id, '_aioseo_robots_noindex', true);
+        if ($aioseo2 === '1' || $aioseo2 === 1 || $aioseo2 === true) return true;
+        // AIOSEO 4.x uses custom table wp_aioseo_posts
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '" . esc_sql($aioseo_table) . "'");
+        if ($table_exists === $aioseo_table) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+            $aioseo_robots = $wpdb->get_var(
+                $wpdb->prepare("SELECT robots_noindex FROM `" . esc_sql($aioseo_table) . "` WHERE post_id = %d LIMIT 1", $post_id)
+            );
+            if ($aioseo_robots === '1' || intval($aioseo_robots) === 1) return true;
+        }
+        
+        // 3. Rank Math
+        $rankmath = get_post_meta($post_id, 'rank_math_robots', true);
+        if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
+        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
+        
+        // 4. SEOPress
+        $seopress = get_post_meta($post_id, '_seopress_robots_index', true);
+        if ($seopress === 'yes' || $seopress === '1') return true; // SEOPress uses 'yes' for noindex
+        
+        // 5. The SEO Framework
+        $tsf = get_post_meta($post_id, '_genesis_noindex', true);
+        if ($tsf === '1' || $tsf === 1) return true;
+        $tsf2 = get_post_meta($post_id, 'exclude_from_archive', true);
+        if ($tsf2 === '1') return true;
+        
+        // 6. Squirrly SEO
+        $squirrly = get_post_meta($post_id, '_sq_noindex', true);
+        if ($squirrly === '1' || $squirrly === 1) return true;
+        
+        // 7. WooCommerce hidden products (if applicable)
+        if (get_post_type($post_id) === 'product') {
+            $visibility = get_post_meta($post_id, '_visibility', true);
+            if ($visibility === 'hidden') return true;
+            // WooCommerce 3.0+ uses taxonomy for visibility
+            $terms = wp_get_post_terms($post_id, 'product_visibility', array('fields' => 'slugs'));
+            if (!is_wp_error($terms) && in_array('exclude-from-search', $terms)) return true;
+        }
+        
+        return false;
     }
     
     /**
@@ -126,18 +194,21 @@ class Siloq_API_Client {
         $front_page_id = (int) get_option('page_on_front');
         $is_homepage = ($front_page_id > 0 && $post->ID === $front_page_id);
         
-        // Check for Yoast noindex setting
-        $yoast_noindex = get_post_meta($post->ID, '_yoast_wpseo_meta-robots-noindex', true);
-        $is_noindex = ($yoast_noindex === '1' || $yoast_noindex === 1);
+        // Check noindex across ALL major SEO plugins
+        $is_noindex = $this->check_noindex_status($post->ID);
         
-        // Prepare page data
+        // Sync noindex pages WITH the flag so the API can update them
+        // (Previously we skipped them, but that left stale pages in the DB as is_noindex=false)
+        
+        // Prepare page data — skip heavy content for noindex pages (just update the flag)
         $page_data = array(
             'wp_post_id' => $post->ID,
             'url' => get_permalink($post->ID),
             'title' => $post->post_title,
-            'content' => $post->post_content,
-            'excerpt' => $post->post_excerpt,
+            'content' => $is_noindex ? '' : $post->post_content,
+            'excerpt' => $is_noindex ? '' : $post->post_excerpt,
             'status' => $post->post_status,
+            'post_type' => $post->post_type,
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
@@ -173,6 +244,11 @@ class Siloq_API_Client {
             // Store Siloq page ID if returned
             if (isset($body['page_id'])) {
                 update_post_meta($post->ID, '_siloq_page_id', $body['page_id']);
+            }
+            
+            // Persist site_id so Business Profile and other features work
+            if (!empty($body['site_id'])) {
+                update_option('siloq_site_id', $body['site_id']);
             }
             
             return array(
@@ -375,7 +451,7 @@ class Siloq_API_Client {
                 'Accept' => 'application/json',
                 'User-Agent' => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION
             ),
-            'timeout' => 30,
+            'timeout' => 60,
             'sslverify' => true
         );
         

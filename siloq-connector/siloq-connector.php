@@ -4,6 +4,7 @@
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
  * Version: 1.3.0
+ * Version: 1.5.7
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -19,9 +20,11 @@ if (!defined('ABSPATH')) {
 
 // Define plugin constants
 define('SILOQ_VERSION', '1.3.0');
+define('SILOQ_VERSION', '1.5.7');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
+define('SILOQ_PLUGIN_FILE', __FILE__);
 
 /**
  * Main Siloq Connector Class
@@ -77,8 +80,11 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
         
-        // Schema injection
+        // Schema injection (legacy meta key _siloq_schema_markup)
         add_action('wp_head', array($this, 'inject_schema_markup'));
+
+        // Schema Manager output (new meta key _siloq_schema, runs first at priority 5)
+        add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'), 5);
     }
     
     /**
@@ -91,6 +97,13 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
+
+        // Load TALI (Theme-Aware Layout Intelligence)
+        if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
+        }
 
         // Initialize webhook handler
         new Siloq_Webhook_Handler();
@@ -98,6 +111,14 @@ class Siloq_Connector {
         // Initialize lead gen scanner
         $api_client = new Siloq_API_Client();
         new Siloq_Lead_Gen_Scanner($api_client);
+
+        // Initialize TALI
+        if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
+            Siloq_TALI::get_instance();
+        }
+
+        // Initialize redirect manager
+        Siloq_Redirect_Manager::get_instance();
     }
     
     /**
@@ -112,6 +133,16 @@ class Siloq_Connector {
             array('Siloq_Admin', 'render_settings_page'),
             'dashicons-networking',
             80
+        );
+        
+        // Explicit first submenu replaces auto-generated parent duplicate
+        add_submenu_page(
+            'siloq-settings',
+            __('Setup', 'siloq-connector'),
+            __('Setup', 'siloq-connector'),
+            'manage_options',
+            'siloq-settings',
+            array('Siloq_Admin', 'render_settings_page')
         );
         
         add_submenu_page(
@@ -298,7 +329,7 @@ class Siloq_Connector {
             $api_key = isset($_REQUEST['siloq_api_key']) ? trim(sanitize_text_field(wp_unslash($_REQUEST['siloq_api_key']))) : $api_key;
         }
         if ($api_url === '' || $api_key === '') {
-            $api_url = trim((string) get_option('siloq_api_url', ''));
+            $api_url = trim((string) get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'));
             $api_key = trim((string) get_option('siloq_api_key', ''));
         }
         
@@ -306,6 +337,17 @@ class Siloq_Connector {
         $result = $api_client->test_connection_with_credentials($api_url, $api_key);
         
         if ($result['success']) {
+            // Extract and persist site_id so Business Profile works immediately
+            $site_id = null;
+            if (!empty($result['data']['site_id'])) {
+                $site_id = $result['data']['site_id'];
+            } elseif (!empty($result['data']['site']['id'])) {
+                $site_id = $result['data']['site']['id'];
+            }
+            if ($site_id) {
+                update_option('siloq_site_id', $site_id);
+                set_transient('siloq_site_id', $site_id, HOUR_IN_SECONDS);
+            }
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
@@ -336,7 +378,7 @@ class Siloq_Connector {
     }
     
     /**
-     * AJAX: Sync all pages
+     * AJAX: Sync all pages (batched to avoid PHP timeout)
      */
     public function ajax_sync_all_pages() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
@@ -346,8 +388,17 @@ class Siloq_Connector {
             return;
         }
         
+        // Extend execution time for large sites
+        @set_time_limit(300);
+        
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 50;
+        if ($batch_size < 1 || $batch_size > 200) {
+            $batch_size = 50;
+        }
+        
         $sync_engine = new Siloq_Sync_Engine();
-        $result = $sync_engine->sync_all_pages();
+        $result = $sync_engine->sync_all_pages($offset, $batch_size);
         
         wp_send_json_success($result);
     }
@@ -594,6 +645,11 @@ class Siloq_Connector {
     private function get_current_site_id() {
         // Check if we have a cached site ID
         $site_id = get_transient('siloq_site_id');
+     * Gets site_id from the auth/verify endpoint which works with API key auth
+     */
+    private function get_current_site_id() {
+        // 1. Check persistent option first (survives restarts, no expiry)
+        $site_id = get_option('siloq_site_id');
         if ($site_id) {
             return $site_id;
         }
@@ -622,6 +678,32 @@ class Siloq_Connector {
         }
         
         return null;
+        // 2. Check transient (legacy, kept for backward compat)
+        $site_id = get_transient('siloq_site_id');
+        if ($site_id) {
+            update_option('siloq_site_id', $site_id);
+            return $site_id;
+        }
+        
+        // 3. Fetch from auth/verify endpoint
+        $api_client = new Siloq_API_Client();
+        $result = $api_client->test_connection();
+        
+        // site_id can be at data.site_id (legacy) or data.site.id (current API)
+        $site_id = null;
+        if ($result['success'] && !empty($result['data'])) {
+            if (!empty($result['data']['site_id'])) {
+                $site_id = $result['data']['site_id'];
+            } elseif (!empty($result['data']['site']['id'])) {
+                $site_id = $result['data']['site']['id'];
+            }
+        }
+        if (!$site_id) {
+            return null;
+        }
+        update_option('siloq_site_id', $site_id);
+        set_transient('siloq_site_id', $site_id, HOUR_IN_SECONDS);
+        return $site_id;
     }
 }
 
@@ -634,6 +716,10 @@ function siloq_activate() {
     add_option('siloq_api_key', '');
     add_option('siloq_auto_sync', 'no');
     add_option('siloq_use_dummy_scan', 'yes');
+    
+    // Create redirects table
+    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+    Siloq_Redirect_Manager::create_table();
     
     // Flush rewrite rules
     flush_rewrite_rules();
