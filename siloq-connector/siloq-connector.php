@@ -19,8 +19,6 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SILOQ_VERSION', '1.2.0');
-define('SILOQ_VERSION', '1.3.0');
 define('SILOQ_VERSION', '1.5.7');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -647,11 +645,6 @@ class Siloq_Connector {
 
     /**
      * Get the current site ID from Siloq
-     * This assumes pages have been synced and we can get the site ID from the API
-     */
-    private function get_current_site_id() {
-        // Check if we have a cached site ID
-        $site_id = get_transient('siloq_site_id');
      * Gets site_id from the auth/verify endpoint which works with API key auth
      */
     private function get_current_site_id() {
@@ -685,32 +678,6 @@ class Siloq_Connector {
         }
         
         return null;
-        // 2. Check transient (legacy, kept for backward compat)
-        $site_id = get_transient('siloq_site_id');
-        if ($site_id) {
-            update_option('siloq_site_id', $site_id);
-            return $site_id;
-        }
-        
-        // 3. Fetch from auth/verify endpoint
-        $api_client = new Siloq_API_Client();
-        $result = $api_client->test_connection();
-        
-        // site_id can be at data.site_id (legacy) or data.site.id (current API)
-        $site_id = null;
-        if ($result['success'] && !empty($result['data'])) {
-            if (!empty($result['data']['site_id'])) {
-                $site_id = $result['data']['site_id'];
-            } elseif (!empty($result['data']['site']['id'])) {
-                $site_id = $result['data']['site']['id'];
-            }
-        }
-        if (!$site_id) {
-            return null;
-        }
-        update_option('siloq_site_id', $site_id);
-        set_transient('siloq_site_id', $site_id, HOUR_IN_SECONDS);
-        return $site_id;
     }
 }
 
