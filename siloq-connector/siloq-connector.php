@@ -3,6 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
+ * Version: 1.3.0
  * Version: 1.5.7
  * Author: Siloq
  * Author URI: https://siloq.com
@@ -18,6 +19,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
+define('SILOQ_VERSION', '1.3.0');
 define('SILOQ_VERSION', '1.5.7');
 define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -638,6 +640,11 @@ class Siloq_Connector {
 
     /**
      * Get the current site ID from Siloq
+     * This assumes pages have been synced and we can get the site ID from the API
+     */
+    private function get_current_site_id() {
+        // Check if we have a cached site ID
+        $site_id = get_transient('siloq_site_id');
      * Gets site_id from the auth/verify endpoint which works with API key auth
      */
     private function get_current_site_id() {
@@ -647,6 +654,30 @@ class Siloq_Connector {
             return $site_id;
         }
         
+        // Try to get it from the API
+        $api_client = new Siloq_API_Client();
+        $sites = $api_client->get_sites();
+        
+        if (is_wp_error($sites) || empty($sites)) {
+            return null;
+        }
+        
+        // Find the site matching this WordPress URL
+        $site_url = get_site_url();
+        foreach ($sites as $site) {
+            if (isset($site['url']) && strpos($site['url'], parse_url($site_url, PHP_URL_HOST)) !== false) {
+                set_transient('siloq_site_id', $site['id'], HOUR_IN_SECONDS);
+                return $site['id'];
+            }
+        }
+        
+        // If no match, use the first site (user might only have one)
+        if (!empty($sites[0]['id'])) {
+            set_transient('siloq_site_id', $sites[0]['id'], HOUR_IN_SECONDS);
+            return $sites[0]['id'];
+        }
+        
+        return null;
         // 2. Check transient (legacy, kept for backward compat)
         $site_id = get_transient('siloq_site_id');
         if ($site_id) {
