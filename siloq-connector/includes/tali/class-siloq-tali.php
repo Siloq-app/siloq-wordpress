@@ -92,6 +92,7 @@ class Siloq_TALI {
     private function init_hooks() {
         // Run fingerprint on plugin activation
         register_activation_hook(SILOQ_PLUGIN_FILE, array($this, 'run_fingerprint'));
+        register_activation_hook(SILOQ_PLUGIN_DIR . 'siloq-connector.php', array($this, 'run_fingerprint'));
         
         // Run fingerprint on theme switch
         add_action('switch_theme', array($this, 'run_fingerprint'));
@@ -99,6 +100,7 @@ class Siloq_TALI {
         
         // Admin menu for manual re-fingerprint
         add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_menu', array($this, 'add_admin_menu'), 20);
         
         // AJAX handlers
         add_action('wp_ajax_siloq_rerun_fingerprint', array($this, 'ajax_rerun_fingerprint'));

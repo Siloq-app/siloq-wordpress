@@ -16,8 +16,9 @@
             const $button = $(this);
             const $form = $button.closest('form');
             const $status = $('#siloq-connection-status');
+            const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
             // Read from the same form by name (works even if IDs differ)
-            const apiUrl = ($form.length ? $form.find('input[name="siloq_api_url"]') : $('input[name="siloq_api_url"]')).val();
+            const apiUrl = (($form.length ? $form.find('input[name="siloq_api_url"]') : $('input[name="siloq_api_url"]')).val() || '').trim() || DEFAULT_API_URL;
             const apiKey = ($form.length ? $form.find('input[name="siloq_api_key"]') : $('input[name="siloq_api_key"]')).val();
             
             // Disable button and show loading
@@ -54,7 +55,7 @@
         });
         
         /**
-         * Sync All Pages
+         * Sync All Pages (batched to handle large sites)
          */
         $('#siloq-sync-all-pages').on('click', function(e) {
             e.preventDefault();
@@ -66,6 +67,7 @@
             const $button = $(this);
             const $progress = $('#siloq-sync-progress');
             const $results = $('#siloq-sync-results');
+            const BATCH_SIZE = 50;
             
             // Disable button and show progress
             $button.prop('disabled', true).addClass('siloq-syncing');
@@ -74,32 +76,71 @@
             
             // Reset progress bar
             $('.siloq-progress-fill').css('width', '0%');
-            $('.siloq-progress-text').text('0 / 0');
+            $('.siloq-progress-text').text('Starting sync...');
             
-            // Make AJAX request
-            $.ajax({
-                url: siloqAjax.ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'siloq_sync_all',
-                    nonce: siloqAjax.nonce
-                },
-                success: function(response) {
-                    $button.prop('disabled', false).removeClass('siloq-syncing');
-                    $progress.hide();
-                    
-                    if (response.success) {
-                        displaySyncResults(response.data);
-                    } else {
-                        alert('Error: ' + (response.data.message || 'Unknown error'));
+            var totalSynced = 0;
+            var totalFailed = 0;
+            var totalSkipped = 0;
+            var allDetails = [];
+            
+            function syncBatch(offset) {
+                $.ajax({
+                    url: siloqAjax.ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'siloq_sync_all',
+                        nonce: siloqAjax.nonce,
+                        offset: offset,
+                        batch_size: BATCH_SIZE
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var data = response.data;
+                            totalSynced += data.synced || 0;
+                            totalFailed += data.failed || 0;
+                            totalSkipped += data.skipped || 0;
+                            if (data.details) {
+                                allDetails = allDetails.concat(data.details);
+                            }
+                            
+                            // Update progress
+                            var processed = offset + (data.total || 0);
+                            var totalAvail = data.total_available || processed;
+                            var pct = totalAvail > 0 ? Math.min(100, Math.round((processed / totalAvail) * 100)) : 100;
+                            $('.siloq-progress-fill').css('width', pct + '%');
+                            $('.siloq-progress-text').text(processed + ' / ' + totalAvail + ' pages processed');
+                            
+                            // If more batches, continue
+                            if (data.has_more) {
+                                syncBatch(offset + BATCH_SIZE);
+                            } else {
+                                // Done!
+                                $button.prop('disabled', false).removeClass('siloq-syncing');
+                                $progress.hide();
+                                displaySyncResults({
+                                    total: totalSynced + totalFailed + totalSkipped,
+                                    synced: totalSynced,
+                                    failed: totalFailed,
+                                    skipped: totalSkipped,
+                                    details: allDetails
+                                });
+                            }
+                        } else {
+                            $button.prop('disabled', false).removeClass('siloq-syncing');
+                            $progress.hide();
+                            alert('Error: ' + (response.data.message || 'Unknown error'));
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $button.prop('disabled', false).removeClass('siloq-syncing');
+                        $progress.hide();
+                        alert('Sync error at batch offset ' + offset + ': ' + error);
                     }
-                },
-                error: function(xhr, status, error) {
-                    $button.prop('disabled', false).removeClass('siloq-syncing');
-                    $progress.hide();
-                    alert('Error: ' + error);
-                }
-            });
+                });
+            }
+            
+            // Start first batch
+            syncBatch(0);
         });
         
         /**
@@ -445,22 +486,44 @@
             let html = '';
             
             // Summary
-            html += '<div class="siloq-result-summary">';
-            html += '<strong>Sync Complete</strong><br>';
-            html += 'Total: ' + data.total + ' | ';
-            html += 'Synced: <span style="color: #00a32a;">' + data.synced + '</span> | ';
-            html += 'Failed: <span style="color: #d63638;">' + data.failed + '</span>';
+            html += '<div class="siloq-result-summary" style="padding: 12px 16px; background: #f0f6fc; border-left: 4px solid #2271b1; border-radius: 4px;">';
+            html += '<strong style="font-size: 14px;">✅ Sync Complete</strong><br>';
+            html += '<span style="color: #00a32a; font-weight: 600;">' + data.synced + ' synced</span>';
+            if (data.skipped > 0) {
+                html += ' &nbsp;·&nbsp; <span style="color: #996800;">' + data.skipped + ' skipped</span>';
+            }
+            if (data.failed > 0) {
+                html += ' &nbsp;·&nbsp; <span style="color: #d63638; font-weight: 600;">' + data.failed + ' failed</span>';
+            }
+            html += ' &nbsp;·&nbsp; ' + data.total + ' total';
             html += '</div>';
             
-            // Details
+            // Only show details for failed/errored items (successes don't need attention)
             if (data.details && data.details.length > 0) {
-                html += '<h3>Details</h3>';
-                data.details.forEach(function(item) {
-                    html += '<div class="siloq-result-item ' + item.status + '">';
-                    html += '<strong>' + item.title + '</strong><br>';
-                    html += '<small>' + item.message + '</small>';
-                    html += '</div>';
-                });
+                var failed = data.details.filter(function(d) { return d.status === 'error'; });
+                var skipped = data.details.filter(function(d) { return d.status === 'skipped'; });
+                
+                if (failed.length > 0) {
+                    html += '<details style="margin-top: 10px;">';
+                    html += '<summary style="cursor: pointer; font-weight: 600; color: #d63638; padding: 6px 0;">⚠ ' + failed.length + ' failed — click to see details</summary>';
+                    html += '<div style="max-height: 300px; overflow-y: auto; margin-top: 8px;">';
+                    failed.forEach(function(item) {
+                        html += '<div class="siloq-result-item error" style="padding: 6px 10px; margin: 4px 0; background: #fcf0f1; border-radius: 3px; font-size: 13px;">';
+                        html += '<strong>' + item.title + '</strong> — <small>' + item.message + '</small>';
+                        html += '</div>';
+                    });
+                    html += '</div></details>';
+                }
+                
+                if (skipped.length > 0) {
+                    html += '<details style="margin-top: 6px;">';
+                    html += '<summary style="cursor: pointer; color: #996800; padding: 6px 0;">' + skipped.length + ' skipped (noindex/unpublished)</summary>';
+                    html += '<div style="max-height: 200px; overflow-y: auto; margin-top: 8px;">';
+                    skipped.forEach(function(item) {
+                        html += '<div style="padding: 4px 10px; font-size: 12px; color: #666;">' + item.title + '</div>';
+                    });
+                    html += '</div></details>';
+                }
             }
             
             $results.html(html).show();
@@ -485,22 +548,25 @@
          * Handle settings form submission with validation
          */
         $('form[action=""]').on('submit', function(e) {
-            const apiUrl = $('#siloq_api_url').val();
             const apiKey = $('#siloq_api_key').val();
             
-            if (!apiUrl || !apiKey) {
+            // Only the API key is required — API URL has a server-side default
+            if (!apiKey) {
                 e.preventDefault();
-                alert('Please fill in all required fields.');
+                alert('Please enter your API Key.');
                 return false;
             }
             
-            // Basic URL validation
-            try {
-                new URL(apiUrl);
-            } catch (err) {
-                e.preventDefault();
-                alert('Please enter a valid API URL.');
-                return false;
+            // Validate API URL only if user explicitly set one
+            const apiUrl = $('#siloq_api_url').val();
+            if (apiUrl) {
+                try {
+                    new URL(apiUrl);
+                } catch (err) {
+                    e.preventDefault();
+                    alert('Please enter a valid API URL.');
+                    return false;
+                }
             }
         });
         

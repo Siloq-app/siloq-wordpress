@@ -293,13 +293,14 @@ class Siloq_Lead_Gen_Scanner {
             'url' => $website_url,
             'scan_type' => 'full',
         ));
-        
 
+        // Check for network/connection errors BEFORE decoding
         if (is_wp_error($response)) {
             wp_send_json_error(array(
-                'message' => 'Network error. Please check your connection and try again.',
+                'message' => 'Unable to connect to scanner. Please check your connection and try again.',
                 'error' => $response->get_error_message(),
             ));
+            return;
         }
 
         $scan_data = json_decode(wp_remote_retrieve_body($response), true);
@@ -350,11 +351,13 @@ class Siloq_Lead_Gen_Scanner {
         // Get scan results from Siloq API
         $response = $this->api_client->request('GET', '/scans/' . $scan_id);
 
+        // Check for network/connection errors BEFORE decoding
         if (is_wp_error($response)) {
             wp_send_json_error(array(
-                'message' => 'Network error. Please check your connection and try again.',
+                'message' => 'Unable to connect to scanner. Please check your connection and try again.',
                 'error' => $response->get_error_message(),
             ));
+            return;
         }
 
         $scan_data = json_decode(wp_remote_retrieve_body($response), true);
@@ -422,11 +425,13 @@ class Siloq_Lead_Gen_Scanner {
 
         $response = $this->api_client->request('GET', '/scans/' . $scan_id . '/report', array());
 
+        // Check for network/connection errors BEFORE decoding
         if (is_wp_error($response)) {
             wp_send_json_error(array(
-                'message' => 'Could not load report. Please try again.',
+                'message' => 'Unable to connect to scanner. Please try again later.',
                 'error' => $response->get_error_message(),
             ));
+            return;
         }
 
         $code = wp_remote_retrieve_response_code($response);
