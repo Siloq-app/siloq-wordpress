@@ -314,7 +314,135 @@ class Siloq_Admin {
                                     </td>
                                 </tr>
 
-                                <?php // Lead Gen settings hidden for V1 - uncomment for agency features ?>
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_debug_mode">
+                                            <?php _e('Debug Mode', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <fieldset>
+                                            <label>
+                                                <input
+                                                    type="checkbox"
+                                                    name="siloq_debug_mode"
+                                                    value="yes"
+                                                    <?php checked(get_option('siloq_debug_mode', 'no'), 'yes'); ?>
+                                                />
+                                                <?php _e('Enable debug logging for troubleshooting', 'siloq-connector'); ?>
+                                            </label>
+                                            <p class="description">
+                                                <?php _e('Logs will be saved to wp-content/debug.log. Only enable when requested by support.', 'siloq-connector'); ?>
+                                            </p>
+                                        </fieldset>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_sync_frequency">
+                                            <?php _e('Auto-Sync Frequency', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <select name="siloq_sync_frequency" id="siloq_sync_frequency">
+                                            <option value="disabled" <?php selected(get_option('siloq_sync_frequency', 'disabled'), 'disabled'); ?>>
+                                                <?php _e('Disabled', 'siloq-connector'); ?>
+                                            </option>
+                                            <option value="hourly" <?php selected(get_option('siloq_sync_frequency', 'disabled'), 'hourly'); ?>>
+                                                <?php _e('Every Hour', 'siloq-connector'); ?>
+                                            </option>
+                                            <option value="twicedaily" <?php selected(get_option('siloq_sync_frequency', 'disabled'), 'twicedaily'); ?>>
+                                                <?php _e('Twice Daily', 'siloq-connector'); ?>
+                                            </option>
+                                            <option value="daily" <?php selected(get_option('siloq_sync_frequency', 'disabled'), 'daily'); ?>>
+                                                <?php _e('Daily', 'siloq-connector'); ?>
+                                            </option>
+                                        </select>
+                                        <p class="description">
+                                            <?php _e('Automatically sync content with Siloq on schedule.', 'siloq-connector'); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_content_types">
+                                            <?php _e('Content Types to Sync', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <fieldset>
+                                            <?php
+                                            $post_types = get_post_types(['public' => true], 'objects');
+                                            $enabled_types = get_option('siloq_content_types', ['page']);
+                                            foreach ($post_types as $post_type) {
+                                                if ($post_type->name === 'attachment') continue;
+                                                ?>
+                                                <label style="margin-right: 15px;">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="siloq_content_types[]"
+                                                        value="<?php echo esc_attr($post_type->name); ?>"
+                                                        <?php checked(in_array($post_type->name, $enabled_types)); ?>
+                                                    />
+                                                    <?php echo esc_html($post_type->labels->name); ?>
+                                                </label>
+                                                <?php
+                                            }
+                                            ?>
+                                        </fieldset>
+                                        <p class="description">
+                                            <?php _e('Choose which content types should be synced with Siloq.', 'siloq-connector'); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_api_timeout">
+                                            <?php _e('API Timeout (seconds)', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            name="siloq_api_timeout"
+                                            id="siloq_api_timeout"
+                                            value="<?php echo esc_attr(get_option('siloq_api_timeout', 30)); ?>"
+                                            min="5"
+                                            max="120"
+                                            class="small-text"
+                                        />
+                                        <p class="description">
+                                            <?php _e('How long to wait for API responses before timing out. Default: 30 seconds.', 'siloq-connector'); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_cache_duration">
+                                            <?php _e('Cache Duration (minutes)', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <input
+                                            type="number"
+                                            name="siloq_cache_duration"
+                                            id="siloq_cache_duration"
+                                            value="<?php echo esc_attr(get_option('siloq_cache_duration', 60)); ?>"
+                                            min="0"
+                                            max="1440"
+                                            class="small-text"
+                                        />
+                                        <p class="description">
+                                            <?php _e('How long to cache API responses. Set to 0 to disable caching. Default: 60 minutes.', 'siloq-connector'); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <?php // Lead gen settings hidden for V1 - uncomment for agency features ?>
                                 <?php /* 
                                 <tr>
                                     <th scope="row">
@@ -833,99 +961,136 @@ class Siloq_Admin {
         $pages_status = $sync_engine->get_all_sync_status();
         
         ?>
-        <div class="wrap">
-            <h1><?php _e('Sync Status', 'siloq-connector'); ?></h1>
+        <div class="wrap siloq-sync-status-container">
+            <div class="siloq-header">
+                <h1>
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <?php _e('Sync Status', 'siloq-connector'); ?>
+                </h1>
+                <p class="siloq-tagline"><?php _e('Content Synchronization Monitor — Track and manage your WordPress content sync with Siloq platform.', 'siloq-connector'); ?></p>
+            </div>
             
-            <div class="siloq-sync-status-container">
-                <p>
-                    <button type="button" id="siloq-refresh-status" class="button button-secondary">
-                        <?php _e('Refresh', 'siloq-connector'); ?>
-                    </button>
-                    
-                    <?php
-                    $pages_needing_resync = $sync_engine->get_pages_needing_resync();
-                    if (!empty($pages_needing_resync)) {
-                        ?>
-                        <button type="button" id="siloq-sync-outdated" class="button button-primary">
-                            <?php printf(__('Sync %d Outdated Pages', 'siloq-connector'), count($pages_needing_resync)); ?>
-                        </button>
-                        <?php
-                    }
-                    ?>
-                </p>
+            <div class="siloq-sync-actions">
+                <button type="button" id="siloq-refresh-status" class="button button-primary" aria-label="Refresh sync status">
+                    <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                    <span><?php _e('Refresh Status', 'siloq-connector'); ?></span>
+                </button>
                 
+                <?php
+                $pages_needing_resync = $sync_engine->get_pages_needing_resync();
+                if (!empty($pages_needing_resync)) {
+                    ?>
+                    <button type="button" id="siloq-sync-outdated" class="button button-primary" aria-label="Sync outdated pages">
+                        <span class="dashicons dashicons-update" aria-hidden="true"></span>
+                        <span><?php printf(__('Sync %d Outdated Pages', 'siloq-connector'), count($pages_needing_resync)); ?></span>
+                    </button>
+                    <?php
+                }
+                ?>
+                <div class="siloq-loading-indicator" id="siloq-sync-loading" style="display: none;">
+                    <span class="dashicons dashicons-spin dashicons-update"></span>
+                    <span><?php _e('Updating sync status...', 'siloq-connector'); ?></span>
+                </div>
+                </div>
+            
                 <?php if (empty($pages_status)): ?>
-                    <div class="notice notice-info">
-                        <p><?php _e('No pages found. Create some pages first, then sync them to Siloq.', 'siloq-connector'); ?></p>
+                    <div class="siloq-empty-state">
+                        <div class="siloq-empty-icon">
+                            <span class="dashicons dashicons-database" style="font-size: 48px; color: var(--siloq-gray-400);"></span>
+                        </div>
+                        <h3><?php _e('No Pages Found', 'siloq-connector'); ?></h3>
+                        <p><?php _e('Create some pages first, then sync them to Siloq to see their status here.', 'siloq-connector'); ?></p>
+                        <a href="<?php echo esc_url(admin_url('post-new.php?post_type=page')); ?>" class="button button-primary">
+                            <span class="dashicons dashicons-plus-alt"></span>
+                            <?php _e('Create First Page', 'siloq-connector'); ?>
+                        </a>
                     </div>
                 <?php else: ?>
-                    <table class="wp-list-table widefat fixed striped">
-                        <thead>
-                            <tr>
-                                <th><?php _e('Page Title', 'siloq-connector'); ?></th>
-                                <th><?php _e('Status', 'siloq-connector'); ?></th>
-                                <th><?php _e('Last Synced', 'siloq-connector'); ?></th>
-                                <th><?php _e('Actions', 'siloq-connector'); ?></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($pages_status as $page): ?>
-                                <?php
-                                $needs_resync = $sync_engine->needs_resync($page['id']);
-                                $status_class = '';
-                                $status_text = '';
-                                
-                                switch ($page['sync_status']) {
-                                    case 'synced':
-                                        $status_class = $needs_resync ? 'warning' : 'success';
-                                        $status_text = $needs_resync ? __('Needs Re-sync', 'siloq-connector') : __('Synced', 'siloq-connector');
-                                        break;
-                                    case 'error':
-                                        $status_class = 'error';
-                                        $status_text = __('Error', 'siloq-connector');
-                                        break;
-                                    default:
-                                        $status_class = 'not-synced';
-                                        $status_text = __('Not Synced', 'siloq-connector');
-                                }
-                                ?>
-                                <tr data-page-id="<?php echo esc_attr($page['id']); ?>">
-                                    <td>
-                                        <strong>
-                                            <a href="<?php echo esc_url($page['edit_url']); ?>">
-                                                <?php echo esc_html($page['title']); ?>
-                                            </a>
-                                        </strong>
-                                        <br>
-                                        <small>
-                                            <a href="<?php echo esc_url($page['url']); ?>" target="_blank">
-                                                <?php _e('View', 'siloq-connector'); ?>
-                                            </a>
-                                        </small>
-                                    </td>
-                                    <td>
-                                        <span class="siloq-status-badge siloq-status-<?php echo esc_attr($status_class); ?>">
-                                            <?php echo esc_html($status_text); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <?php echo esc_html($page['last_synced']); ?>
-                                    </td>
-                                    <td>
-                                        <button 
-                                            type="button" 
-                                            class="button button-small siloq-sync-single" 
-                                            data-page-id="<?php echo esc_attr($page['id']); ?>"
-                                        >
-                                            <?php _e('Sync Now', 'siloq-connector'); ?>
-                                        </button>
-                                    </td>
+                    <div class="siloq-sync-table-wrapper">
+                        <table class="widefat siloq-sync-table">
+                            <thead>
+                                <tr>
+                                    <th><?php _e('Page Title', 'siloq-connector'); ?></th>
+                                    <th><?php _e('Sync Status', 'siloq-connector'); ?></th>
+                                    <th><?php _e('Last Synced', 'siloq-connector'); ?></th>
+                                    <th><?php _e('Actions', 'siloq-connector'); ?></th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pages_status as $page): ?>
+                                    <?php
+                                    $needs_resync = $sync_engine->needs_resync($page['id']);
+                                    $status_class = '';
+                                    $status_text = '';
+                                    $status_icon = '';
+                                    
+                                    switch ($page['sync_status']) {
+                                        case 'synced':
+                                            $status_class = $needs_resync ? 'warning' : 'success';
+                                            $status_text = $needs_resync ? __('Needs Re-sync', 'siloq-connector') : __('Synced', 'siloq-connector');
+                                            $status_icon = $needs_resync ? 'update' : 'yes-alt';
+                                            break;
+                                        case 'error':
+                                            $status_class = 'error';
+                                            $status_text = __('Error', 'siloq-connector');
+                                            $status_icon = 'no-alt';
+                                            break;
+                                        default:
+                                            $status_class = 'not-synced';
+                                            $status_text = __('Not Synced', 'siloq-connector');
+                                            $status_icon = 'minus';
+                                    }
+                                    ?>
+                                    <tr data-page-id="<?php echo esc_attr($page['id']); ?>">
+                                        <td>
+                                            <div class="siloq-page-info">
+                                                <strong>
+                                                    <a href="<?php echo esc_url($page['edit_url']); ?>" class="siloq-page-title">
+                                                        <?php echo esc_html($page['title']); ?>
+                                                    </a>
+                                                </strong>
+                                                <div class="siloq-page-meta">
+                                                    <a href="<?php echo esc_url($page['url']); ?>" target="_blank" class="siloq-view-link">
+                                                        <?php _e('View Page', 'siloq-connector'); ?>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="siloq-status-badge siloq-status-<?php echo esc_attr($status_class); ?>">
+                                                <span class="dashicons dashicons-<?php echo esc_attr($status_icon); ?>" aria-hidden="true"></span>
+                                                <span><?php echo esc_html($status_text); ?></span>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if ($page['last_synced']): ?>
+                                                <span class="siloq-sync-time">
+                                                    <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                                                    <?php echo esc_html(human_time_diff(strtotime($page['last_synced']), current_time('timestamp')) . ' ' . __('ago', 'siloq-connector')); ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="siloq-sync-time siloq-never-synced">
+                                                    <?php _e('Never', 'siloq-connector'); ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="siloq-sync-actions-cell">
+                                                <button type="button" 
+                                                    class="button button-primary siloq-sync-page-btn"
+                                                    data-page-id="<?php echo esc_attr($page['id']); ?>"
+                                                    aria-label="Sync page: <?php echo esc_attr($page['title']); ?>"
+                                                >
+                                                    <span><?php _e('Sync Now', 'siloq-connector'); ?></span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 <?php endif; ?>
-            </div>
         </div>
         <?php
     }
@@ -951,30 +1116,45 @@ class Siloq_Admin {
         ));
         
         ?>
-        <div class="wrap">
-            <h1><?php _e('Content Import', 'siloq-connector'); ?></h1>
+        <div class="wrap siloq-content-import-container">
+            <div class="siloq-header">
+                <h1>
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <?php _e('Content Import', 'siloq-connector'); ?>
+                </h1>
+                <p class="siloq-tagline"><?php _e('AI Content Integration — Import and manage AI-generated content from Siloq platform.', 'siloq-connector'); ?></p>
+            </div>
             
-            <div class="siloq-content-import-container">
-                <p class="description">
-                    <?php _e('AI-generated content from Siloq is ready to be imported. Review and import content for your pages below.', 'siloq-connector'); ?>
-                </p>
+            <div class="siloq-content-import-card">
+                <h2><?php _e('Available AI Content', 'siloq-connector'); ?></h2>
+                
+                <div class="siloq-import-description">
+                    <p><?php _e('AI-generated content from Siloq is ready to be imported. Review and import content for your pages below.', 'siloq-connector'); ?></p>
+                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=content'); ?>" target="_blank" class="button button-secondary">
+                        <?php _e('Go to Content Hub →', 'siloq-connector'); ?>
+                    </a>
+                </div>
                 
                 <?php if (empty($pages)): ?>
-                    <div class="notice notice-info">
-                        <p><?php _e('No AI-generated content available yet. Generate content from your Siloq dashboard first.', 'siloq-connector'); ?></p>
-                        <p>
-                            <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=content'); ?>" target="_blank" class="button button-primary">
-                                <?php _e('Go to Content Hub →', 'siloq-connector'); ?>
-                            </a>
-                        </p>
+                    <div class="siloq-empty-state">
+                        <div class="siloq-empty-icon">
+                            <span class="dashicons dashicons-edit-page" style="font-size: 48px; color: var(--siloq-gray-400);"></span>
+                        </div>
+                        <h3><?php _e('No AI Content Available', 'siloq-connector'); ?></h3>
+                        <p><?php _e('Generate content from your Siloq dashboard first, then return here to import it.', 'siloq-connector'); ?></p>
+                        <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=content'); ?>" target="_blank" class="button button-primary">
+                            <span class="dashicons dashicons-external"></span>
+                            <?php _e('Go to Content Hub →', 'siloq-connector'); ?>
+                        </a>
                     </div>
                 <?php else: ?>
-                    <table class="wp-list-table widefat fixed striped">
+                    <div class="siloq-import-table-wrapper">
+                    <table class="widefat siloq-import-table">
                         <thead>
                             <tr>
                                 <th><?php _e('Page Title', 'siloq-connector'); ?></th>
                                 <th><?php _e('Content Ready', 'siloq-connector'); ?></th>
-                                <th><?php _e('Actions', 'siloq-connector'); ?></th>
+                                <th><?php _e('Available Actions', 'siloq-connector'); ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -986,55 +1166,71 @@ class Siloq_Admin {
                                 ?>
                                 <tr data-page-id="<?php echo esc_attr($page->ID); ?>">
                                     <td>
-                                        <strong>
-                                            <a href="<?php echo esc_url(get_edit_post_link($page->ID)); ?>">
-                                                <?php echo esc_html($page->post_title); ?>
-                                            </a>
-                                        </strong>
+                                        <div class="siloq-page-info">
+                                            <strong>
+                                                <a href="<?php echo esc_url(get_edit_post_link($page->ID)); ?>" class="siloq-page-title">
+                                                    <?php echo esc_html($page->post_title); ?>
+                                                </a>
+                                            </strong>
+                                            <div class="siloq-page-meta">
+                                                <?php if ($has_backup): ?>
+                                                    <span class="siloq-backup-indicator">
+                                                        <span class="dashicons dashicons-backup" aria-hidden="true"></span>
+                                                        <?php _e('Backup Available', 'siloq-connector'); ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>
-                                        <?php 
-                                        if ($ready_at) {
-                                            echo esc_html(human_time_diff(strtotime($ready_at), current_time('timestamp'))) . ' ' . __('ago', 'siloq-connector');
-                                        } else {
-                                            _e('Recently', 'siloq-connector');
-                                        }
-                                        ?>
+                                        <div class="siloq-content-time">
+                                            <?php 
+                                            if ($ready_at) {
+                                                echo '<span class="siloq-time-value">' . esc_html(human_time_diff(strtotime($ready_at), current_time('timestamp'))) . ' ' . __('ago', 'siloq-connector') . '</span>';
+                                            } else {
+                                                echo '<span class="siloq-time-value">' . __('Recently', 'siloq-connector') . '</span>';
+                                            }
+                                            ?>
+                                            <div class="siloq-job-count">
+                                                <?php printf(_n('%d job available', '%d jobs available', count($jobs), 'siloq-connector'), count($jobs)); ?>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>
-                                        <?php if (!empty($jobs)): ?>
-                                            <?php foreach ($jobs as $job): ?>
-                                                <button 
-                                                    type="button" 
-                                                    class="button button-primary siloq-import-content" 
-                                                    data-page-id="<?php echo esc_attr($page->ID); ?>"
-                                                    data-job-id="<?php echo esc_attr($job['job_id']); ?>"
-                                                    data-action="create_draft"
-                                                >
-                                                    <?php _e('Import as Draft', 'siloq-connector'); ?>
-                                                </button>
-                                                
-                                                <button 
-                                                    type="button" 
-                                                    class="button button-secondary siloq-import-content" 
-                                                    data-page-id="<?php echo esc_attr($page->ID); ?>"
-                                                    data-job-id="<?php echo esc_attr($job['job_id']); ?>"
-                                                    data-action="replace"
-                                                >
-                                                    <?php _e('Replace Content', 'siloq-connector'); ?>
-                                                </button>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                        
-                                        <?php if ($has_backup): ?>
-                                            <button 
-                                                type="button" 
-                                                class="button button-link-delete siloq-restore-backup" 
-                                                data-page-id="<?php echo esc_attr($page->ID); ?>"
-                                            >
-                                                <?php _e('Restore Backup', 'siloq-connector'); ?>
-                                            </button>
-                                        <?php endif; ?>
+                                        <div class="siloq-action-buttons">
+                                            <?php if (!empty($jobs)): ?>
+                                                <?php foreach ($jobs as $job): ?>
+                                                    <button 
+                                                        type="button" 
+                                                        class="button button-primary siloq-import-content" 
+                                                        data-page-id="<?php echo esc_attr($page->ID); ?>"
+                                                        data-job-id="<?php echo esc_attr($job['job_id']); ?>"
+                                                        data-action="create_draft"
+                                                        aria-label="Import as draft for: <?php echo esc_attr($page->post_title); ?>"
+                                                    >
+                                                        <span class="dashicons dashicons-edit" aria-hidden="true"></span>
+                                                        <span><?php _e('Import as Draft', 'siloq-connector'); ?></span>
+                                                    </button>
+                                                    
+                                                    <button 
+                                                        type="button" 
+                                                        class="button button-secondary siloq-import-content" 
+                                                        data-page-id="<?php echo esc_attr($page->ID); ?>"
+                                                        data-job-id="<?php echo esc_attr($job['job_id']); ?>"
+                                                        data-action="preview"
+                                                        aria-label="Preview content for: <?php echo esc_attr($page->post_title); ?>"
+                                                    >
+                                                        <span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+                                                        <span><?php _e('Preview', 'siloq-connector'); ?></span>
+                                                    </button>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <span class="siloq-no-jobs">
+                                                    <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                                                    <?php _e('Processing...', 'siloq-connector'); ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

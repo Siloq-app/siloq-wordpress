@@ -114,9 +114,6 @@ class Siloq_Connector {
         // Initialize webhook handler
         new Siloq_Webhook_Handler();
         
-        // Initialize TALI
-        siloq_tali();
-
         // Initialize lead gen scanner
         $api_client = new Siloq_API_Client();
         new Siloq_Lead_Gen_Scanner($api_client);
@@ -162,6 +159,15 @@ class Siloq_Connector {
             'manage_options',
             'siloq-sync-status',
             array('Siloq_Admin', 'render_sync_status_page')
+        );
+        
+        add_submenu_page(
+            'siloq-settings',
+            __('Theme Intelligence', 'siloq-connector'),
+            __('Theme Intelligence', 'siloq-connector'),
+            'manage_options',
+            'siloq-theme-intelligence',
+            array(Siloq_TALI::get_instance(), 'render_admin_page')
         );
         
         add_submenu_page(
