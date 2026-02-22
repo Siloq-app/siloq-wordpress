@@ -130,6 +130,18 @@ class Siloq_API_Client {
         // AIOSEO also stores in robots_noindex
         $aioseo2 = get_post_meta($post_id, '_aioseo_robots_noindex', true);
         if ($aioseo2 === '1' || $aioseo2 === 1 || $aioseo2 === true) return true;
+        // AIOSEO 4.x uses custom table wp_aioseo_posts
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '" . esc_sql($aioseo_table) . "'");
+        if ($table_exists === $aioseo_table) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+            $aioseo_robots = $wpdb->get_var(
+                $wpdb->prepare("SELECT robots_noindex FROM `" . esc_sql($aioseo_table) . "` WHERE post_id = %d LIMIT 1", $post_id)
+            );
+            if ($aioseo_robots === '1' || intval($aioseo_robots) === 1) return true;
+        }
         
         // 3. Rank Math
         $rankmath = get_post_meta($post_id, 'rank_math_robots', true);
@@ -185,24 +197,18 @@ class Siloq_API_Client {
         // Check noindex across ALL major SEO plugins
         $is_noindex = $this->check_noindex_status($post->ID);
         
-        // SKIP noindex pages entirely - don't waste API calls on pages we won't analyze
-        if ($is_noindex) {
-            return array(
-                'success' => true,
-                'message' => __('Skipped (noindex page)', 'siloq-connector'),
-                'skipped' => true
-            );
-        }
+        // Sync noindex pages WITH the flag so the API can update them
+        // (Previously we skipped them, but that left stale pages in the DB as is_noindex=false)
         
-        // Prepare page data
+        // Prepare page data — skip heavy content for noindex pages (just update the flag)
         $page_data = array(
             'wp_post_id' => $post->ID,
             'url' => get_permalink($post->ID),
             'title' => $post->post_title,
-            'content' => $post->post_content,
-            'excerpt' => $post->post_excerpt,
+            'content' => $is_noindex ? '' : $post->post_content,
+            'excerpt' => $is_noindex ? '' : $post->post_excerpt,
             'status' => $post->post_status,
-            'post_type' => $post->post_type,  // page, post, or product
+            'post_type' => $post->post_type,
             'published_at' => $post->post_date_gmt,
             'modified_at' => $post->post_modified_gmt,
             'slug' => $post->post_name,
@@ -238,6 +244,11 @@ class Siloq_API_Client {
             // Store Siloq page ID if returned
             if (isset($body['page_id'])) {
                 update_post_meta($post->ID, '_siloq_page_id', $body['page_id']);
+            }
+            
+            // Persist site_id so Business Profile and other features work
+            if (!empty($body['site_id'])) {
+                update_option('siloq_site_id', $body['site_id']);
             }
             
             return array(
@@ -440,7 +451,7 @@ class Siloq_API_Client {
                 'Accept' => 'application/json',
                 'User-Agent' => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION
             ),
-            'timeout' => 30,
+            'timeout' => 60,
             'sslverify' => true
         );
         

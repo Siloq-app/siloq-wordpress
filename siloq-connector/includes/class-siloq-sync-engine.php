@@ -116,18 +116,21 @@ class Siloq_Sync_Engine {
         $yoast_title = get_term_meta($term_id, '_yoast_wpseo_title', true);
         $yoast_desc = get_term_meta($term_id, '_yoast_wpseo_metadesc', true);
         
+        // Check noindex status for taxonomy terms
+        $is_noindex = $this->check_term_noindex_status($term_id, $taxonomy);
+
         $term_data = array(
             'wp_post_id' => 'term_' . $term_id,
             'url' => is_wp_error($term_link) ? '' : $term_link,
             'title' => $term->name,
-            'content' => $description ?: '',
-            'excerpt' => wp_trim_words(strip_tags($description), 30),
+            'content' => $is_noindex ? '' : ($description ?: ''),
+            'excerpt' => $is_noindex ? '' : wp_trim_words(strip_tags($description), 30),
             'status' => 'publish',
             'post_type' => $taxonomy,
             'slug' => $term->slug,
             'parent_id' => $term->parent,
             'is_homepage' => false,
-            'is_noindex' => false,
+            'is_noindex' => $is_noindex,
             'meta' => array(
                 'yoast_title' => $yoast_title ?: '',
                 'yoast_description' => $yoast_desc ?: '',
@@ -170,6 +173,66 @@ class Siloq_Sync_Engine {
         );
     }
     
+    /**
+     * Check noindex status for a taxonomy term across major SEO plugins.
+     *
+     * @param int    $term_id  Term ID.
+     * @param string $taxonomy Taxonomy name.
+     * @return bool True if the term archive is set to noindex.
+     */
+    private function check_term_noindex_status($term_id, $taxonomy) {
+        // 1. Yoast SEO — stores term noindex in wpseo_taxonomy_meta option
+        $wpseo_taxonomy_meta = get_option('wpseo_taxonomy_meta', array());
+        if (isset($wpseo_taxonomy_meta[$taxonomy][$term_id]['wpseo_noindex'])
+            && $wpseo_taxonomy_meta[$taxonomy][$term_id]['wpseo_noindex'] === 'noindex') {
+            return true;
+        }
+
+        // 2. Rank Math — stores in term meta
+        $rankmath = get_term_meta($term_id, 'rank_math_robots', true);
+        if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
+        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
+
+        // 3. All In One SEO (AIOSEO) — uses its own wp_aioseo_terms table
+        $aioseo = get_term_meta($term_id, '_aioseo_noindex', true);
+        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
+        // AIOSEO 4.x stores in custom table wp_aioseo_terms
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_terms';
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '" . esc_sql($aioseo_table) . "'");
+        if ($table_exists === $aioseo_table) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+            $aioseo_robots = $wpdb->get_var(
+                $wpdb->prepare("SELECT robots_noindex FROM `" . esc_sql($aioseo_table) . "` WHERE term_id = %d LIMIT 1", $term_id)
+            );
+            if ($aioseo_robots === '1' || intval($aioseo_robots) === 1) return true;
+        }
+        // AIOSEO global taxonomy setting (Search Appearance > Taxonomies)
+        $aioseo_options = get_option('aioseo_options', '');
+        if (is_string($aioseo_options) && !empty($aioseo_options)) {
+            $aioseo_opts = json_decode($aioseo_options, true);
+            if (isset($aioseo_opts['searchAppearance']['taxonomies'][$taxonomy]['advanced']['robotsMeta']['noindex'])
+                && $aioseo_opts['searchAppearance']['taxonomies'][$taxonomy]['advanced']['robotsMeta']['noindex']) {
+                return true;
+            }
+        }
+
+        // 4. SEOPress
+        $seopress = get_term_meta($term_id, '_seopress_robots_index', true);
+        if ($seopress === 'yes' || $seopress === '1') return true;
+
+        // 5. The SEO Framework
+        $tsf = get_term_meta($term_id, 'autodescription-term-settings', true);
+        if (is_array($tsf) && !empty($tsf['noindex'])) return true;
+
+        // 6. Check if entire taxonomy is set to noindex (Yoast global setting)
+        $wpseo_titles = get_option('wpseo_titles', array());
+        if (!empty($wpseo_titles['noindex-tax-' . $taxonomy])) return true;
+
+        return false;
+    }
+
     /**
      * Sync all published pages
      * 
@@ -248,13 +311,16 @@ class Siloq_Sync_Engine {
                 $status = 'error';
             }
             
-            $results['details'][] = array(
-                'id' => $page->ID,
-                'title' => $page->post_title,
-                'post_type' => $page->post_type,
-                'status' => $status,
-                'message' => $result['message']
-            );
+            // Only include non-success details to keep response small for large sites
+            if ($status !== 'success') {
+                $results['details'][] = array(
+                    'id' => $page->ID,
+                    'title' => $page->post_title,
+                    'post_type' => $page->post_type,
+                    'status' => $status,
+                    'message' => $result['message']
+                );
+            }
             
             // Small delay to avoid overwhelming the API
             usleep(100000); // 0.1 second
@@ -282,13 +348,15 @@ class Siloq_Sync_Engine {
                         $results['failed']++;
                     }
                     
-                    $results['details'][] = array(
-                        'id' => 'cat_' . $category->term_id,
-                        'title' => $category->name,
-                        'post_type' => 'product_cat',
-                        'status' => $cat_result['success'] ? 'success' : 'error',
-                        'message' => $cat_result['message']
-                    );
+                    if (!$cat_result['success']) {
+                        $results['details'][] = array(
+                            'id' => 'cat_' . $category->term_id,
+                            'title' => $category->name,
+                            'post_type' => 'product_cat',
+                            'status' => 'error',
+                            'message' => $cat_result['message']
+                        );
+                    }
                     
                     usleep(100000);
                 }

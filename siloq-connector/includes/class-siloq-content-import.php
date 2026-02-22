@@ -370,20 +370,36 @@ class Siloq_Content_Import {
             
             $linked_text = '<a href="' . esc_url($target_url) . '" class="siloq-internal-link">' . esc_html($anchor_text) . '</a>';
             
-            // Check if anchor text is already linked
-            $pattern = '/<a[^>]*>' . preg_quote($anchor_text, '/') . '<\/a>/i';
-            if (preg_match($pattern, $content)) {
-                continue; // Already linked, skip
+            // Check if anchor text is already linked (use stripos for case-insensitive, safer check)
+            if (stripos($content, '<a') !== false && stripos($content, $anchor_text) !== false) {
+                // Do more thorough check with DOMDocument if possible
+                if (class_exists('DOMDocument')) {
+                    libxml_use_internal_errors(true);
+                    $dom = new DOMDocument();
+                    $dom->loadHTML('<?xml encoding="utf-8" ?>' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                    libxml_clear_errors();
+                    
+                    $links = $dom->getElementsByTagName('a');
+                    $already_linked = false;
+                    foreach ($links as $existing_link) {
+                        if (stripos($existing_link->textContent, $anchor_text) !== false) {
+                            $already_linked = true;
+                            break;
+                        }
+                    }
+                    if ($already_linked) {
+                        continue;
+                    }
+                }
             }
             
-            // Find first occurrence of anchor text and replace with link
-            // Use word boundary to avoid partial matches
-            $content = preg_replace(
-                '/\b' . preg_quote($anchor_text, '/') . '\b/',
-                $linked_text,
-                $content,
-                1 // Only replace first occurrence
-            );
+            // Simple string replacement (safer than regex for special characters)
+            // Find first occurrence of exact anchor text and replace
+            $pos = stripos($content, $anchor_text);
+            if ($pos !== false) {
+                // Only replace first occurrence
+                $content = substr_replace($content, $linked_text, $pos, strlen($anchor_text));
+            }
         }
         
         return $content;
