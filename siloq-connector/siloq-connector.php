@@ -77,11 +77,6 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-lead-gen-scanner.php';
-
-        // Load TALI (Theme-Aware Layout Intelligence)
-        if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
-            require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
-        }
     }
     
     /**
