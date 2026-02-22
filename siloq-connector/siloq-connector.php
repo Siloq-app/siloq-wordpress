@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Siloq Connector
- * Plugin URI: https://siloq.com
- * Description: Connect WordPress to Siloq platform for AI-powered SEO content management and lead generation
+ * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
+ * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
  * Version: 1.5.7
  * Author: Siloq
  * Author URI: https://siloq.com
@@ -369,7 +369,7 @@ class Siloq_Connector {
             update_option('siloq_site_id', sanitize_text_field($params['siteId']));
         }
         
-        return rest_ensure_response(array('success' => true));
+return rest_ensure_response(array('success' => true));
     }
     
     public function disconnect() {
