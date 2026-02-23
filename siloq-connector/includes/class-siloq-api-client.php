@@ -1,7 +1,7 @@
 <?php
 /**
  * Siloq API Client
- * Handles all communication with the Siloq backend API
+ * Handles communication with Siloq API
  */
 
 if (!defined('ABSPATH')) {
@@ -11,425 +11,142 @@ if (!defined('ABSPATH')) {
 class Siloq_API_Client {
     
     /**
-     * API base URL
+     * API URL
      */
     private $api_url;
     
     /**
-     * API key for authentication
+     * API Key
      */
     private $api_key;
     
     /**
+     * Site ID
+     */
+    private $site_id;
+    
+    /**
      * Constructor
      */
-    /**
-     * Default production API URL
-     */
-    const DEFAULT_API_URL = 'https://api.siloq.ai/api/v1';
-
     public function __construct() {
-        $this->api_url = rtrim(get_option('siloq_api_url', self::DEFAULT_API_URL), '/');
-        $this->api_key = get_option('siloq_api_key');
+        $this->api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $this->api_key = get_option('siloq_api_key', '');
+        $this->site_id = get_option('siloq_site_id', '');
     }
     
     /**
-     * Test API connection (uses saved options from constructor).
-     */
-    public function test_connection() {
-        if (empty($this->api_url) || empty($this->api_key)) {
-            return array(
-                'success' => false,
-                'message' => __('API URL and API Key are required', 'siloq-connector')
-            );
-        }
-        return $this->test_connection_with_credentials($this->api_url, $this->api_key);
-    }
-
-    /**
-     * Test API connection using provided URL and key (e.g. from form before save).
-     * Use this so "Test Connection" works with current form values without saving first.
-     *
-     * @param string $api_url Base API URL (e.g. http://localhost:8000/api/v1).
-     * @param string $api_key API key.
-     * @return array { success: bool, message: string, data?: array }
+     * Test connection with credentials
      */
     public function test_connection_with_credentials($api_url, $api_key) {
-        $api_url = is_string($api_url) ? trim($api_url) : '';
-        $api_key = is_string($api_key) ? trim($api_key) : '';
-        if (empty($api_url) || empty($api_key)) {
-            return array(
-                'success' => false,
-                'message' => __('API URL and API Key are required', 'siloq-connector')
-            );
-        }
-        $base = rtrim($api_url, '/');
-        $url = $base . '/auth/verify';
-        $args = array(
-            'method'  => 'POST',
+        $response = wp_remote_get($api_url . '/test', array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'   => 'application/json',
-                'Accept'        => 'application/json',
-                'User-Agent'    => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION,
+                'Content-Type' => 'application/json'
             ),
-            'timeout' => 30,
-            'sslverify' => true,
-        );
-        $response = wp_remote_request($url, $args);
+            'timeout' => 30
+        ));
+        
         if (is_wp_error($response)) {
-            $msg = $response->get_error_message();
-            // Friendlier message for "could not connect" (e.g. WordPress in Docker, API on host)
-            if (strpos($msg, 'Failed to connect') !== false || strpos($msg, 'Could not connect') !== false) {
-                $hint = '';
-                if (strpos($api_url, 'localhost') !== false) {
-                    $hint = ' ' . __('If WordPress runs in Docker, use host.docker.internal instead of localhost (e.g. http://host.docker.internal:8000/api/v1). Otherwise ensure the Siloq API is running and reachable.', 'siloq-connector');
-                } else {
-                    $hint = ' ' . __('Ensure the Siloq API is running and the URL is reachable from this server.', 'siloq-connector');
-                }
-                $msg = $msg . $hint;
-            }
             return array(
                 'success' => false,
-                'message' => $msg
+                'message' => $response->get_error_message()
             );
         }
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        // Backend returns 'valid' field (not 'authenticated')
-        if ($code === 200 && isset($body['valid']) && $body['valid']) {
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        if ($status_code === 200) {
             return array(
                 'success' => true,
-                'message' => __('Connection successful!', 'siloq-connector'),
-                'data' => $body
+                'message' => 'Connection successful',
+                'data' => json_decode($body, true)
+            );
+        } else {
+            return array(
+                'success' => false,
+                'message' => 'Connection failed: ' . $body,
+                'status_code' => $status_code
             );
         }
-        // Backend may return error in 'error' or 'detail' field
-        $error_msg = isset($body['error']) ? $body['error'] : (isset($body['detail']) ? $body['detail'] : __('Authentication failed', 'siloq-connector'));
-        return array(
-            'success' => false,
-            'message' => $error_msg
-        );
     }
     
     /**
-     * Check if a post is marked noindex across ALL major SEO plugins
-     * Supports: Yoast, AIOSEO, RankMath, SEOPress, The SEO Framework, Squirrly
-     * 
-     * @param int $post_id WordPress post ID
-     * @return bool True if noindex
+     * Create content job
      */
-    private function check_noindex_status($post_id) {
-        // 1. Yoast SEO
-        $yoast = get_post_meta($post_id, '_yoast_wpseo_meta-robots-noindex', true);
-        if ($yoast === '1' || $yoast === 1) return true;
-        
-        // 2. All In One SEO (AIOSEO)
-        $aioseo = get_post_meta($post_id, '_aioseo_noindex', true);
-        if ($aioseo === '1' || $aioseo === 1 || $aioseo === true) return true;
-        // AIOSEO also stores in robots_noindex
-        $aioseo2 = get_post_meta($post_id, '_aioseo_robots_noindex', true);
-        if ($aioseo2 === '1' || $aioseo2 === 1 || $aioseo2 === true) return true;
-        
-        // 3. Rank Math
-        $rankmath = get_post_meta($post_id, 'rank_math_robots', true);
-        if (is_array($rankmath) && in_array('noindex', $rankmath)) return true;
-        if (is_string($rankmath) && strpos($rankmath, 'noindex') !== false) return true;
-        
-        // 4. SEOPress
-        $seopress = get_post_meta($post_id, '_seopress_robots_index', true);
-        if ($seopress === 'yes' || $seopress === '1') return true; // SEOPress uses 'yes' for noindex
-        
-        // 5. The SEO Framework
-        $tsf = get_post_meta($post_id, '_genesis_noindex', true);
-        if ($tsf === '1' || $tsf === 1) return true;
-        $tsf2 = get_post_meta($post_id, 'exclude_from_archive', true);
-        if ($tsf2 === '1') return true;
-        
-        // 6. Squirrly SEO
-        $squirrly = get_post_meta($post_id, '_sq_noindex', true);
-        if ($squirrly === '1' || $squirrly === 1) return true;
-        
-        // 7. WooCommerce hidden products (if applicable)
-        if (get_post_type($post_id) === 'product') {
-            $visibility = get_post_meta($post_id, '_visibility', true);
-            if ($visibility === 'hidden') return true;
-            // WooCommerce 3.0+ uses taxonomy for visibility
-            $terms = wp_get_post_terms($post_id, 'product_visibility', array('fields' => 'slugs'));
-            if (!is_wp_error($terms) && in_array('exclude-from-search', $terms)) return true;
+    public function create_content_job($post_id) {
+        $post = get_post($post_id);
+        if (!$post) {
+            return array('success' => false, 'message' => 'Post not found');
         }
         
-        return false;
+        $data = array(
+            'post_id' => $post_id,
+            'title' => $post->post_title,
+            'content' => $post->post_content,
+            'url' => get_permalink($post_id),
+            'type' => $post->post_type
+        );
+        
+        return $this->make_request('/content/jobs', 'POST', $data);
     }
     
     /**
-     * Sync a page to Siloq
-     * 
-     * @param int $post_id WordPress post ID
-     * @return array Response data
+     * Get job status
+     */
+    public function get_job_status($job_id) {
+        return $this->make_request('/content/jobs/' . $job_id, 'GET');
+    }
+    
+    /**
+     * Get business profile
+     */
+    public function get_business_profile() {
+        return $this->make_request('/business/profile', 'GET');
+    }
+    
+    /**
+     * Save business profile
+     */
+    public function save_business_profile($profile_data) {
+        return $this->make_request('/business/profile', 'POST', $profile_data);
+    }
+    
+    /**
+     * Get sites
+     */
+    public function get_sites() {
+        return $this->make_request('/sites', 'GET');
+    }
+    
+    /**
+     * Sync page
      */
     public function sync_page($post_id) {
         $post = get_post($post_id);
-        
         if (!$post) {
-            return array(
-                'success' => false,
-                'message' => __('Page not found', 'siloq-connector')
-            );
+            return array('success' => false, 'message' => 'Post not found');
         }
         
-        // Check if this is the homepage (front page)
-        $front_page_id = (int) get_option('page_on_front');
-        $is_homepage = ($front_page_id > 0 && $post->ID === $front_page_id);
-        
-        // Check noindex across ALL major SEO plugins
-        $is_noindex = $this->check_noindex_status($post->ID);
-        
-        // SKIP noindex pages entirely - don't waste API calls on pages we won't analyze
-        if ($is_noindex) {
-            return array(
-                'success' => true,
-                'message' => __('Skipped (noindex page)', 'siloq-connector'),
-                'skipped' => true
-            );
-        }
-        
-        // Prepare page data
-        $page_data = array(
+        $data = array(
             'wp_post_id' => $post->ID,
-            'url' => get_permalink($post->ID),
             'title' => $post->post_title,
             'content' => $post->post_content,
-            'excerpt' => $post->post_excerpt,
+            'url' => get_permalink($post->ID),
+            'type' => $post->post_type,
             'status' => $post->post_status,
-            'post_type' => $post->post_type,  // page, post, or product
-            'published_at' => $post->post_date_gmt,
-            'modified_at' => $post->post_modified_gmt,
-            'slug' => $post->post_name,
-            'parent_id' => $post->post_parent,
-            'menu_order' => $post->menu_order,
-            'is_homepage' => $is_homepage,
-            'is_noindex' => $is_noindex,
-            'meta' => array(
-                'yoast_title' => get_post_meta($post->ID, '_yoast_wpseo_title', true) ?: '',
-                'yoast_description' => get_post_meta($post->ID, '_yoast_wpseo_metadesc', true) ?: '',
-                'featured_image' => get_the_post_thumbnail_url($post->ID, 'full') ?: ''
-            )
+            'author' => get_the_author_meta('display_name', $post->post_author),
+            'modified' => $post->post_modified,
+            'site_id' => $this->site_id
         );
         
-        // Send to Siloq API
-        $response = $this->make_request('POST', '/pages/sync/', $page_data);
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 200 || $code === 201) {
-            // Update sync metadata
-            update_post_meta($post->ID, '_siloq_last_synced', current_time('mysql'));
-            update_post_meta($post->ID, '_siloq_sync_status', 'synced');
-            
-            // Store Siloq page ID if returned
-            if (isset($body['page_id'])) {
-                update_post_meta($post->ID, '_siloq_page_id', $body['page_id']);
-            }
-            
-            return array(
-                'success' => true,
-                'message' => __('Page synced successfully', 'siloq-connector'),
-                'data' => $body
-            );
-        }
-        
-        update_post_meta($post->ID, '_siloq_sync_status', 'error');
-        
-        // Build detailed error message for debugging
-        $error_msg = '';
-        if (isset($body['error'])) {
-            $error_msg = $body['error'];
-        } elseif (isset($body['detail'])) {
-            $error_msg = $body['detail'];
-        } elseif (isset($body['message'])) {
-            $error_msg = $body['message'];
-        } else {
-            $error_msg = sprintf(__('Sync failed (HTTP %d)', 'siloq-connector'), $code);
-        }
-        
-        return array(
-            'success' => false,
-            'message' => $error_msg
-        );
+        return $this->make_request('/pages/sync', 'POST', $data);
     }
     
     /**
-     * Get schema markup for a page
-     * 
-     * @param int $post_id WordPress post ID
-     * @return array Response data
+     * Make API request
      */
-    public function get_schema_markup($post_id) {
-        $siloq_page_id = get_post_meta($post_id, '_siloq_page_id', true);
-        
-        if (empty($siloq_page_id)) {
-            return array(
-                'success' => false,
-                'message' => __('Page not synced with Siloq', 'siloq-connector')
-            );
-        }
-        
-        $response = $this->make_request('GET', "/pages/{$siloq_page_id}/schema/", array());
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 200 && isset($body['schema_markup'])) {
-            // Validate and sanitize schema markup (should be valid JSON)
-            $schema_markup = $body['schema_markup'];
-            
-            // If it's a string, try to decode it to validate it's valid JSON
-            if (is_string($schema_markup)) {
-                $decoded = json_decode($schema_markup, true);
-                if (json_last_error() === JSON_ERROR_NONE) {
-                    // Re-encode to ensure consistent formatting
-                    $schema_markup = json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-                } else {
-                    // Invalid JSON, log error but don't fail
-                    if (defined('WP_DEBUG') && WP_DEBUG) {
-                        error_log('[Siloq] Invalid schema markup JSON: ' . json_last_error_msg());
-                    }
-                }
-            }
-            
-            // Store schema markup in post meta
-            update_post_meta($post_id, '_siloq_schema_markup', $schema_markup);
-            update_post_meta($post_id, '_siloq_schema_updated_at', current_time('mysql'));
-            
-            return array(
-                'success' => true,
-                'message' => __('Schema markup retrieved', 'siloq-connector'),
-                'data' => $body
-            );
-        }
-        
-        return array(
-            'success' => false,
-            'message' => isset($body['error']) ? $body['error'] : __('Failed to retrieve schema', 'siloq-connector')
-        );
-    }
-    
-    /**
-     * Create a content generation job
-     * 
-     * @param int $post_id WordPress post ID
-     * @param array $options Generation options
-     * @return array Response data
-     */
-    public function create_content_job($post_id, $options = array()) {
-        $siloq_page_id = get_post_meta($post_id, '_siloq_page_id', true);
-        
-        if (empty($siloq_page_id)) {
-            return array(
-                'success' => false,
-                'message' => __('Page not synced with Siloq', 'siloq-connector')
-            );
-        }
-        
-        $job_data = array_merge(array(
-            'page_id' => $siloq_page_id,
-            'wp_post_id' => $post_id,
-            'job_type' => 'content_generation'
-        ), $options);
-        
-        $response = $this->make_request('POST', '/content-jobs/', $job_data);
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 201 && isset($body['job_id'])) {
-            update_post_meta($post_id, '_siloq_content_job_id', $body['job_id']);
-            update_post_meta($post_id, '_siloq_content_job_status', 'pending');
-            
-            return array(
-                'success' => true,
-                'message' => __('Content generation job created', 'siloq-connector'),
-                'data' => $body
-            );
-        }
-        
-        return array(
-            'success' => false,
-            'message' => isset($body['error']) ? $body['error'] : __('Failed to create job', 'siloq-connector')
-        );
-    }
-    
-    /**
-     * Get status of a content generation job
-     * 
-     * @param string $job_id Job ID
-     * @return array Response data
-     */
-    public function get_content_job_status($job_id) {
-        $response = $this->make_request('GET', "/content-jobs/{$job_id}/", array());
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
-        
-        if ($code === 200) {
-            return array(
-                'success' => true,
-                'data' => $body
-            );
-        }
-        
-        return array(
-            'success' => false,
-            'message' => isset($body['error']) ? $body['error'] : __('Failed to get job status', 'siloq-connector')
-        );
-    }
-    
-    /**
-     * Make an HTTP request to the Siloq API
-     * 
-     * @param string $method HTTP method (GET, POST, PUT, DELETE)
-     * @param string $endpoint API endpoint (without base URL)
-     * @param array $data Request data
-     * @return array|WP_Error Response or error
-     */
-    private function make_request($method, $endpoint, $data = array()) {
-        if (empty($this->api_url) || empty($this->api_key)) {
-            return new WP_Error(
-                'siloq_config_error',
-                __('Siloq API is not configured. Please check your settings.', 'siloq-connector')
-            );
-        }
-        
+    private function make_request($endpoint, $method = 'GET', $data = array()) {
         $url = $this->api_url . $endpoint;
         
         $args = array(
@@ -437,174 +154,41 @@ class Siloq_API_Client {
             'headers' => array(
                 'Authorization' => 'Bearer ' . $this->api_key,
                 'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-                'User-Agent' => 'Siloq-WordPress-Plugin/' . SILOQ_VERSION
+                'X-Site-ID' => $this->site_id
             ),
-            'timeout' => 30,
-            'sslverify' => true
+            'timeout' => 30
         );
         
-        if (!empty($data) && ($method === 'POST' || $method === 'PUT')) {
+        if (!empty($data) && $method !== 'GET') {
             $args['body'] = json_encode($data);
-        } elseif (!empty($data) && $method === 'GET') {
-            $url = add_query_arg($data, $url);
         }
         
         $response = wp_remote_request($url, $args);
         
-        // Log the request for debugging (can be removed in production)
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            $status = is_wp_error($response) ? 'Error: ' . $response->get_error_message() : wp_remote_retrieve_response_code($response);
-            error_log(sprintf(
-                '[Siloq API] %s %s - Status: %s',
-                $method,
-                $endpoint,
-                $status
-            ));
-        }
-        
-        // Enhanced error handling for common HTTP errors
         if (is_wp_error($response)) {
-            $error_code = $response->get_error_code();
-            $error_message = $response->get_error_message();
-            
-            // Provide more helpful error messages
-            if (strpos($error_message, 'curl') !== false || strpos($error_message, 'resolve') !== false) {
-                return new WP_Error(
-                    'siloq_connection_error',
-                    __('Cannot connect to Siloq API. Please check your API URL and network connection.', 'siloq-connector'),
-                    array('original_error' => $error_message)
-                );
-            }
-            
-            if (strpos($error_message, 'timeout') !== false) {
-                return new WP_Error(
-                    'siloq_timeout_error',
-                    __('Connection to Siloq API timed out. Please try again.', 'siloq-connector'),
-                    array('original_error' => $error_message)
-                );
-            }
-        }
-        
-        return $response;
-    }
-
-    /**
-     * Public request method for scanner and other callers
-     *
-     * @param string $method   HTTP method (GET, POST, etc.)
-     * @param string $endpoint Endpoint path (e.g. /scans)
-     * @param array  $data     Request body/data
-     * @return array|WP_Error
-     */
-    public function request($method, $endpoint, $data = array()) {
-        return $this->make_request($method, $endpoint, $data);
-    }
-    
-    /**
-     * Validate API credentials
-     * 
-     * @param string $api_url API URL
-     * @param string $api_key API Key
-     * @return bool True if valid
-     */
-    public static function validate_credentials($api_url, $api_key) {
-        if (empty($api_url) || empty($api_key)) {
-            return false;
-        }
-        
-        // Basic URL validation
-        if (!filter_var($api_url, FILTER_VALIDATE_URL)) {
-            return false;
-        }
-        
-        // Basic API key format validation (adjust as needed)
-        if (strlen($api_key) < 20) {
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
-     * Get list of user's sites
-     * 
-     * @return array|WP_Error
-     */
-    public function get_sites() {
-        $response = $this->make_request('GET', '/sites/');
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        $code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-        
-        if ($code !== 200) {
-            return new WP_Error(
-                'siloq_api_error',
-                isset($data['detail']) ? $data['detail'] : __('Failed to get sites', 'siloq-connector')
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
             );
         }
         
-        // Handle both array and paginated response
-        return isset($data['results']) ? $data['results'] : (is_array($data) ? $data : array());
-    }
-
-    /**
-     * Get business profile for a site
-     * 
-     * @param int $site_id Site ID
-     * @return array|WP_Error
-     */
-    public function get_business_profile($site_id) {
-        $response = $this->make_request('GET', "/sites/{$site_id}/profile/");
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        $code = wp_remote_retrieve_response_code($response);
+        $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
+        
         $data = json_decode($body, true);
         
-        if ($code !== 200) {
-            return new WP_Error(
-                'siloq_api_error',
-                isset($data['detail']) ? $data['detail'] : __('Failed to get business profile', 'siloq-connector')
+        if ($status_code >= 200 && $status_code < 300) {
+            return array(
+                'success' => true,
+                'data' => $data
+            );
+        } else {
+            return array(
+                'success' => false,
+                'message' => isset($data['message']) ? $data['message'] : 'API request failed',
+                'status_code' => $status_code,
+                'data' => $data
             );
         }
-        
-        return $data;
-    }
-
-    /**
-     * Save business profile for a site
-     * 
-     * @param int $site_id Site ID
-     * @param array $profile_data Profile data
-     * @return array|WP_Error
-     */
-    public function save_business_profile($site_id, $profile_data) {
-        $response = $this->make_request('PATCH', "/sites/{$site_id}/profile/", $profile_data);
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        $code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-        
-        if ($code !== 200) {
-            return new WP_Error(
-                'siloq_api_error',
-                isset($data['detail']) ? $data['detail'] : __('Failed to save business profile', 'siloq-connector')
-            );
-        }
-        
-        return $data;
     }
 }
