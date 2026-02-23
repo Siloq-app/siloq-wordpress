@@ -981,6 +981,122 @@ class Siloq_Admin {
     }
     
     /**
+     * Render dashboard page
+     */
+    public static function render_dashboard_page() {
+        // Ensure plugin URL constant is defined
+        if (!defined('SILOQ_PLUGIN_URL')) {
+            define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
+        }
+        
+        ?>
+        <div class="wrap siloq-admin-wrap">
+            <div class="siloq-header">
+                <h1>
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <?php _e('Siloq Dashboard', 'siloq-connector'); ?>
+                </h1>
+                <p class="siloq-tagline"><?php _e('SEO Content Management Dashboard — Monitor and manage your content optimization.', 'siloq-connector'); ?></p>
+            </div>
+            
+            <div class="siloq-dashboard-container">
+                <div class="siloq-card">
+                    <h2><?php _e('Overview', 'siloq-connector'); ?></h2>
+                    <p><?php _e('Welcome to the Siloq Dashboard. Here you can monitor your SEO performance and manage content optimization.', 'siloq-connector'); ?></p>
+                    
+                    <div class="siloq-stats-grid">
+                        <div class="siloq-stat-card">
+                            <h3><?php _e('Pages Synced', 'siloq-connector'); ?></h3>
+                            <div class="siloq-stat-number">0</div>
+                        </div>
+                        <div class="siloq-stat-card">
+                            <h3><?php _e('Content Generated', 'siloq-connector'); ?></h3>
+                            <div class="siloq-stat-number">0</div>
+                        </div>
+                        <div class="siloq-stat-card">
+                            <h3><?php _e('SEO Score', 'siloq-connector'); ?></h3>
+                            <div class="siloq-stat-number">--</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="siloq-card">
+                    <h2><?php _e('Quick Actions', 'siloq-connector'); ?></h2>
+                    <div class="siloq-actions-grid">
+                        <a href="<?php echo admin_url('admin.php?page=siloq-sync'); ?>" class="siloq-action-card">
+                            <span class="dashicons dashicons-update"></span>
+                            <h3><?php _e('Sync Pages', 'siloq-connector'); ?></h3>
+                            <p><?php _e('Sync your WordPress pages with Siloq platform', 'siloq-connector'); ?></p>
+                        </a>
+                        <a href="<?php echo admin_url('admin.php?page=siloq-content-import'); ?>" class="siloq-action-card">
+                            <span class="dashicons dashicons-download"></span>
+                            <h3><?php _e('Import Content', 'siloq-connector'); ?></h3>
+                            <p><?php _e('Import AI-generated content from Siloq', 'siloq-connector'); ?></p>
+                        </a>
+                        <a href="<?php echo admin_url('admin.php?page=siloq-tali'); ?>" class="siloq-action-card">
+                            <span class="dashicons dashicons-palette"></span>
+                            <h3><?php _e('Theme Intelligence', 'siloq-connector'); ?></h3>
+                            <p><?php _e('Configure theme-aware layout intelligence', 'siloq-connector'); ?></p>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render sync page
+     */
+    public static function render_sync_page() {
+        // Ensure plugin URL constant is defined
+        if (!defined('SILOQ_PLUGIN_URL')) {
+            define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
+        }
+        
+        ?>
+        <div class="wrap siloq-admin-wrap">
+            <div class="siloq-header">
+                <h1>
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <?php _e('Page Sync', 'siloq-connector'); ?>
+                </h1>
+                <p class="siloq-tagline"><?php _e('Content Synchronization — Sync your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
+            </div>
+            
+            <div class="siloq-sync-container">
+                <div class="siloq-card">
+                    <h2><?php _e('Sync Status', 'siloq-connector'); ?></h2>
+                    <p><?php _e('Monitor and manage the synchronization status of your pages.', 'siloq-connector'); ?></p>
+                    
+                    <div class="siloq-sync-actions">
+                        <button type="button" id="siloq-sync-all" class="siloq-button siloq-button-primary">
+                            <span class="dashicons dashicons-update"></span>
+                            <?php _e('Sync All Pages', 'siloq-connector'); ?>
+                        </button>
+                        <button type="button" id="siloq-sync-outdated" class="siloq-button siloq-button-secondary">
+                            <span class="dashicons dashicons-clock"></span>
+                            <?php _e('Sync Outdated Pages', 'siloq-connector'); ?>
+                        </button>
+                    </div>
+                    
+                    <div id="siloq-sync-status" class="siloq-sync-status">
+                        <p><?php _e('Loading sync status...', 'siloq-connector'); ?></p>
+                    </div>
+                </div>
+                
+                <div class="siloq-card">
+                    <h2><?php _e('Page List', 'siloq-connector'); ?></h2>
+                    <div id="siloq-pages-list">
+                        <p><?php _e('Loading pages...', 'siloq-connector'); ?></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
      * Render sync status page
      */
     public static function render_sync_status_page() {

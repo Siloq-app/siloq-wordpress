@@ -118,6 +118,9 @@ class Siloq_Connector {
         // Admin menu
         add_action('admin_menu', array($this, 'add_admin_menu'));
         
+        // Admin assets
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+        
         // Schema injection
         add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'));
         
@@ -231,6 +234,35 @@ class Siloq_Connector {
             'nonce' => wp_create_nonce('siloq_ai_nonce'),
             'preferences' => Siloq_AI_Content_Generator::get_default_preferences()
         ));
+    }
+    
+    /**
+     * Enqueue admin assets
+     */
+    public function enqueue_admin_assets() {
+        // Ensure plugin URL constant is defined
+        if (!defined('SILOQ_PLUGIN_URL')) {
+            define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
+        }
+        
+        // Get current screen
+        $screen = get_current_screen();
+        
+        // Enqueue sync script on sync pages
+        if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
+            wp_enqueue_script(
+                'siloq-sync',
+                SILOQ_PLUGIN_URL . 'assets/siloq-sync.js',
+                array('jquery'),
+                SILOQ_VERSION,
+                true
+            );
+            
+            wp_localize_script('siloq-sync', 'siloqAdmin', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('siloq_ajax_nonce')
+            ));
+        }
     }
     
     /**

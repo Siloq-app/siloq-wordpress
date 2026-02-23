@@ -708,19 +708,198 @@
     border: 0;
 }
 
-/* Print Styles */
-@media print {
-    .siloq-ai-generator,
-    .siloq-modal-overlay,
-    .siloq-button,
-    .siloq-tooltip {
-        display: none !important;
+/* Dashboard Styles */
+.siloq-dashboard-container {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.siloq-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin: 25px 0;
+}
+
+.siloq-stat-card {
+    background: var(--siloq-gray-50);
+    border: 1px solid var(--siloq-gray-200);
+    border-radius: var(--siloq-border-radius);
+    padding: 20px;
+    text-align: center;
+    transition: var(--siloq-transition);
+}
+
+.siloq-stat-card:hover {
+    background: white;
+    border-color: var(--siloq-primary-light);
+    transform: translateY(-2px);
+    box-shadow: var(--siloq-shadow);
+}
+
+.siloq-stat-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--siloq-gray-600);
+}
+
+.siloq-stat-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--siloq-primary);
+    line-height: 1;
+}
+
+.siloq-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.siloq-action-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 25px 20px;
+    background: white;
+    border: 1px solid var(--siloq-gray-200);
+    border-radius: var(--siloq-border-radius);
+    text-decoration: none;
+    color: var(--siloq-gray-700);
+    transition: var(--siloq-transition);
+}
+
+.siloq-action-card:hover {
+    border-color: var(--siloq-primary);
+    color: var(--siloq-primary);
+    transform: translateY(-2px);
+    box-shadow: var(--siloq-shadow);
+    text-decoration: none;
+}
+
+.siloq-action-card .dashicons {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    margin-bottom: 15px;
+    color: var(--siloq-primary);
+}
+
+.siloq-action-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.siloq-action-card p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--siloq-gray-600);
+}
+
+/* Sync Page Styles */
+.siloq-sync-container {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.siloq-sync-actions {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+}
+
+.siloq-sync-status {
+    background: var(--siloq-gray-50);
+    border: 1px solid var(--siloq-gray-200);
+    border-radius: var(--siloq-border-radius);
+    padding: 20px;
+    min-height: 100px;
+}
+
+.siloq-sync-status .siloq-spinner {
+    display: block;
+    margin: 20px auto;
+}
+
+.siloq-pages-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.siloq-page-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--siloq-gray-200);
+    transition: var(--siloq-transition);
+}
+
+.siloq-page-item:hover {
+    background: var(--siloq-gray-50);
+}
+
+.siloq-page-item:last-child {
+    border-bottom: none;
+}
+
+.siloq-page-info {
+    flex: 1;
+}
+
+.siloq-page-title {
+    font-weight: 600;
+    color: var(--siloq-gray-900);
+    margin-bottom: 5px;
+}
+
+.siloq-page-meta {
+    font-size: 13px;
+    color: var(--siloq-gray-500);
+}
+
+.siloq-page-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.siloq-page-sync-button {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: var(--siloq-border-radius-sm);
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .siloq-stats-grid {
+        grid-template-columns: 1fr;
     }
     
-    .siloq-card {
-        box-shadow: none;
-        border: 1px solid #ccc;
-        break-inside: avoid;
+    .siloq-actions-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .siloq-sync-actions {
+        flex-direction: column;
+    }
+    
+    .siloq-page-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .siloq-page-status {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
