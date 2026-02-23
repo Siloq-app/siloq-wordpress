@@ -245,8 +245,16 @@ class Siloq_Connector {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
         }
         
-        // Get current screen
-        $screen = get_current_screen();
+        // Enqueue admin CSS on all Siloq pages
+        wp_enqueue_style(
+            'siloq-admin',
+            SILOQ_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            SILOQ_VERSION
+        );
+        
+        // Get current screen (might not be available in all contexts)
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         
         // Enqueue sync script on sync pages
         if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {

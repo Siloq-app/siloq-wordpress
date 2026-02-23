@@ -139,7 +139,7 @@ class Siloq_Admin {
             <?php endif; ?>
             
             <div class="siloq-settings-container">
-                <form method="post" action="">
+                <form method="post" action="" id="siloq-settings-form">
                     <?php wp_nonce_field('siloq_settings_nonce'); ?>
                     
                     <!-- Main Settings Card -->
@@ -606,34 +606,30 @@ class Siloq_Admin {
             $('#siloq-settings-form').on('submit', function(e) {
                 var apiKey = $('#siloq_api_key').val().trim();
                 var apiUrl = $('#siloq_api_url').val().trim();
-                var submitButton = $(this).find('input[type="submit"]');
-                var originalText = submitButton.val();
+                var submitButton = $(this).find('button[type="submit"]');
+                var originalText = submitButton.text();
                 
                 // Basic validation
                 if (!apiKey) {
                     showNotification('Please enter an API key', 'error');
                     $('#siloq_api_key').focus();
+                    e.preventDefault();
                     return false;
                 }
                 
                 if (!apiUrl) {
                     showNotification('Please enter an API URL', 'error');
                     $('#siloq_api_url').focus();
+                    e.preventDefault();
                     return false;
                 }
                 
-                // Show loading state
-                submitButton.prop('disabled', true).val('Saving...');
+                // Show loading state but allow form to submit
+                submitButton.prop('disabled', true).text('Saving...');
                 submitButton.after('<span class="siloq-loading-spinner"></span>');
                 
-                // Simulate async save (replace with actual AJAX call)
-                setTimeout(function() {
-                    submitButton.prop('disabled', false).val(originalText);
-                    $('.siloq-loading-spinner').remove();
-                    showNotification('Settings saved successfully!', 'success');
-                }, 1500);
-                
-                return false; // Prevent actual submission for demo
+                // Form will submit normally
+                return true;
             });
             
             // Connection test functionality
@@ -923,7 +919,7 @@ class Siloq_Admin {
     /**
      * Save settings
      */
-    private static function save_settings() {
+    public static function save_settings() {
         if (!current_user_can('manage_options')) {
             return;
         }
