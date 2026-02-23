@@ -183,13 +183,24 @@ The **Sync Status** page provides:
 
 ## Documentation
 
-Comprehensive documentation is available in the plugin directory:
+The plugin uses a modern React-based architecture:
 
-- **[README.md](siloq-connector/README.md)** - Complete plugin documentation
-- **[INSTALL.md](siloq-connector/INSTALL.md)** - Detailed installation guide
-- **[TESTING.md](siloq-connector/TESTING.md)** - Testing procedures and checklist
-- **[DEPLOYMENT.md](siloq-connector/DEPLOYMENT.md)** - Production deployment guide
-- **[CHANGELOG.md](siloq-connector/CHANGELOG.md)** - Version history and changes
+### Plugin Structure
+
+- **[siloq-connector.php](siloq-connector/siloq-connector.php)** - Main plugin file with REST API endpoints
+- **[react-ui/src/](siloq-connector/react-ui/src/)** - React TypeScript frontend
+  - `App.tsx` - Main application component
+  - `index.tsx` - Application entry point
+  - `types.ts` - TypeScript type definitions
+  - `components/` - Reusable UI components
+  - `services/` - API service modules
+  - `views/` - Page view components:
+    - `Dashboard.tsx` - Main dashboard view
+    - `LeadGenScanner.tsx` - Lead generation scanner
+    - `PageSync.tsx` - Page synchronization
+    - `Settings.tsx` - Plugin settings
+    - `SetupWizard.tsx` - Onboarding wizard
+- **[scripts/](siloq-connector/scripts/)** - Build and utility scripts
 
 ## API Reference
 

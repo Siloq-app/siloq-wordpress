@@ -20,9 +20,6 @@ class Siloq_Redirect_Manager {
      */
     private static $instance = null;
     
-    /**
-     * Get singleton instance
-     */
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -30,314 +27,249 @@ class Siloq_Redirect_Manager {
         return self::$instance;
     }
     
-    /**
-     * Constructor
-     */
     private function __construct() {
-        // Register REST API endpoints
-        add_action('rest_api_init', array($this, 'register_rest_routes'));
-        
-        // Hook into template_redirect at priority 1 (before everything else)
-        add_action('template_redirect', array($this, 'handle_redirects'), 1);
+        add_action('init', array($this, 'maybe_redirect'));
     }
     
     /**
      * Create redirects table
-     * Called on plugin activation
      */
     public static function create_table() {
         global $wpdb;
         
+        // Check if WordPress database object is available
+        if (!$wpdb || !isset($wpdb->prefix) || !method_exists($wpdb, 'get_charset_collate')) {
+            return false;
+        }
+        
         $table_name = $wpdb->prefix . self::TABLE_NAME;
+        
         $charset_collate = $wpdb->get_charset_collate();
         
         $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id BIGINT(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            source_url VARCHAR(2048) NOT NULL,
-            target_url VARCHAR(2048) NOT NULL,
-            redirect_type INT(11) DEFAULT 301,
-            reason VARCHAR(255) DEFAULT NULL,
-            created_by VARCHAR(100) DEFAULT 'siloq_api',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            is_active TINYINT(1) DEFAULT 1,
-            hit_count INT(11) DEFAULT 0,
-            last_hit_at DATETIME DEFAULT NULL,
-            INDEX idx_source (source_url(191)),
-            INDEX idx_active (is_active)
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            source_url varchar(500) NOT NULL,
+            target_url varchar(500) NOT NULL,
+            status_code int(3) DEFAULT 301,
+            enabled tinyint(1) DEFAULT 1,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY source_url (source_url),
+            KEY enabled (enabled)
         ) $charset_collate;";
         
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        // Check if table was created successfully
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
-            error_log('[Siloq Redirect Manager] Failed to create redirects table');
-            return false;
+        // Check if WordPress admin upgrade file exists
+        $upgrade_file = ABSPATH . 'wp-admin/includes/upgrade.php';
+        if (file_exists($upgrade_file)) {
+            require_once($upgrade_file);
+            dbDelta($sql);
+        } else {
+            // Fallback: execute SQL directly if dbDelta is not available
+            $wpdb->query($sql);
         }
         
         return true;
     }
     
     /**
-     * Register REST API routes
+     * Check if current URL needs redirect
      */
-    public function register_rest_routes() {
-        // POST /wp-json/siloq/v1/redirects - Create a redirect
-        register_rest_route('siloq/v1', '/redirects', array(
-            'methods' => 'POST',
-            'callback' => array($this, 'rest_create_redirect'),
-            'permission_callback' => array($this, 'verify_api_auth')
-        ));
+    public function maybe_redirect() {
+        if (is_admin()) {
+            return;
+        }
         
-        // GET /wp-json/siloq/v1/redirects - List all active redirects
-        register_rest_route('siloq/v1', '/redirects', array(
-            'methods' => 'GET',
-            'callback' => array($this, 'rest_list_redirects'),
-            'permission_callback' => array($this, 'verify_api_auth')
-        ));
+        $current_url = $this->get_current_url();
+        $redirect = $this->get_redirect($current_url);
         
-        // DELETE /wp-json/siloq/v1/redirects/{id} - Deactivate a redirect
-        register_rest_route('siloq/v1', '/redirects/(?P<id>\d+)', array(
-            'methods' => 'DELETE',
-            'callback' => array($this, 'rest_delete_redirect'),
-            'permission_callback' => array($this, 'verify_api_auth')
-        ));
+        if ($redirect && $redirect->enabled) {
+            wp_redirect($redirect->target_url, $redirect->status_code);
+            exit;
+        }
     }
     
     /**
-     * Verify API authentication
-     * Supports both Bearer token and X-Siloq-Signature
+     * Get current URL
      */
-    public function verify_api_auth($request) {
-        // Method 1: Bearer token (API key)
-        $auth_header = $request->get_header('Authorization');
-        if ($auth_header && strpos($auth_header, 'Bearer ') === 0) {
-            $provided_key = trim(substr($auth_header, 7));
-            $api_key = get_option('siloq_api_key');
-            
-            if (!empty($api_key) && hash_equals($api_key, $provided_key)) {
-                return true;
-            }
-        }
-        
-        // Method 2: Webhook signature (for backward compatibility)
-        $signature = $request->get_header('X-Siloq-Signature');
-        if ($signature) {
-            $api_key = get_option('siloq_api_key');
-            if (empty($api_key)) {
-                return new WP_Error(
-                    'not_configured',
-                    __('Siloq API not configured', 'siloq-connector'),
-                    array('status' => 500)
-                );
-            }
-            
-            $body = $request->get_body();
-            $expected_signature = hash_hmac('sha256', $body, $api_key);
-            
-            if (hash_equals($expected_signature, $signature)) {
-                return true;
-            }
-        }
-        
-        return new WP_Error(
-            'unauthorized',
-            __('Invalid or missing authentication', 'siloq-connector'),
-            array('status' => 401)
-        );
+    private function get_current_url() {
+        $protocol = is_ssl() ? 'https://' : 'http://';
+        return $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
     }
     
     /**
-     * REST: Create a redirect
+     * Get redirect for URL
      */
-    public function rest_create_redirect($request) {
+    public function get_redirect($source_url) {
         global $wpdb;
         
-        $data = $request->get_json_params();
-        
-        // Validate required fields
-        if (empty($data['source_url']) || empty($data['target_url'])) {
-            return new WP_Error(
-                'missing_fields',
-                __('Missing required fields: source_url and target_url', 'siloq-connector'),
-                array('status' => 400)
-            );
-        }
-        
-        $source_url = sanitize_text_field($data['source_url']);
-        $target_url = sanitize_text_field($data['target_url']);
-        $redirect_type = isset($data['redirect_type']) ? intval($data['redirect_type']) : 301;
-        $reason = isset($data['reason']) ? sanitize_text_field($data['reason']) : '';
-        
-        // Validate redirect type
-        if (!in_array($redirect_type, array(301, 302, 307, 308))) {
-            $redirect_type = 301;
-        }
-        
-        // Insert into database
         $table_name = $wpdb->prefix . self::TABLE_NAME;
+        
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE source_url = %s AND enabled = 1",
+            $source_url
+        ));
+    }
+    
+    /**
+     * Add redirect
+     */
+    public function add_redirect($source_url, $target_url, $status_code = 301) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . self::TABLE_NAME;
+        
+        // Normalize URLs
+        $source_url = $this->normalize_url($source_url);
+        $target_url = $this->normalize_url($target_url);
+        
+        // Check if redirect already exists
+        $existing = $this->get_redirect($source_url);
+        if ($existing) {
+            return $this->update_redirect($existing->id, $target_url, $status_code);
+        }
+        
         $result = $wpdb->insert(
             $table_name,
             array(
                 'source_url' => $source_url,
                 'target_url' => $target_url,
-                'redirect_type' => $redirect_type,
-                'reason' => $reason,
-                'created_by' => 'siloq_api',
-                'created_at' => current_time('mysql'),
-                'is_active' => 1,
-                'hit_count' => 0
+                'status_code' => $status_code,
+                'enabled' => 1
             ),
-            array('%s', '%s', '%d', '%s', '%s', '%s', '%d', '%d')
+            array('%s', '%s', '%d', '%d')
         );
         
-        if ($result === false) {
-            return new WP_Error(
-                'db_error',
-                sprintf(__('Database error: %s', 'siloq-connector'), $wpdb->last_error),
-                array('status' => 500)
-            );
-        }
-        
-        $redirect_id = $wpdb->insert_id;
-        
-        return rest_ensure_response(array(
-            'success' => true,
-            'redirect_id' => $redirect_id,
-            'message' => __('Redirect created successfully', 'siloq-connector')
-        ));
+        return $result !== false;
     }
     
     /**
-     * REST: List all active redirects
+     * Update redirect
      */
-    public function rest_list_redirects($request) {
+    public function update_redirect($id, $target_url, $status_code = 301) {
         global $wpdb;
         
         $table_name = $wpdb->prefix . self::TABLE_NAME;
-        $redirects = $wpdb->get_results(
-            "SELECT * FROM $table_name WHERE is_active = 1 ORDER BY created_at DESC",
-            ARRAY_A
-        );
         
-        if ($redirects === null) {
-            return new WP_Error(
-                'db_error',
-                sprintf(__('Database error: %s', 'siloq-connector'), $wpdb->last_error),
-                array('status' => 500)
-            );
-        }
-        
-        return rest_ensure_response(array(
-            'success' => true,
-            'redirects' => $redirects,
-            'count' => count($redirects)
-        ));
-    }
-    
-    /**
-     * REST: Delete (deactivate) a redirect
-     */
-    public function rest_delete_redirect($request) {
-        global $wpdb;
-        
-        $redirect_id = intval($request['id']);
-        
-        if ($redirect_id <= 0) {
-            return new WP_Error(
-                'invalid_id',
-                __('Invalid redirect ID', 'siloq-connector'),
-                array('status' => 400)
-            );
-        }
-        
-        $table_name = $wpdb->prefix . self::TABLE_NAME;
-        
-        // Check if redirect exists
-        $exists = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table_name WHERE id = %d",
-            $redirect_id
-        ));
-        
-        if (!$exists) {
-            return new WP_Error(
-                'not_found',
-                __('Redirect not found', 'siloq-connector'),
-                array('status' => 404)
-            );
-        }
-        
-        // Deactivate the redirect (soft delete)
-        $result = $wpdb->update(
+        return $wpdb->update(
             $table_name,
-            array('is_active' => 0),
-            array('id' => $redirect_id),
-            array('%d'),
+            array(
+                'target_url' => $this->normalize_url($target_url),
+                'status_code' => $status_code,
+                'updated_at' => current_time('mysql')
+            ),
+            array('id' => $id),
+            array('%s', '%d', '%s'),
             array('%d')
-        );
-        
-        if ($result === false) {
-            return new WP_Error(
-                'db_error',
-                sprintf(__('Database error: %s', 'siloq-connector'), $wpdb->last_error),
-                array('status' => 500)
-            );
-        }
-        
-        return rest_ensure_response(array(
-            'success' => true,
-            'message' => __('Redirect deactivated successfully', 'siloq-connector')
-        ));
+        ) !== false;
     }
     
     /**
-     * Handle redirects on template_redirect hook
-     * Executes before WordPress loads the template
+     * Delete redirect
      */
-    public function handle_redirects() {
+    public function delete_redirect($id) {
         global $wpdb;
-        
-        // Get current URL path
-        $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        $current_url = home_url($current_path);
         
         $table_name = $wpdb->prefix . self::TABLE_NAME;
         
-        // Try exact match first
+        return $wpdb->delete(
+            $table_name,
+            array('id' => $id),
+            array('%d')
+        ) !== false;
+    }
+    
+    /**
+     * Toggle redirect status
+     */
+    public function toggle_redirect($id) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . self::TABLE_NAME;
+        
         $redirect = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $table_name WHERE source_url = %s AND is_active = 1 LIMIT 1",
-            $current_url
+            "SELECT enabled FROM $table_name WHERE id = %d",
+            $id
         ));
         
-        // Try with/without trailing slash
-        if (!$redirect) {
-            $alt_url = rtrim($current_url, '/') === $current_url 
-                ? $current_url . '/' 
-                : rtrim($current_url, '/');
+        if ($redirect) {
+            $new_status = $redirect->enabled ? 0 : 1;
             
-            $redirect = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM $table_name WHERE source_url = %s AND is_active = 1 LIMIT 1",
-                $alt_url
-            ));
+            return $wpdb->update(
+                $table_name,
+                array('enabled' => $new_status),
+                array('id' => $id),
+                array('%d'),
+                array('%d')
+            ) !== false;
         }
         
-        // If redirect found, update hit count and execute
-        if ($redirect) {
-            // Update hit count and last hit time
-            $wpdb->update(
-                $table_name,
-                array(
-                    'hit_count' => $redirect->hit_count + 1,
-                    'last_hit_at' => current_time('mysql')
-                ),
-                array('id' => $redirect->id),
-                array('%d', '%s'),
-                array('%d')
-            );
-            
-            // Execute redirect
-            wp_redirect($redirect->target_url, $redirect->redirect_type);
-            exit;
+        return false;
+    }
+    
+    /**
+     * Get all redirects
+     */
+    public function get_all_redirects($enabled_only = false) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . self::TABLE_NAME;
+        
+        $sql = "SELECT * FROM $table_name";
+        if ($enabled_only) {
+            $sql .= " WHERE enabled = 1";
         }
+        $sql .= " ORDER BY created_at DESC";
+        
+        return $wpdb->get_results($sql);
+    }
+    
+    /**
+     * Normalize URL
+     */
+    private function normalize_url($url) {
+        // Remove trailing slash unless it's the homepage
+        $url = rtrim($url, '/');
+        if (empty($url)) {
+            $url = '/';
+        }
+        
+        // Ensure URL starts with /
+        if (strpos($url, 'http') !== 0 && strpos($url, '/') !== 0) {
+            $url = '/' . $url;
+        }
+        
+        return $url;
+    }
+    
+    /**
+     * Import redirects from array
+     */
+    public function import_redirects($redirects) {
+        $success_count = 0;
+        $error_count = 0;
+        
+        foreach ($redirects as $redirect) {
+            $source_url = isset($redirect['source_url']) ? $redirect['source_url'] : '';
+            $target_url = isset($redirect['target_url']) ? $redirect['target_url'] : '';
+            $status_code = isset($redirect['status_code']) ? intval($redirect['status_code']) : 301;
+            
+            if (empty($source_url) || empty($target_url)) {
+                $error_count++;
+                continue;
+            }
+            
+            if ($this->add_redirect($source_url, $target_url, $status_code)) {
+                $success_count++;
+            } else {
+                $error_count++;
+            }
+        }
+        
+        return array(
+            'success_count' => $success_count,
+            'error_count' => $error_count,
+            'total' => count($redirects)
+        );
     }
 }
