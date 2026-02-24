@@ -256,6 +256,26 @@ class Siloq_Connector {
             SILOQ_VERSION
         );
         
+        // Enqueue admin JavaScript for form validation and enhanced functionality
+        wp_enqueue_script(
+            'siloq-admin',
+            SILOQ_PLUGIN_URL . 'assets/js/siloq-admin.js',
+            array('jquery'),
+            SILOQ_VERSION,
+            true
+        );
+        
+        wp_localize_script('siloq-admin', 'siloqAdminData', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('siloq_admin_nonce'),
+            'strings' => array(
+                'validationError' => __('Please fix the errors before submitting.', 'siloq-connector'),
+                'settingsSaved' => __('Settings saved successfully!', 'siloq-connector'),
+                'connectionTestSuccess' => __('Connection successful!', 'siloq-connector'),
+                'connectionTestFailed' => __('Connection failed. Please check your credentials.', 'siloq-connector')
+            )
+        ));
+        
         // Get current screen (might not be available in all contexts)
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         
@@ -625,6 +645,17 @@ function siloq_deactivate() {
 
 if (function_exists('register_deactivation_hook')) {
     register_deactivation_hook(__FILE__, 'siloq_deactivate');
+}
+
+/**
+ * Debug logging function
+ */
+function siloq_debug_log($message, $level = 'info') {
+    if (get_option('siloq_debug_mode', 'no') === 'yes') {
+        $timestamp = current_time('Y-m-d H:i:s');
+        $log_message = "[{$timestamp}] [{$level}] Siloq: {$message}";
+        error_log($log_message);
+    }
 }
 
 /**

@@ -931,6 +931,17 @@ class Siloq_Admin {
         $use_dummy_scan = isset($_POST['siloq_use_dummy_scan']) ? 'yes' : 'no';
         $show_advanced = isset($_POST['siloq_show_advanced']) ? sanitize_text_field($_POST['siloq_show_advanced']) : 'no';
         
+        // Advanced settings
+        $debug_mode = isset($_POST['siloq_debug_mode']) ? 'yes' : 'no';
+        $sync_frequency = isset($_POST['siloq_sync_frequency']) ? sanitize_text_field($_POST['siloq_sync_frequency']) : 'disabled';
+        $content_types = isset($_POST['siloq_content_types']) ? array_map('sanitize_text_field', $_POST['siloq_content_types']) : ['page'];
+        $api_timeout = isset($_POST['siloq_api_timeout']) ? intval($_POST['siloq_api_timeout']) : 30;
+        $cache_duration = isset($_POST['siloq_cache_duration']) ? intval($_POST['siloq_cache_duration']) : 60;
+        
+        // Validate advanced settings
+        $api_timeout = max(5, min(120, $api_timeout)); // Ensure between 5-120 seconds
+        $cache_duration = max(0, min(1440, $cache_duration)); // Ensure between 0-1440 minutes
+        
         // Use default API URL if empty
         if (empty($api_url)) {
             $api_url = self::DEFAULT_API_URL;
@@ -962,6 +973,13 @@ class Siloq_Admin {
         update_option('siloq_signup_url', $signup_url);
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
         update_option('siloq_show_advanced', $show_advanced);
+        
+        // Save advanced settings
+        update_option('siloq_debug_mode', $debug_mode);
+        update_option('siloq_sync_frequency', $sync_frequency);
+        update_option('siloq_content_types', $content_types);
+        update_option('siloq_api_timeout', $api_timeout);
+        update_option('siloq_cache_duration', $cache_duration);
         
         // Clear connection verification if credentials changed
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {
