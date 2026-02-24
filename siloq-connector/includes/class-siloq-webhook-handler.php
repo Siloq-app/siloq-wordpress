@@ -130,6 +130,10 @@ class Siloq_Webhook_Handler {
         }
         
         $event_type = $data['event_type'];
+
+        // Unwrap nested payload: API sends { event_type, site_id, data: { ...fields } }
+        // Handlers expect the inner fields directly, so extract $data['data'] when present.
+        $event_data = (isset($data['data']) && is_array($data['data'])) ? $data['data'] : $data;
         
         // Log webhook for debugging
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -142,28 +146,28 @@ class Siloq_Webhook_Handler {
         // Route to appropriate handler
         switch ($event_type) {
             case 'content.generated':
-                return $this->handle_content_generated($data);
+                return $this->handle_content_generated($event_data);
                 
             case 'schema.updated':
-                return $this->handle_schema_updated($data);
+                return $this->handle_schema_updated($event_data);
                 
             case 'page.analyzed':
-                return $this->handle_page_analyzed($data);
+                return $this->handle_page_analyzed($event_data);
                 
             case 'sync.completed':
-                return $this->handle_sync_completed($data);
+                return $this->handle_sync_completed($event_data);
                 
             case 'content.create_draft':
-                return $this->handle_content_create_draft($data);
+                return $this->handle_content_create_draft($event_data);
                 
             case 'redirect.create':
-                return $this->handle_redirect_create($data);
+                return $this->handle_redirect_create($event_data);
                 
             case 'page.update_meta':
-                return $this->handle_page_update_meta($data);
+                return $this->handle_page_update_meta($event_data);
 
             case 'content.apply_content':
-                return $this->handle_apply_content($data);
+                return $this->handle_apply_content($event_data);
                 
             default:
                 return new WP_Error(
