@@ -46,10 +46,31 @@ class Siloq_Webhook_Handler {
         // Get signature from header
         $signature = $request->get_header('X-Siloq-Signature');
         
-        // TODO: Implement proper signature auth for content.create_draft — temporary siloq_page_id check
         if (empty($signature)) {
-            // Allow content.create_draft with simplified auth (valid siloq_page_id)
             $body_data = json_decode($request->get_body(), true);
+            $stored_site_id = (string) get_option('siloq_site_id', '');
+
+            // Allow known webhook events if the payload site_id matches the stored siloq_site_id.
+            // This validates the request is intended for this site while HMAC signing is pending.
+            $trusted_events = array(
+                'content.apply_content',
+                'page.update_meta',
+                'schema.updated',
+                'content.create_draft',
+                'redirect.created',
+            );
+            if (
+                is_array($body_data) &&
+                isset($body_data['event_type']) &&
+                in_array($body_data['event_type'], $trusted_events, true) &&
+                !empty($stored_site_id) &&
+                isset($body_data['site_id']) &&
+                (string) $body_data['site_id'] === $stored_site_id
+            ) {
+                return true;
+            }
+
+            // Legacy fallback: content.create_draft with valid siloq_page_id
             if (
                 is_array($body_data) &&
                 isset($body_data['event_type']) &&
