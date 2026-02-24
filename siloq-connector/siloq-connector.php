@@ -30,6 +30,9 @@ if (function_exists('plugin_dir_path')) {
 
 /**
  * Main Siloq Connector Class
+ * 
+ * Handles plugin initialization, admin menu setup, and core functionality
+ * for the Siloq WordPress plugin integration.
  */
 class Siloq_Connector {
     
