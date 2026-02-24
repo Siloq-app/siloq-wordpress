@@ -81,7 +81,7 @@ The Siloq WordPress Connector plugin provides enterprise-grade integration betwe
 
 ### Method 1: WordPress Admin (Recommended)
 
-1. Download the latest release from the [Releases](https://github.com/Siloq-seo/siloq-wordpress/releases) page
+1. Download the latest release from the [Releases](https://github.com/Siloq-app/siloq-wordpress/releases) page
 2. Navigate to **WordPress Admin → Plugins → Add New**
 3. Click **Upload Plugin** and select the downloaded ZIP file
 4. Click **Install Now**, then **Activate Plugin**
@@ -98,7 +98,7 @@ The Siloq WordPress Connector plugin provides enterprise-grade integration betwe
 
 ```bash
 cd /path/to/wordpress/wp-content/plugins
-git clone https://github.com/Siloq-seo/siloq-wordpress.git siloq-connector
+git clone https://github.com/Siloq-app/siloq-wordpress.git siloq-connector
 cd siloq-connector
 git checkout main
 ```
@@ -285,7 +285,7 @@ Before submitting a PR:
 
 ### Getting Help
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/Siloq-seo/siloq-wordpress/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/Siloq-app/siloq-wordpress/issues)
 - **Documentation**: [Siloq Platform Documentation](https://siloq.com/docs)
 - **Email Support**: support@siloq.com
 

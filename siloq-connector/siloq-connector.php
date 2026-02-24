@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Siloq Connector
- * Plugin URI: https://github.com/Siloq-seo/siloq-wordpress-plugin
+ * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
  * Version: 1.5.7
  * Author: Siloq
@@ -222,7 +222,7 @@ class Siloq_Connector {
         // Enqueue AI Generator JavaScript
         wp_enqueue_script(
             'siloq-ai-generator',
-            SILOQ_PLUGIN_URL . 'assets/siloq-ai-generator.js',
+            SILOQ_PLUGIN_URL . 'assets/js/siloq-ai-generator.js',
             array(),
             SILOQ_VERSION,
             true
@@ -260,7 +260,7 @@ class Siloq_Connector {
         if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
             wp_enqueue_script(
                 'siloq-sync',
-                SILOQ_PLUGIN_URL . 'assets/siloq-sync.js',
+                SILOQ_PLUGIN_URL . 'assets/js/siloq-sync.js',
                 array('jquery'),
                 SILOQ_VERSION,
                 true
