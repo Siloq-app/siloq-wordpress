@@ -807,6 +807,36 @@ class Siloq_Webhook_Handler {
      * - If before == "Not present": append `after` before the last CTA section, or at end if none found
      * - Else: find `before` text in content and replace with `after`; append if not found
      */
+    /**
+     * Detect if a post was built with a visual page builder.
+     * These builders store layout in post_meta, not post_content —
+     * auto-injecting HTML into post_content breaks the rendered page.
+     */
+    private function _is_page_builder_page($post_id) {
+        // Elementor
+        if (get_post_meta($post_id, '_elementor_edit_mode', true) === 'builder') {
+            return 'elementor';
+        }
+        // Divi Builder
+        if (get_post_meta($post_id, '_et_pb_use_builder', true) === 'on') {
+            return 'divi';
+        }
+        // Beaver Builder
+        if (get_post_meta($post_id, '_fl_builder_enabled', true)) {
+            return 'beaver_builder';
+        }
+        // WPBakery / Visual Composer
+        if (strpos(get_post_field('post_content', $post_id), '[vc_row') !== false ||
+            strpos(get_post_field('post_content', $post_id), '[vc_section') !== false) {
+            return 'wpbakery';
+        }
+        // Bricks
+        if (get_post_meta($post_id, '_bricks_page_content_2', true)) {
+            return 'bricks';
+        }
+        return false;
+    }
+
     private function handle_apply_content($data) {
         if (empty($data['url'])) {
             return new WP_Error('missing_data', __('Missing required field: url', 'siloq-connector'), array('status' => 400));
@@ -822,6 +852,25 @@ class Siloq_Webhook_Handler {
         $post_id = $this->find_post_by_url($url);
         if (!$post_id) {
             return new WP_Error('post_not_found', __('Post not found for the provided URL', 'siloq-connector'), array('status' => 404));
+        }
+
+        // Detect page builders — they store layout in post_meta, not post_content.
+        // Auto-injecting HTML into post_content breaks the visual layout entirely.
+        // Return a manual_action_required signal so the dashboard shows the content
+        // as a copy-paste recommendation instead of auto-applying.
+        $builder = $this->_is_page_builder_page($post_id);
+        if ($builder) {
+            return rest_ensure_response(array(
+                'success'              => false,
+                'error'               => 'page_builder_detected',
+                'builder'             => $builder,
+                'manual_action'       => true,
+                'content_to_add'      => $after,
+                'message'             => sprintf(
+                    __('This page uses %s. Copy the suggested content and add it in your page builder editor.', 'siloq-connector'),
+                    ucfirst(str_replace('_', ' ', $builder))
+                ),
+            ));
         }
 
         $post    = get_post($post_id);
