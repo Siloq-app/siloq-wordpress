@@ -92,6 +92,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-ai-content-generator.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
     }
     

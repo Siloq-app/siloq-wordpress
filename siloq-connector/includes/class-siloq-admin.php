@@ -1248,7 +1248,7 @@ class Siloq_Admin {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
         
-        $import_handler = new Siloq_Content_Import();
+        $import_handler = Siloq_Content_Import::get_instance();
         
         // Get all pages with available jobs
         $pages = get_posts(array(
