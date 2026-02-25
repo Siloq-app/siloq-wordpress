@@ -22,9 +22,9 @@
     --siloq-gray-700: #3c434a;
     --siloq-gray-800: #2c3338;
     --siloq-gray-900: #1d2327;
-    --siloq-border-radius: 8px;
-    --siloq-border-radius-sm: 4px;
-    --siloq-border-radius-lg: 12px;
+    --siloq-border-radius: 6px;
+    --siloq-border-radius-sm: 3px;
+    --siloq-border-radius-lg: 10px;
     --siloq-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
     --siloq-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --siloq-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);

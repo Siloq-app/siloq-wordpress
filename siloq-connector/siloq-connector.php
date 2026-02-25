@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.12
+* Version: 1.5.12
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -92,6 +92,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-ai-content-generator.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
     }
     
@@ -625,6 +626,54 @@ function siloq_deactivate() {
 
 if (function_exists('register_deactivation_hook')) {
     register_deactivation_hook(__FILE__, 'siloq_deactivate');
+}
+
+/**
+ * AJAX handler for dashboard stats
+ */
+function siloq_get_dashboard_stats() {
+    check_ajax_referer('siloq_admin_nonce', 'nonce');
+    
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Unauthorized'));
+        return;
+    }
+    
+    // Get real statistics
+    $pages_synced = get_option('siloq_pages_synced', 0);
+    $content_generated = get_option('siloq_content_generated', 0);
+    $seo_score = get_option('siloq_seo_score', '--');
+    
+    // Count synced pages from post meta
+    $synced_pages = get_posts(array(
+        'post_type' => 'page',
+        'post_status' => 'publish',
+        'meta_key' => '_siloq_sync_status',
+        'meta_value' => 'synced',
+        'posts_per_page' => -1
+    ));
+    
+    $pages_synced = count($synced_pages);
+    
+    // Count generated content
+    $generated_content = get_posts(array(
+        'post_type' => 'page',
+        'post_status' => 'publish',
+        'meta_key' => '_siloq_content_imported',
+        'posts_per_page' => -1
+    ));
+    
+    $content_generated = count($generated_content);
+    
+    wp_send_json_success(array(
+        'pages_synced' => $pages_synced,
+        'content_generated' => $content_generated,
+        'seo_score' => $seo_score
+    ));
+}
+
+if (function_exists('wp_ajax_siloq_get_dashboard_stats')) {
+    add_action('wp_ajax_siloq_get_dashboard_stats', 'siloq_get_dashboard_stats');
 }
 
 /**

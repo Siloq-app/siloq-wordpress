@@ -22,9 +22,9 @@
     --siloq-gray-700: #3c434a;
     --siloq-gray-800: #2c3338;
     --siloq-gray-900: #1d2327;
-    --siloq-border-radius: 8px;
-    --siloq-border-radius-sm: 4px;
-    --siloq-border-radius-lg: 12px;
+    --siloq-border-radius: 6px;
+    --siloq-border-radius-sm: 3px;
+    --siloq-border-radius-lg: 10px;
     --siloq-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
     --siloq-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --siloq-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
@@ -277,7 +277,7 @@
     max-width: 400px;
     padding: 10px 12px;
     border: 1px solid var(--siloq-gray-300);
-    border-radius: var(--siloq-border-radius-sm);
+    border-radius: 6px;
     font-size: 14px;
     transition: var(--siloq-transition);
     background: #ffffff;
@@ -750,6 +750,33 @@
     font-weight: 700;
     color: var(--siloq-primary);
     line-height: 1;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.siloq-stat-updating {
+    opacity: 0.6;
+    transform: scale(1.05);
+}
+
+.siloq-stat-number:hover {
+    transform: scale(1.02);
+    color: var(--siloq-primary-dark);
+}
+
+.siloq-stat-number::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--siloq-primary);
+    transition: width 0.3s ease;
+}
+
+.siloq-stat-number:hover::after {
+    width: 100%;
 }
 
 .siloq-actions-grid {
@@ -1960,6 +1987,74 @@ button.siloq-syncing {
 }
 
 .siloq-sync-time {
+    font-size: 12px;
+    color: var(--siloq-gray-500);
+}
+
+/* Sync Stats Grid */
+.siloq-sync-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 20px 30px;
+    margin: 20px 0;
+}
+
+.siloq-sync-stat {
+    text-align: center;
+    padding: 15px;
+    background: var(--siloq-gray-50);
+    border-radius: var(--siloq-border-radius);
+    border: 1px solid var(--siloq-gray-200);
+    transition: var(--siloq-transition);
+}
+
+.siloq-sync-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--siloq-shadow-sm);
+    border-color: var(--siloq-primary);
+}
+
+.siloq-sync-stat-number {
+    display: block;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--siloq-primary);
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.siloq-sync-stat-label {
+    display: block;
+    font-size: 12px;
+    color: var(--siloq-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 768px) {
+    .siloq-sync-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .siloq-sync-stat {
+        padding: 12px;
+    }
+    
+    .siloq-sync-stat-number {
+        font-size: 20px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .siloq-sync-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
+
+.siloq-sync-time-details {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -2187,4 +2282,13 @@ button.siloq-syncing {
 
 .siloq-status-badge.siloq-status-not-synced:hover {
     background: var(--siloq-gray-200);
+}
+
+/* WordPress Core UI Button Overrides */
+.wp-core-ui .button-primary {
+    border-radius: 6px !important;
+}
+
+.wp-core-ui .button {
+    border-radius: 6px !important;
 }
