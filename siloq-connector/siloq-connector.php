@@ -677,6 +677,23 @@ if (function_exists('wp_ajax_siloq_get_dashboard_stats')) {
 }
 
 /**
+ * Output schema markup in wp_head
+ */
+function siloq_output_schema_markup() {
+    global $post;
+    
+    if (!$post) {
+        return;
+    }
+    
+    $schema = get_post_meta($post->ID, '_siloq_schema_markup', true);
+    
+    if (!empty($schema)) {
+        echo '<script type="application/ld+json">' . wp_json_encode($schema) . '</script>' . "\n";
+    }
+}
+
+/**
  * Initialize the plugin
  */
 function siloq_init() {
