@@ -23,6 +23,9 @@
         
         // Loading states
         initLoadingStates();
+        
+        // Dashboard stats
+        initDashboardStats();
     }
 
     function initFormValidation() {
@@ -242,10 +245,93 @@
         });
     }
 
+    function initDashboardStats() {
+        // Update dashboard statistics with real data
+        updateDashboardStats();
+        
+        // Refresh stats every 30 seconds
+        setInterval(updateDashboardStats, 30000);
+    }
+
+    function updateDashboardStats() {
+        // Get real statistics from WordPress
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'siloq_get_dashboard_stats',
+                nonce: siloqAdminData.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const stats = response.data;
+                    
+                    // Update pages synced
+                    $('#siloq-pages-synced').text(stats.pages_synced || '0');
+                    
+                    // Update content generated
+                    $('#siloq-content-generated').text(stats.content_generated || '0');
+                    
+                    // Update SEO score
+                    $('#siloq-seo-score').text(stats.seo_score || '--');
+                    
+                    // Animate number changes
+                    animateNumber('#siloq-pages-synced');
+                    animateNumber('#siloq-content-generated');
+                }
+            },
+            error: function() {
+                // Keep default values on error
+                console.log('Failed to load dashboard stats');
+            }
+        });
+    }
+
+    function animateNumber(selector) {
+        const $element = $(selector);
+        const currentValue = $element.text();
+        
+        // Add animation class
+        $element.addClass('siloq-stat-updating');
+        
+        // Create number animation effect
+        const isNumeric = !isNaN(currentValue) && currentValue !== '--';
+        if (isNumeric) {
+            const targetValue = parseInt(currentValue);
+            const startValue = targetValue > 0 ? 0 : targetValue;
+            const duration = 800;
+            const steps = 20;
+            const stepValue = (targetValue - startValue) / steps;
+            let currentStep = 0;
+            
+            const animationInterval = setInterval(() => {
+                currentStep++;
+                const newValue = Math.round(startValue + (stepValue * currentStep));
+                $element.text(newValue);
+                
+                if (currentStep >= steps) {
+                    clearInterval(animationInterval);
+                    $element.text(targetValue);
+                    
+                    // Remove animation class after completion
+                    setTimeout(function() {
+                        $element.removeClass('siloq-stat-updating');
+                    }, 200);
+                }
+            }, duration / steps);
+        } else {
+            // For non-numeric values (like '--'), just do the fade animation
+            setTimeout(function() {
+                $element.removeClass('siloq-stat-updating');
+            }, 500);
+        }
+    }
+
     // Expose functions globally
     window.siloqAdmin = {
         updateSyncStatus: updateSyncStatus,
-        showNotification: showNotification
+        showNotification: showNotification,
+        updateDashboardStats: updateDashboardStats
     };
 
 })(jQuery);

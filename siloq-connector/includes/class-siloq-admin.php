@@ -1003,15 +1003,15 @@ class Siloq_Admin {
                     <div class="siloq-stats-grid">
                         <div class="siloq-stat-card">
                             <h3><?php _e('Pages Synced', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number">0</div>
+                            <div class="siloq-stat-number" id="siloq-pages-synced">0</div>
                         </div>
                         <div class="siloq-stat-card">
                             <h3><?php _e('Content Generated', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number">0</div>
+                            <div class="siloq-stat-number" id="siloq-content-generated">0</div>
                         </div>
                         <div class="siloq-stat-card">
                             <h3><?php _e('SEO Score', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number">--</div>
+                            <div class="siloq-stat-number" id="siloq-seo-score">--</div>
                         </div>
                     </div>
                 </div>
@@ -1030,7 +1030,7 @@ class Siloq_Admin {
                             <p><?php _e('Import AI-generated content from Siloq', 'siloq-connector'); ?></p>
                         </a>
                         <a href="<?php echo admin_url('admin.php?page=siloq-tali'); ?>" class="siloq-action-card">
-                            <span class="dashicons dashicons-palette"></span>
+                            <span class="dashicons dashicons-admin-appearance"></span>
                             <h3><?php _e('Theme Intelligence', 'siloq-connector'); ?></h3>
                             <p><?php _e('Configure theme-aware layout intelligence', 'siloq-connector'); ?></p>
                         </a>
