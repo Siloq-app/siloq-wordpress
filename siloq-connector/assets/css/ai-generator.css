@@ -1,0 +1,562 @@
+/* AI Content Generator Styles - Enhanced UX/UI */
+
+/* Design System Variables */
+:root {
+    --siloq-primary: #2271b1;
+    --siloq-primary-dark: #135e96;
+    --siloq-primary-light: #4a94d4;
+    --siloq-secondary: #646970;
+    --siloq-success: #00a32a;
+    --siloq-success-bg: #d4edda;
+    --siloq-warning: #dba617;
+    --siloq-warning-bg: #fff3cd;
+    --siloq-error: #d63638;
+    --siloq-error-bg: #fcf0f1;
+    --siloq-gray-50: #f8f9fa;
+    --siloq-gray-100: #f0f0f1;
+    --siloq-gray-200: #dcdcde;
+    --siloq-gray-300: #c3c4c7;
+    --siloq-gray-400: #a7aaad;
+    --siloq-gray-500: #646970;
+    --siloq-gray-600: #50575e;
+    --siloq-gray-700: #3c434a;
+    --siloq-gray-800: #2c3338;
+    --siloq-gray-900: #1d2327;
+    --siloq-border-radius: 6px;
+    --siloq-border-radius-sm: 3px;
+    --siloq-border-radius-lg: 10px;
+    --siloq-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --siloq-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --siloq-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+    --siloq-transition: all 0.2s ease;
+}
+
+/* Main Generator Container */
+.siloq-ai-generator {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 420px;
+    max-width: 95vw;
+    background: white;
+    border: 2px solid var(--siloq-primary);
+    border-radius: var(--siloq-border-radius-lg);
+    box-shadow: var(--siloq-shadow-lg);
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--siloq-gray-800);
+    overflow: hidden;
+    transition: var(--siloq-transition);
+    display: none;
+}
+
+/* Mobile Responsive Positioning */
+@media (max-width: 768px) {
+    .siloq-ai-generator {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        max-width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+        z-index: 9999999;
+    }
+}
+
+@media (max-width: 480px) {
+    .siloq-ai-generator {
+        font-size: 13px;
+    }
+}
+
+/* Trigger Button */
+.siloq-ai-generator-trigger {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 999998;
+}
+
+@media (max-width: 768px) {
+    .siloq-ai-generator-trigger {
+        bottom: 20px;
+        top: auto;
+        right: 20px;
+    }
+}
+
+.siloq-ai-trigger-button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, var(--siloq-primary), var(--siloq-primary-dark));
+    color: white;
+    border: none;
+    padding: 14px 20px;
+    border-radius: var(--siloq-border-radius-lg);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--siloq-transition);
+    box-shadow: var(--siloq-shadow);
+}
+
+.siloq-ai-trigger-button:hover {
+    background: linear-gradient(135deg, var(--siloq-primary-dark), var(--siloq-primary));
+    transform: translateY(-2px);
+    box-shadow: var(--siloq-shadow-lg);
+}
+
+.siloq-ai-trigger-button .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Header */
+.siloq-ai-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    background: linear-gradient(135deg, var(--siloq-primary), var(--siloq-primary-dark));
+    color: white;
+}
+
+.siloq-ai-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.siloq-ai-title h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.siloq-ai-title .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.siloq-ai-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--siloq-transition);
+}
+
+.siloq-ai-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.siloq-ai-close .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Notifications */
+.siloq-ai-notification {
+    margin: 0 20px 20px;
+    padding: 12px 16px;
+    border-radius: var(--siloq-border-radius);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.siloq-ai-notification-success {
+    background: var(--siloq-success-bg);
+    color: var(--siloq-success);
+    border: 1px solid var(--siloq-success);
+}
+
+.siloq-ai-notification-error {
+    background: var(--siloq-error-bg);
+    color: var(--siloq-error);
+    border: 1px solid var(--siloq-error);
+}
+
+.siloq-ai-notification-info {
+    background: #e7f3ff;
+    color: #0073aa;
+    border: 1px solid #0073aa;
+}
+
+/* Tabs */
+.siloq-ai-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--siloq-gray-200);
+    background: var(--siloq-gray-50);
+}
+
+.siloq-ai-tab {
+    flex: 1;
+    padding: 16px 20px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--siloq-gray-600);
+    cursor: pointer;
+    transition: var(--siloq-transition);
+    border-bottom: 3px solid transparent;
+}
+
+.siloq-ai-tab:hover {
+    color: var(--siloq-primary);
+    background: rgba(34, 113, 177, 0.05);
+}
+
+.siloq-ai-tab.active {
+    color: var(--siloq-primary);
+    border-bottom-color: var(--siloq-primary);
+    background: white;
+}
+
+.siloq-ai-tab:disabled {
+    color: var(--siloq-gray-400);
+    cursor: not-allowed;
+}
+
+.siloq-ai-tab:disabled:hover {
+    background: none;
+    color: var(--siloq-gray-400);
+}
+
+/* Content Area */
+.siloq-ai-content {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Generate Tab */
+.siloq-ai-generate-tab {
+    padding: 20px;
+}
+
+.siloq-ai-prompt h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--siloq-gray-900);
+}
+
+.siloq-ai-prompt p {
+    margin: 0 0 20px 0;
+    color: var(--siloq-gray-600);
+    font-size: 14px;
+}
+
+.siloq-ai-preferences {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.siloq-ai-preference-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.siloq-ai-preference-group label {
+    font-weight: 500;
+    color: var(--siloq-gray-700);
+    font-size: 13px;
+}
+
+.siloq-ai-preference-group select,
+.siloq-ai-preference-group textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--siloq-gray-300);
+    border-radius: var(--siloq-border-radius);
+    font-size: 14px;
+    transition: var(--siloq-transition);
+}
+
+.siloq-ai-preference-group select:focus,
+.siloq-ai-preference-group textarea:focus {
+    outline: none;
+    border-color: var(--siloq-primary);
+    box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.2);
+}
+
+.siloq-ai-preference-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.siloq-ai-preference-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.siloq-ai-generate-button {
+    width: 100%;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, var(--siloq-primary), var(--siloq-primary-dark));
+    color: white;
+    border: none;
+    border-radius: var(--siloq-border-radius);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--siloq-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.siloq-ai-generate-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--siloq-primary-dark), var(--siloq-primary));
+    transform: translateY(-1px);
+    box-shadow: var(--siloq-shadow);
+}
+
+.siloq-ai-generate-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.siloq-ai-generate-button .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Preview Tab */
+.siloq-ai-preview-tab {
+    padding: 20px;
+}
+
+.siloq-ai-generating {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.siloq-ai-progress p {
+    margin: 16px 0 8px 0;
+    font-weight: 500;
+    color: var(--siloq-gray-700);
+}
+
+.siloq-ai-progress small {
+    color: var(--siloq-gray-500);
+}
+
+.siloq-ai-generated-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.siloq-ai-content-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.siloq-ai-content-actions .button {
+    padding: 8px 16px;
+    font-size: 13px;
+    border-radius: var(--siloq-border-radius);
+    text-decoration: none;
+    transition: var(--siloq-transition);
+}
+
+.siloq-ai-content-actions .button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--siloq-shadow-sm);
+}
+
+.siloq-ai-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.siloq-ai-section {
+    border: 1px solid var(--siloq-gray-200);
+    border-radius: var(--siloq-border-radius);
+    overflow: hidden;
+}
+
+.siloq-ai-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--siloq-gray-50);
+    border-bottom: 1px solid var(--siloq-gray-200);
+}
+
+.siloq-ai-section-header h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--siloq-gray-900);
+}
+
+.siloq-ai-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.siloq-ai-word-count {
+    font-size: 12px;
+    color: var(--siloq-gray-500);
+    font-weight: 500;
+}
+
+.siloq-ai-section-content {
+    padding: 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--siloq-gray-700);
+}
+
+.siloq-ai-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--siloq-gray-500);
+}
+
+/* Settings Tab */
+.siloq-ai-settings-tab {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.siloq-ai-setting-group h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--siloq-gray-700);
+}
+
+.siloq-ai-setting-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--siloq-gray-300);
+    border-radius: var(--siloq-border-radius);
+    font-size: 14px;
+    transition: var(--siloq-transition);
+    resize: vertical;
+    min-height: 80px;
+}
+
+.siloq-ai-setting-group textarea:focus {
+    outline: none;
+    border-color: var(--siloq-primary);
+    box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.2);
+}
+
+.siloq-ai-setting-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: var(--siloq-gray-700);
+    font-size: 14px;
+}
+
+.siloq-ai-setting-group input[type="checkbox"] {
+    margin: 0;
+}
+
+/* Spinner Animation */
+.siloq-ai-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: siloq-spin 1s ease-in-out infinite;
+}
+
+@keyframes siloq-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* WordPress Integration */
+.siloq-ai-generator .button {
+    background: #0073aa;
+    color: white;
+    border: 1px solid #0073aa;
+    padding: 8px 16px;
+    border-radius: var(--siloq-border-radius);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--siloq-transition);
+}
+
+.siloq-ai-generator .button:hover {
+    background: #005a87;
+    border-color: #005a87;
+}
+
+.siloq-ai-generator .button-primary {
+    background: var(--siloq-primary);
+    border-color: var(--siloq-primary);
+}
+
+.siloq-ai-generator .button-primary:hover {
+    background: var(--siloq-primary-dark);
+    border-color: var(--siloq-primary-dark);
+}
+
+.siloq-ai-generator .button-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .siloq-ai-generator {
+        background: var(--siloq-gray-900);
+        color: var(--siloq-gray-100);
+        border-color: var(--siloq-primary-light);
+    }
+    
+    .siloq-ai-tab {
+        background: var(--siloq-gray-800);
+        color: var(--siloq-gray-300);
+    }
+    
+    .siloq-ai-tab.active {
+        background: var(--siloq-gray-900);
+        color: var(--siloq-primary-light);
+    }
+    
+    .siloq-ai-section {
+        border-color: var(--siloq-gray-700);
+    }
+    
+    .siloq-ai-section-header {
+        background: var(--siloq-gray-800);
+        border-bottom-color: var(--siloq-gray-700);
+    }
+}
