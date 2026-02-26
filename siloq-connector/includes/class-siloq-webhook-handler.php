@@ -65,17 +65,21 @@ class Siloq_Webhook_Handler {
             ), 400);
         }
         
-        // Validate site_id when stored — auto-store on first valid call if not yet set
-        $stored_site_id = get_option('siloq_site_id', '');
-        if (!empty($stored_site_id) && !empty($site_id) && (string) $params['site_id'] !== (string) $stored_site_id) {
-            return new WP_REST_Response(array(
-                'success' => false,
-                'message' => 'Invalid site_id',
-            ), 403);
-        }
-        if (empty($stored_site_id) && !empty($site_id)) {
-            // Auto-register the site_id on first successful webhook
-            update_option('siloq_site_id', sanitize_text_field((string) $site_id));
+        // site_id validation: only enforce when a webhook secret is also configured.
+        // Without a secret, we rely on the API key (Bearer token) for auth.
+        // Always store/update the site_id from the API so the plugin knows its ID.
+        if (!empty($site_id)) {
+            $stored_site_id = get_option('siloq_site_id', '');
+            $incoming = sanitize_text_field((string) $site_id);
+            // Only block if secret is set AND ids don't match (tight mode)
+            if (!empty($secret) && !empty($stored_site_id) && $incoming !== $stored_site_id) {
+                return new WP_REST_Response(array(
+                    'success' => false,
+                    'message'  => 'Invalid site_id',
+                ), 403);
+            }
+            // Always keep site_id current (auto-register or update)
+            update_option('siloq_site_id', $incoming);
         }
         
         // Handle different events
