@@ -783,21 +783,6 @@ class Siloq_Admin {
                         '</span>');
                 }
             }
-                            $('#siloq-profile-form').show();
-                        } else {
-                            $('#siloq-profile-error p').text(response.data ? response.data.message : 'Failed to load profile');
-                            $('#siloq-profile-error').show();
-                            $('#siloq-profile-form').show();
-                        }
-                    },
-                    error: function() {
-                        $('#siloq-profile-loading').hide();
-                        $('#siloq-profile-error p').text('Connection error. Please try again.');
-                        $('#siloq-profile-error').show();
-                        $('#siloq-profile-form').show();
-                    }
-                });
-            }
             
             function renderServices() {
                 var html = '';
