@@ -48,6 +48,13 @@ class Siloq_Webhook_Handler {
      * Handle incoming webhook
      */
     public static function handle_webhook($request) {
+        // Security: Validate webhook signature
+        $secret = get_option('siloq_webhook_secret', '');
+        $signature = $request->get_header('X-Siloq-Signature');
+        if (empty($secret) || empty($signature) || !hash_equals('sha256=' . hash_hmac('sha256', $request->get_body(), $secret), $signature)) {
+            return new WP_REST_Response(array('success' => false, 'message' => 'Invalid signature'), 401);
+        }
+        
         $params = $request->get_params();
         
         // Validate required parameters
@@ -165,13 +172,23 @@ class Siloq_Webhook_Handler {
                 $value = sanitize_text_field($value);
             }
             
-            // Handle AIOSEO specific fields
+            // Handle AIOSEO specific fields using wp_aioseo_posts table
             if ($key === 'title') {
-                update_post_meta($post_id, '_aioseo_title', $value);
-                $updated_fields[] = '_aioseo_title';
+                global $wpdb;
+                $table_name = $wpdb->prefix . 'aioseo_posts';
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE $table_name SET title = %s WHERE post_id = %d",
+                    $value, $post_id
+                ));
+                $updated_fields[] = 'title';
             } elseif ($key === 'description') {
-                update_post_meta($post_id, '_aioseo_description', $value);
-                $updated_fields[] = '_aioseo_description';
+                global $wpdb;
+                $table_name = $wpdb->prefix . 'aioseo_posts';
+                $wpdb->query($wpdb->prepare(
+                    "UPDATE $table_name SET description = %s WHERE post_id = %d",
+                    $value, $post_id
+                ));
+                $updated_fields[] = 'description';
             } else {
                 // Handle other meta fields
                 update_post_meta($post_id, $key, $value);
@@ -228,11 +245,21 @@ class Siloq_Webhook_Handler {
                     $value = sanitize_text_field($value);
                 }
                 
-                // Handle AIOSEO specific fields
+                // Handle AIOSEO specific fields using wp_aioseo_posts table
                 if ($key === 'title') {
-                    update_post_meta($post_id, '_aioseo_title', $value);
+                    global $wpdb;
+                    $table_name = $wpdb->prefix . 'aioseo_posts';
+                    $wpdb->query($wpdb->prepare(
+                        "UPDATE $table_name SET title = %s WHERE post_id = %d",
+                        $value, $post_id
+                    ));
                 } elseif ($key === 'description') {
-                    update_post_meta($post_id, '_aioseo_description', $value);
+                    global $wpdb;
+                    $table_name = $wpdb->prefix . 'aioseo_posts';
+                    $wpdb->query($wpdb->prepare(
+                        "UPDATE $table_name SET description = %s WHERE post_id = %d",
+                        $value, $post_id
+                    ));
                 } else {
                     update_post_meta($post_id, $key, $value);
                 }
