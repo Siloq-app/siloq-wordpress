@@ -275,6 +275,16 @@ class Siloq_Connector {
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('siloq_ajax_nonce')
             ));
+            
+            wp_localize_script('siloq-sync', 'siloqAjax', array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('siloq_ajax_nonce'),
+                'strings' => array(
+                    'testing' => 'Testing...',
+                    'success' => 'Success:',
+                    'error'   => 'Error:'
+                )
+            ));
         }
     }
     
@@ -719,4 +729,5 @@ function siloq_init() {
 // Start the plugin only if WordPress functions are available
 if (function_exists('add_action')) {
     add_action('plugins_loaded', 'siloq_init');
+    add_action('wp_head', 'siloq_output_schema_markup', 1);
 }
