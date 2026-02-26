@@ -150,45 +150,34 @@ class Siloq_API_Client {
         $url = $this->api_url . $endpoint;
         
         $args = array(
-            'method' => $method,
+            'timeout' => 30,
             'headers' => array(
                 'Authorization' => 'Bearer ' . $this->api_key,
-                'Content-Type' => 'application/json',
-                'X-Site-ID' => $this->site_id
-            ),
-            'timeout' => 30
+                'Content-Type' => 'application/json'
+            )
         );
         
-        if (!empty($data) && $method !== 'GET') {
+        if ($method === 'POST' && !empty($data)) {
             $args['body'] = json_encode($data);
-        }
-        
-        $response = wp_remote_request($url, $args);
-        
-        if (is_wp_error($response)) {
-            return array(
-                'success' => false,
-                'message' => $response->get_error_message()
-            );
-        }
-        
-        $status_code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        
-        $data = json_decode($body, true);
-        
-        if ($status_code >= 200 && $status_code < 300) {
-            return array(
-                'success' => true,
-                'data' => $data
-            );
+            $response = wp_remote_post($url, $args);
         } else {
-            return array(
-                'success' => false,
-                'message' => isset($data['message']) ? $data['message'] : 'API request failed',
-                'status_code' => $status_code,
-                'data' => $data
-            );
+            $response = wp_remote_get($url, $args);
         }
+        
+        return $response;
+    }
+    
+    /**
+     * Generic POST request
+     */
+    public function post($endpoint, $data = array()) {
+        return $this->make_request($endpoint, 'POST', $data);
+    }
+    
+    /**
+     * Generic GET request
+     */
+    public function get($endpoint) {
+        return $this->make_request($endpoint, 'GET');
     }
 }
