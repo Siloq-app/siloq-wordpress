@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.13
+* Version: 1.5.14
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.13');
+define('SILOQ_VERSION', '1.5.14');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -713,4 +713,5 @@ function siloq_init() {
 // Start the plugin only if WordPress functions are available
 if (function_exists('add_action')) {
     add_action('plugins_loaded', 'siloq_init');
+    add_action('wp_head', 'siloq_output_schema_markup', 1);
 }
