@@ -79,12 +79,18 @@ class Siloq_Webhook_Handler {
         }
         
         // Handle different events
+        // NOTE: 'page.update_meta' is what the Siloq API sends (see page_analysis_views.py).
+        // 'meta.update' kept as legacy alias.
         switch ($event) {
             case 'content.apply_content':
                 return self::handle_apply_content($data);
-                
+
+            case 'page.update_meta':
             case 'meta.update':
                 return self::handle_meta_update($data);
+
+            case 'schema.updated':
+                return self::handle_schema_update($data);
                 
             case 'page.create_draft':
                 return self::handle_create_draft($data);
@@ -101,10 +107,14 @@ class Siloq_Webhook_Handler {
      * Handle content.apply_content event
      */
     private static function handle_apply_content($data) {
-        if (!isset($data['url']) || !isset($data['content'])) {
+        // API sends 'after' (the new content); legacy callers may send 'content'
+        $content = isset($data['after']) ? $data['after']
+                 : (isset($data['content']) ? $data['content'] : null);
+
+        if (!isset($data['url']) || $content === null) {
             return new WP_REST_Response(array(
                 'success' => false,
-                'message' => 'Missing url or content in data'
+                'message' => 'Missing url or content/after in data'
             ), 400);
         }
         
@@ -116,16 +126,31 @@ class Siloq_Webhook_Handler {
                 'message' => 'Post not found for URL: ' . $data['url']
             ), 404);
         }
+
+        // Detect page builders — can't safely inject raw HTML
+        $post_content = get_post_field('post_content', $post_id);
+        if (preg_match('/\[vc_|elementor|divi|cornerstone|cs_|fl-builder/i', $post_content)) {
+            return new WP_REST_Response(array(
+                'success'       => false,
+                'manual_action' => true,
+                'builder'       => 'page builder',
+                'message'       => 'Page uses a page builder. Paste the suggested content in your page editor manually.',
+            ), 200);
+        }
+
+        // Backup existing content before replacing
+        update_post_meta($post_id, '_siloq_backup_content', $post_content);
+        update_post_meta($post_id, '_siloq_backup_at', current_time('mysql'));
         
         // Update post content
         $update_args = array(
-            'ID' => $post_id,
-            'post_content' => $data['content']
+            'ID'           => $post_id,
+            'post_content' => wp_kses_post($content),
         );
         
         // Update post title if provided
         if (isset($data['title'])) {
-            $update_args['post_title'] = $data['title'];
+            $update_args['post_title'] = sanitize_text_field($data['title']);
         }
         
         $result = wp_update_post($update_args, true);
@@ -148,10 +173,10 @@ class Siloq_Webhook_Handler {
      * Handle meta.update event
      */
     private static function handle_meta_update($data) {
-        if (!isset($data['url']) || !isset($data['meta'])) {
+        if (!isset($data['url'])) {
             return new WP_REST_Response(array(
                 'success' => false,
-                'message' => 'Missing url or meta in data'
+                'message' => 'Missing url in data'
             ), 400);
         }
         
@@ -163,45 +188,115 @@ class Siloq_Webhook_Handler {
                 'message' => 'Post not found for URL: ' . $data['url']
             ), 404);
         }
-        
-        $meta_fields = $data['meta'];
-        $updated_fields = array();
-        
-        // Update meta fields (AIOSEO format)
-        foreach ($meta_fields as $key => $value) {
-            if (is_string($value)) {
-                $value = sanitize_text_field($value);
+
+        // Build a normalised flat fields map.
+        // API sends: { url, title, meta_description, h1 }
+        // Legacy sends: { url, meta: { title, description } }
+        $fields = array();
+
+        if (!empty($data['meta']) && is_array($data['meta'])) {
+            // Legacy nested format — map 'description' → 'meta_description'
+            foreach ($data['meta'] as $k => $v) {
+                $fields[$k === 'description' ? 'meta_description' : $k] = $v;
             }
-            
-            // Handle AIOSEO specific fields using wp_aioseo_posts table
+        }
+        // Flat format — pull recognised keys directly
+        foreach (['title', 'meta_description', 'h1'] as $key) {
+            if (isset($data[$key])) {
+                $fields[$key] = $data[$key];
+            }
+        }
+
+        if (empty($fields)) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'No recognised meta fields provided (title, meta_description, h1)'
+            ), 400);
+        }
+        
+        $updated_fields = array();
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        $aioseo_exists = $wpdb->get_var("SHOW TABLES LIKE '$aioseo_table'") === $aioseo_table;
+
+        foreach ($fields as $key => $value) {
+            $value = sanitize_text_field($value);
+
             if ($key === 'title') {
-                global $wpdb;
-                $table_name = $wpdb->prefix . 'aioseo_posts';
-                $wpdb->query($wpdb->prepare(
-                    "UPDATE $table_name SET title = %s WHERE post_id = %d",
-                    $value, $post_id
-                ));
+                if ($aioseo_exists) {
+                    // AIOSEO — upsert (INSERT … ON DUPLICATE KEY UPDATE)
+                    $wpdb->query($wpdb->prepare(
+                        "INSERT INTO $aioseo_table (post_id, title) VALUES (%d, %s)
+                         ON DUPLICATE KEY UPDATE title = %s",
+                        $post_id, $value, $value
+                    ));
+                }
+                // Also update the WP post title as fallback
+                wp_update_post(array('ID' => $post_id, 'post_title' => $value));
                 $updated_fields[] = 'title';
-            } elseif ($key === 'description') {
-                global $wpdb;
-                $table_name = $wpdb->prefix . 'aioseo_posts';
-                $wpdb->query($wpdb->prepare(
-                    "UPDATE $table_name SET description = %s WHERE post_id = %d",
-                    $value, $post_id
-                ));
-                $updated_fields[] = 'description';
+
+            } elseif ($key === 'meta_description') {
+                if ($aioseo_exists) {
+                    $wpdb->query($wpdb->prepare(
+                        "INSERT INTO $aioseo_table (post_id, description) VALUES (%d, %s)
+                         ON DUPLICATE KEY UPDATE description = %s",
+                        $post_id, $value, $value
+                    ));
+                } else {
+                    // Fallback: store in standard post meta
+                    update_post_meta($post_id, '_yoast_wpseo_metadesc', $value);
+                }
+                $updated_fields[] = 'meta_description';
+
+            } elseif ($key === 'h1') {
+                // H1 lives in the post title in most WP setups
+                wp_update_post(array('ID' => $post_id, 'post_title' => $value));
+                $updated_fields[] = 'h1';
+
             } else {
-                // Handle other meta fields
-                update_post_meta($post_id, $key, $value);
+                update_post_meta($post_id, sanitize_key($key), $value);
                 $updated_fields[] = $key;
             }
         }
         
         return new WP_REST_Response(array(
+            'success'        => true,
+            'message'        => 'Meta updated successfully',
+            'post_id'        => $post_id,
+            'updated_fields' => $updated_fields,
+        ));
+    }
+
+    /**
+     * Handle schema.updated event
+     * Stores schema JSON-LD in post meta for output in wp_head.
+     */
+    private static function handle_schema_update($data) {
+        if (!isset($data['url']) || !isset($data['schema_markup'])) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Missing url or schema_markup in data'
+            ), 400);
+        }
+
+        $post_id = url_to_postid($data['url']);
+        if (!$post_id) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Post not found for URL: ' . $data['url']
+            ), 404);
+        }
+
+        $schema = is_array($data['schema_markup'])
+            ? json_encode($data['schema_markup'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+            : $data['schema_markup'];
+
+        update_post_meta($post_id, '_siloq_schema_markup', $schema);
+
+        return new WP_REST_Response(array(
             'success' => true,
-            'message' => 'Meta updated successfully',
+            'message' => 'Schema updated successfully',
             'post_id' => $post_id,
-            'updated_fields' => $updated_fields
         ));
     }
     
