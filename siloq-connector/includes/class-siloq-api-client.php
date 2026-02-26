@@ -164,7 +164,38 @@ class Siloq_API_Client {
             $response = wp_remote_get($url, $args);
         }
         
-        return $response;
+        // Handle WP HTTP errors (network failures, DNS, etc.)
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message(),
+                'data'    => null,
+            );
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body        = wp_remote_retrieve_body($response);
+        $parsed      = json_decode($body, true);
+        
+        // 2xx = success
+        if ($status_code >= 200 && $status_code < 300) {
+            return array(
+                'success' => true,
+                'data'    => $parsed,
+                'message' => 'OK',
+            );
+        }
+        
+        // API returned an error status
+        $error_message = isset($parsed['detail'])
+            ? $parsed['detail']
+            : ( isset($parsed['message']) ? $parsed['message'] : "HTTP {$status_code}" );
+        
+        return array(
+            'success' => false,
+            'message' => $error_message,
+            'data'    => $parsed,
+        );
     }
     
     /**
