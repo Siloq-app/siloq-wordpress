@@ -707,6 +707,11 @@ function siloq_init() {
         return;
     }
     
+    // Initialize webhook handler
+    if (class_exists('Siloq_Webhook_Handler')) {
+        Siloq_Webhook_Handler::init();
+    }
+    
     return Siloq_Connector::get_instance();
 }
 
