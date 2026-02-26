@@ -39,6 +39,13 @@ class Siloq_Content_Import {
         $jobs = get_post_meta($page_id, '_siloq_content_jobs', true);
         return is_array($jobs) ? $jobs : array();
     }
+
+    /**
+     * Alias used by the Content Import render page.
+     */
+    public function get_available_jobs($page_id) {
+        return array_values($this->get_page_jobs($page_id));
+    }
     
     /**
      * Import content to a page

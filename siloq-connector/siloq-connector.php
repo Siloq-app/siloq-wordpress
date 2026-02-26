@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.22
+* Version: 1.5.23
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.22');
+define('SILOQ_VERSION', '1.5.23');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -138,8 +138,13 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_sync_all_pages', array($this, 'ajax_sync_all_pages'));
         add_action('wp_ajax_siloq_get_sync_status', array($this, 'ajax_get_sync_status'));
         add_action('wp_ajax_siloq_import_content', array($this, 'ajax_import_content'));
-        add_action('wp_ajax_siloq_generate_content', array($this, 'ajax_generate_content'));
-        add_action('wp_ajax_siloq_check_job_status', array($this, 'ajax_check_job_status'));
+        add_action('wp_ajax_siloq_generate_content',        array($this, 'ajax_generate_content'));
+        add_action('wp_ajax_siloq_check_job_status',        array($this, 'ajax_check_job_status'));
+        // AI generator action aliases (called by siloq-ai-generator.js)
+        add_action('wp_ajax_siloq_ai_generate_content',    array($this, 'ajax_generate_content'));
+        add_action('wp_ajax_siloq_ai_get_content_preview', array($this, 'ajax_check_job_status'));
+        add_action('wp_ajax_siloq_ai_insert_content',      array($this, 'ajax_ai_insert_content'));
+        add_action('wp_ajax_siloq_ai_regenerate_section',  array($this, 'ajax_generate_content'));
         add_action('wp_ajax_siloq_restore_backup', array($this, 'ajax_restore_backup'));
         add_action('wp_ajax_siloq_sync_outdated', array($this, 'ajax_sync_outdated'));
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
@@ -233,12 +238,15 @@ class Siloq_Connector {
             true
         );
         
-        wp_localize_script('siloq-ai-generator', 'siloqAI', array(
-            'postId' => $post->ID,
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('siloq_ai_nonce'),
-            'preferences' => Siloq_AI_Content_Generator::get_default_preferences()
-        ));
+        $ai_localize = array(
+            'postId'      => $post->ID,
+            'ajaxUrl'     => admin_url('admin-ajax.php'),
+            'nonce'       => wp_create_nonce('siloq_ajax_nonce'), // matches check_ajax_referer in handlers
+            'preferences' => Siloq_AI_Content_Generator::get_default_preferences(),
+        );
+        wp_localize_script('siloq-ai-generator', 'siloqAI', $ai_localize);
+        // JS uses wpData.ajaxUrl / wpData.nonce — provide as alias
+        wp_localize_script('siloq-ai-generator', 'wpData', $ai_localize);
     }
     
     /**
@@ -496,6 +504,81 @@ class Siloq_Connector {
         }
     }
     
+    /**
+     * AJAX: AI Insert Content
+     * Called by siloq-ai-generator.js insertContent()
+     * insert_mode: 'draft' = new draft post, 'replace' = update existing post
+     */
+    public function ajax_ai_insert_content() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $post_id     = isset($_POST['post_id'])     ? intval($_POST['post_id'])                : 0;
+        $content     = isset($_POST['content'])     ? wp_kses_post($_POST['content'])          : '';
+        $insert_mode = isset($_POST['insert_mode']) ? sanitize_text_field($_POST['insert_mode']) : 'draft';
+
+        if (empty($content)) {
+            wp_send_json_error(array('message' => 'No content provided'));
+            return;
+        }
+
+        if ($insert_mode === 'replace' && $post_id > 0) {
+            // Backup existing content before replacing
+            $existing = get_post_field('post_content', $post_id);
+            update_post_meta($post_id, '_siloq_backup_content', $existing);
+            update_post_meta($post_id, '_siloq_backup_at', current_time('mysql'));
+
+            $result = wp_update_post(array(
+                'ID'           => $post_id,
+                'post_content' => $content,
+            ), true);
+
+            if (is_wp_error($result)) {
+                wp_send_json_error(array('message' => $result->get_error_message()));
+                return;
+            }
+
+            update_post_meta($post_id, '_siloq_content_imported', true);
+            update_post_meta($post_id, '_siloq_content_imported_at', current_time('mysql'));
+
+            wp_send_json_success(array(
+                'message'  => 'Content applied to page',
+                'edit_url' => get_edit_post_link($post_id, 'raw'),
+            ));
+
+        } else {
+            // Create new draft
+            $post        = $post_id > 0 ? get_post($post_id) : null;
+            $draft_title = $post ? 'AI Draft: ' . $post->post_title : 'AI Generated Draft';
+
+            $new_id = wp_insert_post(array(
+                'post_title'   => $draft_title,
+                'post_content' => $content,
+                'post_status'  => 'draft',
+                'post_type'    => $post ? $post->post_type : 'page',
+                'post_parent'  => $post ? $post->post_parent : 0,
+            ), true);
+
+            if (is_wp_error($new_id)) {
+                wp_send_json_error(array('message' => $new_id->get_error_message()));
+                return;
+            }
+
+            update_post_meta($new_id, '_siloq_content_imported', true);
+            update_post_meta($new_id, '_siloq_content_imported_at', current_time('mysql'));
+
+            wp_send_json_success(array(
+                'message'     => 'Draft created successfully',
+                'new_post_id' => $new_id,
+                'edit_url'    => get_edit_post_link($new_id, 'raw'),
+            ));
+        }
+    }
+
     /**
      * AJAX: Restore backup
      */
