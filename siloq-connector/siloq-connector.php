@@ -274,6 +274,16 @@ class Siloq_Connector {
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('siloq_ajax_nonce')
             ));
+            
+            wp_localize_script('siloq-sync', 'siloqAjax', array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('siloq_ajax_nonce'),
+                'strings' => array(
+                    'testing' => 'Testing...',
+                    'success' => 'Success:',
+                    'error'   => 'Error:'
+                )
+            ));
         }
     }
     
