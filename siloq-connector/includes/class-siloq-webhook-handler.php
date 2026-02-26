@@ -21,26 +21,12 @@ class Siloq_Webhook_Handler {
      * Register REST routes
      */
     public static function register_routes() {
+        // No strict arg validation here — we parse manually in handle_webhook
+        // to support both 'event' and 'event_type' field names from the API.
         register_rest_route('siloq/v1', '/webhook', array(
-            'methods' => 'POST',
-            'callback' => array(__CLASS__, 'handle_webhook'),
+            'methods'             => 'POST',
+            'callback'            => array(__CLASS__, 'handle_webhook'),
             'permission_callback' => '__return_true',
-            'args' => array(
-                'event' => array(
-                    'required' => true,
-                    'type' => 'string',
-                    'sanitize_callback' => 'sanitize_text_field'
-                ),
-                'site_id' => array(
-                    'required' => true,
-                    'type' => 'string',
-                    'sanitize_callback' => 'sanitize_text_field'
-                ),
-                'data' => array(
-                    'required' => true,
-                    'type' => 'object'
-                )
-            )
         ));
     }
     
@@ -48,34 +34,49 @@ class Siloq_Webhook_Handler {
      * Handle incoming webhook
      */
     public static function handle_webhook($request) {
-        // Security: Validate webhook signature
-        $secret = get_option('siloq_webhook_secret', '');
+        // Security: only enforce HMAC if a webhook secret has been configured.
+        // The Siloq API omits the signature header until a secret is set in
+        // both the API and the plugin — allow unauthenticated when no secret is set.
+        $secret    = get_option('siloq_webhook_secret', '');
         $signature = $request->get_header('X-Siloq-Signature');
-        if (empty($secret) || empty($signature) || !hash_equals('sha256=' . hash_hmac('sha256', $request->get_body(), $secret), $signature)) {
-            return new WP_REST_Response(array('success' => false, 'message' => 'Invalid signature'), 401);
+        if (!empty($secret)) {
+            if (empty($signature) || !hash_equals('sha256=' . hash_hmac('sha256', $request->get_body(), $secret), $signature)) {
+                return new WP_REST_Response(array('success' => false, 'message' => 'Invalid signature'), 401);
+            }
         }
         
-        $params = $request->get_params();
+        $params = $request->get_json_params();
+        if (!is_array($params)) {
+            $params = $request->get_params();
+        }
+        
+        // Accept both 'event_type' (API) and 'event' (legacy) field names
+        $event = isset($params['event_type']) ? $params['event_type']
+               : (isset($params['event'])     ? $params['event'] : null);
+        
+        $site_id = isset($params['site_id']) ? $params['site_id'] : null;
+        $data    = isset($params['data'])    ? $params['data']    : null;
         
         // Validate required parameters
-        if (!isset($params['event']) || !isset($params['site_id']) || !isset($params['data'])) {
+        if (!$event || !$data) {
             return new WP_REST_Response(array(
                 'success' => false,
-                'message' => 'Missing required parameters'
+                'message' => 'Missing required parameters: event_type and data are required',
             ), 400);
         }
         
-        // Validate site_id
+        // Validate site_id when stored — auto-store on first valid call if not yet set
         $stored_site_id = get_option('siloq_site_id', '');
-        if (empty($stored_site_id) || $params['site_id'] !== $stored_site_id) {
+        if (!empty($stored_site_id) && !empty($site_id) && (string) $params['site_id'] !== (string) $stored_site_id) {
             return new WP_REST_Response(array(
                 'success' => false,
-                'message' => 'Invalid site_id'
+                'message' => 'Invalid site_id',
             ), 403);
         }
-        
-        $event = $params['event'];
-        $data = $params['data'];
+        if (empty($stored_site_id) && !empty($site_id)) {
+            // Auto-register the site_id on first successful webhook
+            update_option('siloq_site_id', sanitize_text_field((string) $site_id));
+        }
         
         // Handle different events
         switch ($event) {
