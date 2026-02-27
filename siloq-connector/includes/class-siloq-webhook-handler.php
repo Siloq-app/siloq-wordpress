@@ -65,21 +65,11 @@ class Siloq_Webhook_Handler {
             ), 400);
         }
         
-        // site_id validation: only enforce when a webhook secret is also configured.
-        // Without a secret, we rely on the API key (Bearer token) for auth.
-        // Always store/update the site_id from the API so the plugin knows its ID.
+        // Store site_id from API — no validation until HMAC signing is active.
+        // Real auth comes from the webhook secret (HMAC); site_id alone is not
+        // a security mechanism and should never block legitimate calls.
         if (!empty($site_id)) {
-            $stored_site_id = get_option('siloq_site_id', '');
-            $incoming = sanitize_text_field((string) $site_id);
-            // Only block if secret is set AND ids don't match (tight mode)
-            if (!empty($secret) && !empty($stored_site_id) && $incoming !== $stored_site_id) {
-                return new WP_REST_Response(array(
-                    'success' => false,
-                    'message'  => 'Invalid site_id',
-                ), 403);
-            }
-            // Always keep site_id current (auto-register or update)
-            update_option('siloq_site_id', $incoming);
+            update_option('siloq_site_id', sanitize_text_field((string) $site_id));
         }
         
         // Handle different events
