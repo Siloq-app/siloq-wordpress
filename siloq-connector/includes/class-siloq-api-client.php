@@ -127,17 +127,22 @@ class Siloq_API_Client {
         if (!$post) {
             return array('success' => false, 'message' => 'Post not found');
         }
-        
+
+        // Detect and cache which page builder created this page
+        $builder = siloq_detect_builder($post_id);
+        update_post_meta($post_id, '_siloq_page_builder', $builder);
+
         $data = array(
-            'wp_post_id' => $post->ID,
-            'title' => $post->post_title,
-            'content' => $post->post_content,
-            'url' => get_permalink($post->ID),
-            'type' => $post->post_type,
-            'status' => $post->post_status,
-            'author' => get_the_author_meta('display_name', $post->post_author),
-            'modified' => $post->post_modified,
-            'site_id' => $this->site_id
+            'wp_post_id'   => $post->ID,
+            'title'        => $post->post_title,
+            'content'      => $post->post_content,
+            'url'          => get_permalink($post->ID),
+            'type'         => $post->post_type,
+            'status'       => $post->post_status,
+            'author'       => get_the_author_meta('display_name', $post->post_author),
+            'modified'     => $post->post_modified,
+            'site_id'      => $this->site_id,
+            'page_builder' => $builder,  // 'elementor'|'cornerstone'|'divi'|'wpbakery'|'beaver_builder'|'gutenberg'|'standard'
         );
         
         return $this->make_request('/pages/sync', 'POST', $data);
