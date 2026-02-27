@@ -120,63 +120,37 @@ class Siloq_Webhook_Handler {
             ), 404);
         }
 
-        $sanitized     = wp_kses_post($content);
-        $post_content  = get_post_field('post_content', $post_id);
+        $post_content = get_post_field('post_content', $post_id);
 
-        // Backup existing content before any change
+        // ── Page builder safety check ─────────────────────────────────────────
+        // Page builders (Elementor, Divi, WPBakery, Beaver Builder, etc.) store
+        // their layouts in post meta or shortcodes. Overwriting post_content
+        // directly will wipe the visible page. Always return manual_action so
+        // the dashboard can guide the user to paste in their builder's editor.
+        $elementor_raw = get_post_meta($post_id, '_elementor_data', true);
+        $has_elementor = !empty($elementor_raw) && $elementor_raw !== '[]';
+        $has_fl        = !empty(get_post_meta($post_id, '_fl_builder_data', true));
+        $has_shortcodes = (bool) preg_match('/\[vc_|\[et_pb_|\[fl_/i', $post_content);
+
+        if ($has_elementor || $has_fl || $has_shortcodes) {
+            $builder = $has_elementor ? 'Elementor' : ($has_fl ? 'Beaver Builder' : 'WPBakery/Divi');
+            return new WP_REST_Response(array(
+                'success'       => false,
+                'manual_action' => true,
+                'builder'       => $builder,
+                'content'       => $content,
+                'message'       => $builder . ' page detected. Open your page editor and paste the suggested content into the appropriate section.',
+            ), 200);
+        }
+
+        // ── Standard WordPress page — safe to replace post_content directly ───
+        // Backup existing content before replacing
         update_post_meta($post_id, '_siloq_backup_content', $post_content);
         update_post_meta($post_id, '_siloq_backup_at', current_time('mysql'));
 
-        // ── Strategy 1: Elementor ─────────────────────────────────────────────
-        // Elementor stores its layout in _elementor_data post meta (JSON).
-        // Injecting into that meta is the only way to make content appear on
-        // Elementor pages — wp_update_post() alone won't show in the front end.
-        $elementor_raw = get_post_meta($post_id, '_elementor_data', true);
-        if (!empty($elementor_raw) && $elementor_raw !== '[]') {
-            if (self::apply_to_elementor($post_id, $sanitized, $elementor_raw)) {
-                return new WP_REST_Response(array(
-                    'success' => true,
-                    'message' => 'Content injected into Elementor page',
-                    'post_id' => $post_id,
-                    'method'  => 'elementor',
-                ));
-            }
-        }
-
-        // ── Strategy 2: Beaver Builder ────────────────────────────────────────
-        $fl_data = get_post_meta($post_id, '_fl_builder_data', true);
-        if (!empty($fl_data)) {
-            // Beaver Builder uses post_content as a fallback renderer;
-            // appending HTML there surfaces it on the page.
-            $result = wp_update_post(array(
-                'ID'           => $post_id,
-                'post_content' => trim($post_content) . "\n\n" . $sanitized,
-            ), true);
-            if (!is_wp_error($result)) {
-                return new WP_REST_Response(array(
-                    'success' => true,
-                    'message' => 'Content appended to Beaver Builder page',
-                    'post_id' => $post_id,
-                    'method'  => 'beaver_builder',
-                ));
-            }
-        }
-
-        // ── Strategy 3: post_content (standard WP, Divi, WPBakery, etc.) ─────
-        // Divi and WPBakery store their shortcodes in post_content; appending
-        // clean HTML after the shortcodes works fine — WordPress renders both.
-        // Standard WP pages are replaced entirely (not appended).
-        $has_builder_shortcodes = (bool) preg_match('/\[vc_|\[et_pb_|\[fl_/i', $post_content);
-        if ($has_builder_shortcodes) {
-            // Append after existing builder content
-            $new_content = trim($post_content) . "\n\n" . $sanitized;
-        } else {
-            // Standard page — replace entirely
-            $new_content = $sanitized;
-        }
-
         $update_args = array(
             'ID'           => $post_id,
+            'post_content' => wp_kses_post($content),
             'post_content' => $new_content,
         );
         if (isset($data['title'])) {
@@ -195,65 +169,8 @@ class Siloq_Webhook_Handler {
             'success' => true,
             'message' => 'Content applied successfully',
             'post_id' => $post_id,
-            'method'  => $has_builder_shortcodes ? 'appended' : 'replaced',
+            'method'  => 'replaced',
         ));
-    }
-
-    /**
-     * Inject Siloq AI content as a new section at the end of an Elementor page.
-     *
-     * @param int    $post_id       WP post ID
-     * @param string $html          Sanitized HTML to inject
-     * @param string $elementor_raw Raw JSON from _elementor_data meta
-     * @return bool  true on success, false if JSON is malformed or save fails
-     */
-    private static function apply_to_elementor($post_id, $html, $elementor_raw) {
-        $layout = json_decode($elementor_raw, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($layout)) {
-            return false;
-        }
-
-        // Build a new Elementor section → column → text-editor widget
-        $new_section = array(
-            'id'       => substr(md5(uniqid('siloq_', true)), 0, 7),
-            'elType'   => 'section',
-            'isInner'  => false,
-            'settings' => array( '_title' => 'Siloq AI Recommendation' ),
-            'elements' => array(
-                array(
-                    'id'       => substr(md5(uniqid('col_', true)), 0, 7),
-                    'elType'   => 'column',
-                    'settings' => array( '_column_size' => 100, '_inline_size' => null ),
-                    'elements' => array(
-                        array(
-                            'id'         => substr(md5(uniqid('wid_', true)), 0, 7),
-                            'elType'     => 'widget',
-                            'widgetType' => 'text-editor',
-                            'settings'   => array( 'editor' => $html ),
-                            'elements'   => array(),
-                        ),
-                    ),
-                ),
-            ),
-        );
-
-        $layout[] = $new_section;
-
-        $encoded = wp_json_encode($layout, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (!$encoded) {
-            return false;
-        }
-
-        update_post_meta($post_id, '_elementor_data', $encoded);
-
-        // Clear Elementor's per-page CSS cache so the new section renders immediately
-        delete_post_meta($post_id, '_elementor_css');
-        update_metadata('post', $post_id, '_elementor_page_settings', array());
-
-        // Trigger WP save hooks (updates modified date, flushes object cache, etc.)
-        wp_update_post(array( 'ID' => $post_id ));
-
-        return true;
     }
     
     /**
