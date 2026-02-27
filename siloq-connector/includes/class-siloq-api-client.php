@@ -216,4 +216,17 @@ class Siloq_API_Client {
     public function get($endpoint) {
         return $this->make_request($endpoint, 'GET');
     }
+
+    /**
+     * Purge pages from Siloq DB that no longer exist in WordPress.
+     * Call this after a full sync completes with the complete list of active WP post IDs.
+     *
+     * @param  array $active_wp_post_ids  All current published/draft post IDs from WP
+     * @return array                      API response with deleted_count
+     */
+    public function purge_deleted_pages($active_wp_post_ids) {
+        return $this->make_request('/pages/purge-deleted/', 'POST', array(
+            'active_wp_post_ids' => array_values(array_map('intval', $active_wp_post_ids)),
+        ));
+    }
 }

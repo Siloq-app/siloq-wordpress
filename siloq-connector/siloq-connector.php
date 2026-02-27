@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.30
+* Version: 1.5.31
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.30');
+define('SILOQ_VERSION', '1.5.31');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -411,15 +411,34 @@ class Siloq_Connector {
      */
     public function ajax_sync_all_pages() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
-        
+
         if (!current_user_can('edit_pages')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        
+
         $sync_engine = new Siloq_Sync_Engine();
         $result = $sync_engine->sync_all_pages();
-        
+
+        // After a successful full sync, purge stale pages from Siloq DB.
+        // Collect ALL current published/draft post IDs so the API knows what's still live.
+        $purge_result = null;
+        if ($result['success'] && !$result['has_more']) {
+            // Only purge when this is the FINAL batch (has_more = false)
+            $all_posts = get_posts(array(
+                'post_type'      => array('page', 'post'),
+                'post_status'    => array('publish', 'draft'),
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            ));
+            if (!empty($all_posts)) {
+                $api_client  = new Siloq_API_Client();
+                $purge_result = $api_client->purge_deleted_pages($all_posts);
+            }
+        }
+
+        $result['purge'] = $purge_result;
+
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
