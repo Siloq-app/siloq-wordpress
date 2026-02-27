@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.29
+* Version: 1.5.31
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.29');
+define('SILOQ_VERSION', '1.5.31');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -26,6 +26,48 @@ if (function_exists('plugin_dir_path')) {
     define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
     define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
     define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
+}
+
+/**
+ * Detect which page builder (if any) created a given post/page.
+ *
+ * Runs on every sync so the result is always fresh.
+ * Returns one of: 'elementor' | 'cornerstone' | 'divi' | 'wpbakery' |
+ *                 'beaver_builder' | 'gutenberg' | 'standard'
+ *
+ * @param int $post_id WordPress post ID.
+ * @return string Builder slug.
+ */
+function siloq_detect_builder( $post_id ) {
+    $post_content = get_post_field( 'post_content', $post_id );
+    $post_meta    = get_post_meta( $post_id );
+
+    // Elementor stores its layout in a dedicated meta key
+    if ( ! empty( $post_meta['_elementor_data'][0] ) && $post_meta['_elementor_data'][0] !== '[]' ) {
+        return 'elementor';
+    }
+    // Beaver Builder
+    if ( ! empty( $post_meta['_fl_builder_data'][0] ) ) {
+        return 'beaver_builder';
+    }
+    // Cornerstone / X Theme (shortcodes)
+    if ( strpos( $post_content, '[cs_' ) !== false || strpos( $post_content, '[x_' ) !== false ) {
+        return 'cornerstone';
+    }
+    // Divi
+    if ( strpos( $post_content, '[et_pb_' ) !== false ) {
+        return 'divi';
+    }
+    // WPBakery / Makdigital
+    if ( strpos( $post_content, '[vc_' ) !== false || strpos( $post_content, '[mkd_' ) !== false ) {
+        return 'wpbakery';
+    }
+    // Gutenberg (block editor)
+    if ( strpos( $post_content, '<!-- wp:' ) !== false ) {
+        return 'gutenberg';
+    }
+    // Plain WordPress
+    return 'standard';
 }
 
 /**
@@ -94,6 +136,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
     }
     
@@ -146,6 +189,8 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_ai_insert_content',      array($this, 'ajax_ai_insert_content'));
         add_action('wp_ajax_siloq_ai_regenerate_section',  array($this, 'ajax_generate_content'));
         add_action('wp_ajax_siloq_restore_backup', array($this, 'ajax_restore_backup'));
+        add_action('wp_ajax_siloq_scan_junk_pages', array('Siloq_Junk_Detector', 'ajax_scan'));
+        add_action('wp_ajax_siloq_apply_junk_action', array('Siloq_Junk_Detector', 'ajax_apply'));
         add_action('wp_ajax_siloq_sync_outdated', array($this, 'ajax_sync_outdated'));
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
@@ -366,15 +411,34 @@ class Siloq_Connector {
      */
     public function ajax_sync_all_pages() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
-        
+
         if (!current_user_can('edit_pages')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        
+
         $sync_engine = new Siloq_Sync_Engine();
         $result = $sync_engine->sync_all_pages();
-        
+
+        // After a successful full sync, purge stale pages from Siloq DB.
+        // Collect ALL current published/draft post IDs so the API knows what's still live.
+        $purge_result = null;
+        if ($result['success'] && !$result['has_more']) {
+            // Only purge when this is the FINAL batch (has_more = false)
+            $all_posts = get_posts(array(
+                'post_type'      => array('page', 'post'),
+                'post_status'    => array('publish', 'draft'),
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            ));
+            if (!empty($all_posts)) {
+                $api_client  = new Siloq_API_Client();
+                $purge_result = $api_client->purge_deleted_pages($all_posts);
+            }
+        }
+
+        $result['purge'] = $purge_result;
+
         if ($result['success']) {
             wp_send_json_success($result);
         } else {

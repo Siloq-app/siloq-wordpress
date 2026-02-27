@@ -127,17 +127,22 @@ class Siloq_API_Client {
         if (!$post) {
             return array('success' => false, 'message' => 'Post not found');
         }
-        
+
+        // Detect and cache which page builder created this page
+        $builder = siloq_detect_builder($post_id);
+        update_post_meta($post_id, '_siloq_page_builder', $builder);
+
         $data = array(
-            'wp_post_id' => $post->ID,
-            'title' => $post->post_title,
-            'content' => $post->post_content,
-            'url' => get_permalink($post->ID),
-            'type' => $post->post_type,
-            'status' => $post->post_status,
-            'author' => get_the_author_meta('display_name', $post->post_author),
-            'modified' => $post->post_modified,
-            'site_id' => $this->site_id
+            'wp_post_id'   => $post->ID,
+            'title'        => $post->post_title,
+            'content'      => $post->post_content,
+            'url'          => get_permalink($post->ID),
+            'type'         => $post->post_type,
+            'status'       => $post->post_status,
+            'author'       => get_the_author_meta('display_name', $post->post_author),
+            'modified'     => $post->post_modified,
+            'site_id'      => $this->site_id,
+            'page_builder' => $builder,  // 'elementor'|'cornerstone'|'divi'|'wpbakery'|'beaver_builder'|'gutenberg'|'standard'
         );
         
         return $this->make_request('/pages/sync', 'POST', $data);
@@ -210,5 +215,18 @@ class Siloq_API_Client {
      */
     public function get($endpoint) {
         return $this->make_request($endpoint, 'GET');
+    }
+
+    /**
+     * Purge pages from Siloq DB that no longer exist in WordPress.
+     * Call this after a full sync completes with the complete list of active WP post IDs.
+     *
+     * @param  array $active_wp_post_ids  All current published/draft post IDs from WP
+     * @return array                      API response with deleted_count
+     */
+    public function purge_deleted_pages($active_wp_post_ids) {
+        return $this->make_request('/pages/purge-deleted/', 'POST', array(
+            'active_wp_post_ids' => array_values(array_map('intval', $active_wp_post_ids)),
+        ));
     }
 }
