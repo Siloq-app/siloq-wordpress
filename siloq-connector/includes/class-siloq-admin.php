@@ -218,7 +218,7 @@ class Siloq_Admin {
                         <p class="description"><?php _e('Sync your WordPress pages to Siloq for SEO analysis and optimization recommendations.', 'siloq-connector'); ?></p>
                         
                         <p>
-                            <button type="button" id="siloq-sync-all-pages" class="button button-primary button-large">
+                            <button type="button" id="siloq-sync-all" class="button button-primary button-large">
                                 <?php _e('Sync All Pages', 'siloq-connector'); ?>
                             </button>
                             <span class="description" style="margin-left: 10px;">

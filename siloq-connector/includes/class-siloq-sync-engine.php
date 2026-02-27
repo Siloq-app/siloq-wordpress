@@ -154,24 +154,39 @@ class Siloq_Sync_Engine {
         $synced_pages = 0;
         $outdated_pages = 0;
         $last_sync = null;
+        $pages = array();
         
         foreach ($posts as $post) {
             $is_synced = get_post_meta($post->ID, '_siloq_synced', true);
             $synced_at = get_post_meta($post->ID, '_siloq_synced_at', true);
             
+            // Determine page status
             if ($is_synced) {
                 $synced_pages++;
                 
                 // Check if page is outdated (modified after last sync)
                 if ($synced_at && strtotime($post->post_modified) > strtotime($synced_at)) {
                     $outdated_pages++;
+                    $status = 'outdated';
+                } else {
+                    $status = 'synced';
                 }
                 
                 // Track last sync time
                 if ($synced_at && (!$last_sync || strtotime($synced_at) > strtotime($last_sync))) {
                     $last_sync = $synced_at;
                 }
+            } else {
+                $status = 'pending';
             }
+            
+            $pages[] = array(
+                'id'       => $post->ID,
+                'title'    => $post->post_title ?: '(Untitled)',
+                'modified' => get_the_modified_date('M j, Y g:i a', $post->ID),
+                'status'   => $status,
+                'url'      => get_permalink($post->ID),
+            );
         }
         
         return array(
@@ -181,7 +196,8 @@ class Siloq_Sync_Engine {
             'outdated_pages' => $outdated_pages,
             'sync_percentage' => $total_pages > 0 ? round(($synced_pages / $total_pages) * 100, 2) : 0,
             'last_sync' => $last_sync,
-            'auto_sync_enabled' => get_option('siloq_auto_sync', 'no') === 'yes'
+            'auto_sync_enabled' => get_option('siloq_auto_sync', 'no') === 'yes',
+            'pages' => $pages,
         );
     }
     
