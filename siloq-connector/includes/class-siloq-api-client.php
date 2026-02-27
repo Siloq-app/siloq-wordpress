@@ -132,17 +132,37 @@ class Siloq_API_Client {
         $builder = siloq_detect_builder($post_id);
         update_post_meta($post_id, '_siloq_page_builder', $builder);
 
+        // Read SEO meta: AIOSEO (custom table) → Yoast → RankMath
+        // AIOSEO 4.x stores meta in wp_aioseo_posts, NOT in standard post_meta.
+        global $wpdb;
+        $aioseo = $wpdb->get_row( $wpdb->prepare(
+            "SELECT title, description FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d",
+            $post->ID
+        ) );
+
+        $seo_title = ( $aioseo && ! empty( $aioseo->title ) )
+            ? $aioseo->title
+            : ( get_post_meta( $post->ID, '_yoast_wpseo_title', true )
+                ?: get_post_meta( $post->ID, '_rank_math_title', true ) );
+
+        $seo_description = ( $aioseo && ! empty( $aioseo->description ) )
+            ? $aioseo->description
+            : ( get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true )
+                ?: get_post_meta( $post->ID, '_rank_math_description', true ) );
+
         $data = array(
-            'wp_post_id'   => $post->ID,
-            'title'        => $post->post_title,
-            'content'      => $post->post_content,
-            'url'          => get_permalink($post->ID),
-            'type'         => $post->post_type,
-            'status'       => $post->post_status,
-            'author'       => get_the_author_meta('display_name', $post->post_author),
-            'modified'     => $post->post_modified,
-            'site_id'      => $this->site_id,
-            'page_builder' => $builder,  // 'elementor'|'cornerstone'|'divi'|'wpbakery'|'beaver_builder'|'gutenberg'|'standard'
+            'wp_post_id'        => $post->ID,
+            'title'             => $post->post_title,
+            'content'           => $post->post_content,
+            'url'               => get_permalink($post->ID),
+            'type'              => $post->post_type,
+            'status'            => $post->post_status,
+            'author'            => get_the_author_meta('display_name', $post->post_author),
+            'modified'          => $post->post_modified,
+            'site_id'           => $this->site_id,
+            'page_builder'      => $builder,  // 'elementor'|'cornerstone'|'divi'|'wpbakery'|'beaver_builder'|'gutenberg'|'standard'
+            'yoast_title'       => $seo_title ?: '',        // Field name matches PageSyncSerializer
+            'yoast_description' => $seo_description ?: '',  // Works for AIOSEO, Yoast, and RankMath
         );
         
         return $this->make_request('/pages/sync', 'POST', $data);
