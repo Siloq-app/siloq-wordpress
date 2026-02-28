@@ -122,25 +122,50 @@ class Siloq_Webhook_Handler {
 
         $post_content = get_post_field('post_content', $post_id);
 
-        // ── Page builder safety check ─────────────────────────────────────────
-        // Page builders (Elementor, Divi, WPBakery, Beaver Builder, etc.) store
-        // their layouts in post meta or shortcodes. Overwriting post_content
-        // directly will wipe the visible page. Always return manual_action so
-        // the dashboard can guide the user to paste in their builder's editor.
-        $elementor_raw = get_post_meta($post_id, '_elementor_data', true);
-        $has_elementor = !empty($elementor_raw) && $elementor_raw !== '[]';
-        $has_fl        = !empty(get_post_meta($post_id, '_fl_builder_data', true));
-        $has_shortcodes = (bool) preg_match('/\[vc_|\[et_pb_|\[fl_/i', $post_content);
+        // ── Builder-aware content apply (Section 06 — Official API approach) ──
+        // Instead of blocking all page builders, use each builder's official API.
+        // Only WPBakery and Oxygen fall back to manual_action (no stable API).
+        $builder = function_exists('siloq_detect_builder') ? siloq_detect_builder($post_id) : 'standard';
+        $field   = isset($data['field']) ? $data['field'] : 'content_body';
 
-        if ($has_elementor || $has_fl || $has_shortcodes) {
-            $builder = $has_elementor ? 'Elementor' : ($has_fl ? 'Beaver Builder' : 'WPBakery/Divi');
-            return new WP_REST_Response(array(
-                'success'       => false,
-                'manual_action' => true,
-                'builder'       => $builder,
-                'content'       => $content,
-                'message'       => $builder . ' page detected. Open your page editor and paste the suggested content into the appropriate section.',
-            ), 200);
+        if ($builder !== 'standard' && class_exists('Siloq_Builder_Apply')) {
+            if (in_array($field, array('h1', 'h2', 'heading'))) {
+                // Heading change — use builder's heading API
+                $old_text = isset($data['before']) ? $data['before'] : '';
+                $result = Siloq_Builder_Apply::apply_heading_change($post_id, $old_text, $content);
+            } else {
+                // Content block insertion — use builder's content API
+                $widget_type = isset($data['widget_type']) ? $data['widget_type'] : 'text';
+                $result = Siloq_Builder_Apply::apply_content_block($post_id, $content, $widget_type);
+            }
+
+            if (isset($result['status'])) {
+                if ($result['status'] === 'applied') {
+                    return new WP_REST_Response(array(
+                        'success' => true,
+                        'message' => 'Content applied via ' . $builder . ' API',
+                        'builder' => $builder,
+                        'method'  => $result['method'] ?? 'builder_api',
+                    ));
+                } elseif ($result['status'] === 'manual_action') {
+                    return new WP_REST_Response(array(
+                        'success'       => false,
+                        'manual_action' => true,
+                        'builder'       => $result['builder'] ?? $builder,
+                        'content'       => $content,
+                        'instructions'  => $result['instructions'] ?? null,
+                        'message'       => $result['message'] ?? $builder . ' requires manual content application.',
+                    ), 200);
+                } elseif ($result['status'] === 'not_found') {
+                    // Heading not found in builder data — fall through to standard WP
+                } else {
+                    return new WP_REST_Response(array(
+                        'success' => false,
+                        'message' => $result['message'] ?? 'Builder apply failed',
+                        'builder' => $builder,
+                    ), 500);
+                }
+            }
         }
 
         // ── Standard WordPress page — safe to replace post_content directly ───

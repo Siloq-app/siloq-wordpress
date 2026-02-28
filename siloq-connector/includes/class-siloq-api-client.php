@@ -163,6 +163,8 @@ class Siloq_API_Client {
             'page_builder'      => $builder,  // 'elementor'|'cornerstone'|'divi'|'wpbakery'|'beaver_builder'|'gutenberg'|'standard'
             'yoast_title'       => $seo_title ?: '',        // Field name matches PageSyncSerializer
             'yoast_description' => $seo_description ?: '',  // Works for AIOSEO, Yoast, and RankMath
+            'junk_action'       => get_post_meta( $post->ID, '_siloq_junk_action', true ) ?: null,
+            'junk_reason'       => get_post_meta( $post->ID, '_siloq_junk_reason', true ) ?: null,
         );
         
         return $this->make_request('/pages/sync', 'POST', $data);

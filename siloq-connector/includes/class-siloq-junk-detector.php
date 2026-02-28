@@ -215,6 +215,10 @@ class Siloq_Junk_Detector {
      * Build a standardised finding array.
      */
     private static function finding( WP_Post $post, string $action, string $reason ): array {
+        // Persist junk flags in post meta so they sync to the Siloq API
+        update_post_meta( $post->ID, '_siloq_junk_action', $action );
+        update_post_meta( $post->ID, '_siloq_junk_reason', $reason );
+
         return array(
             'post_id'   => $post->ID,
             'title'     => $post->post_title ?: '(untitled)',
