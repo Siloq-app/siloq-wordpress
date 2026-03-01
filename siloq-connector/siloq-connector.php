@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.33
+* Version: 1.5.34
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.33');
+define('SILOQ_VERSION', '1.5.34');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -133,6 +133,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-sync-engine.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-ai-content-generator.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-architect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
@@ -173,6 +174,7 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         
         // Schema injection
         add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'));
+        Siloq_Schema_Architect::init();
         
         // Page editor assets
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_page_editor_assets'));
