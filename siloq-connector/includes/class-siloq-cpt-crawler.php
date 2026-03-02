@@ -30,28 +30,47 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string[]
  */
 function get_siloq_crawlable_post_types() {
-    $all_types = get_post_types(
-        array(
-            'public'             => true,
-            'publicly_queryable' => true,
-        ),
-        'names'
+    // Get all registered post types — use 'public' only (NOT requiring publicly_queryable)
+    // Some CPTs (e.g. JetEngine-registered) may have public=>true but publicly_queryable=>false
+    $all_public = get_post_types( array( 'public' => true ), 'names' );
+
+    // Also catch CPTs that have publicly_queryable=>true but public=>false (rare but real)
+    $all_queryable = get_post_types( array( 'publicly_queryable' => true ), 'names' );
+
+    // Merge both lists
+    $all_types = array_unique( array_merge( array_values( $all_public ), array_values( $all_queryable ) ) );
+
+    // Always include standard types
+    $all_types = array_unique( array_merge( $all_types, array( 'post', 'page' ) ) );
+
+    $excluded = array(
+        'attachment',          // binary files
+        'revision',            // WP internals
+        'nav_menu_item',       // menus
+        'custom_css',          // WP internals
+        'customize_changeset', // WP internals
+        'wp_block',            // reusable blocks
+        'wp_template',         // FSE templates
+        'wp_template_part',    // FSE template parts
+        'wp_global_styles',    // FSE
+        'wp_navigation',       // FSE
+        'elementor_library',   // Elementor templates (not real pages)
+        'e-floating-buttons',  // Elementor popups
+        'elementor-hf',        // Elementor Header/Footer
     );
 
-    $excluded = array( 'attachment' );
-
     /**
-     * Filter: exclude specific post types from Siloq's crawl.
+     * Filter: add/remove post types from Siloq's crawl.
      *
      * add_filter( 'siloq_exclude_post_types', function( $ex ) {
-     *     return array_merge( $ex, array( 'product', 'product_variation' ) );
+     *     return array_merge( $ex, array( 'product_variation' ) );
      * });
      *
      * @param string[] $excluded
      */
     $excluded = apply_filters( 'siloq_exclude_post_types', $excluded );
 
-    return array_values( array_diff( array_values( $all_types ), $excluded ) );
+    return array_values( array_diff( $all_types, $excluded ) );
 }
 
 // =============================================================================
