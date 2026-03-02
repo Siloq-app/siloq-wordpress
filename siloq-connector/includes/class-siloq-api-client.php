@@ -155,14 +155,16 @@ class Siloq_API_Client {
             ? Siloq_Content_Extractor::extract( $post->ID )
             : array( 'raw_text' => '', 'faq_items' => array(), 'links' => array(), 'headings' => array() );
         $extracted_text = $extracted['raw_text'] ?: '';
-        $extracted_faqs = array_map( function( $item ) { return $item['question']; }, $extracted['faq_items'] );
+        $extracted_faqs = isset( $extracted['faq_items'] ) ? array_map( function( $item ) { return $item['question'] ?? ''; }, $extracted['faq_items'] ) : array();
         $extracted_links = $extracted['links'];
         $extracted_headings = $extracted['headings'];
 
         $data = array(
             'wp_post_id'        => $post->ID,
             'title'             => $post->post_title,
-            'content'           => $extracted_text ?: $post->post_content,
+            'content'           => ( $extracted_text !== '' )
+                ? $extracted_text
+                : ( ( $extracted['builder'] === 'classic' || $extracted['builder'] === 'gutenberg' ) ? $post->post_content : '' ),
             'url'               => get_permalink($post->ID),
             'type'              => $post->post_type,
             'status'            => $post->post_status,
