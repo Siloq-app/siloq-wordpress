@@ -30,18 +30,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return string[]
  */
 function get_siloq_crawlable_post_types() {
-    // Get all registered post types — use 'public' only (NOT requiring publicly_queryable)
-    // Some CPTs (e.g. JetEngine-registered) may have public=>true but publicly_queryable=>false
-    $all_public = get_post_types( array( 'public' => true ), 'names' );
+    // Get ALL registered post types — no public/queryable filter.
+    // Some CPTs (e.g. JetEngine "our-services") are registered with public=false
+    // but still have accessible front-end URLs. We include everything then exclude
+    // known non-content types below.
+    $all_types = get_post_types( array(), 'names' );
 
-    // Also catch CPTs that have publicly_queryable=>true but public=>false (rare but real)
-    $all_queryable = get_post_types( array( 'publicly_queryable' => true ), 'names' );
-
-    // Merge both lists
-    $all_types = array_unique( array_merge( array_values( $all_public ), array_values( $all_queryable ) ) );
-
-    // Always include standard types
-    $all_types = array_unique( array_merge( $all_types, array( 'post', 'page' ) ) );
+    // Always ensure standard types are present
+    $all_types = array_unique( array_merge( array_values( $all_types ), array( 'post', 'page' ) ) );
 
     $excluded = array(
         'attachment',          // binary files

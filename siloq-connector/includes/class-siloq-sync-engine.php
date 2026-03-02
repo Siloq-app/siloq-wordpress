@@ -42,7 +42,7 @@ class Siloq_Sync_Engine {
             'title' => $post->post_title,
             'content' => $post->post_content,
             'url' => get_permalink($post->ID),
-            'type' => $post->post_type,
+            'post_type' => $post->post_type,
             'status' => $post->post_status,
             'author' => get_the_author_meta('display_name', $post->post_author),
             'modified' => $post->post_modified,
