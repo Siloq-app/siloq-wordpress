@@ -86,7 +86,7 @@ class Siloq_Sync_Engine {
      */
     public function sync_all_pages($offset = 0, $batch_size = 50) {
         $args = array(
-            'post_type' => array('page', 'post'),
+            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status' => array('publish', 'draft'),
             'posts_per_page' => $batch_size,
             'offset' => $offset,
@@ -132,7 +132,7 @@ class Siloq_Sync_Engine {
      */
     public function get_sync_status() {
         $args = array(
-            'post_type' => array('page', 'post'),
+            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status' => array('publish', 'draft'),
             'posts_per_page' => 500,
             'no_found_rows'  => true,
@@ -209,7 +209,7 @@ class Siloq_Sync_Engine {
      */
     public function sync_outdated_pages() {
         $args = array(
-            'post_type' => array('page', 'post'),
+            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status' => array('publish', 'draft'),
             'posts_per_page' => 500,
             'no_found_rows'  => true,

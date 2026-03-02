@@ -130,7 +130,8 @@ class Siloq_Connector {
         
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin.php';
         if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php' ) ) {
-    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php';
+    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-cpt-crawler.php';
+require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php';
 }
 if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php' ) ) {
     require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php';
