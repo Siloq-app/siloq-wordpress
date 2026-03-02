@@ -87,6 +87,7 @@ class Siloq_Webhook_Handler {
                 return self::handle_schema_update($data);
                 
             case 'page.create_draft':
+            case 'content.create_draft':
                 return self::handle_create_draft($data);
                 
             default:
