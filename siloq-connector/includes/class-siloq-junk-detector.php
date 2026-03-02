@@ -103,7 +103,10 @@ class Siloq_Junk_Detector {
         $posts = get_posts( array(
             'post_type'      => array( 'page', 'post' ),
             'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'posts_per_page' => 500,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
             'fields'         => 'all',
         ) );
 
@@ -142,7 +145,10 @@ class Siloq_Junk_Detector {
             $el_posts = get_posts( array(
                 'post_type'      => 'elementor_library',
                 'post_status'    => 'publish',
-                'posts_per_page' => -1,
+                'posts_per_page' => 500,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
             ) );
             foreach ( $el_posts as $post ) {
                 $findings[] = self::finding( $post, 'noindex', 'Elementor library template — should not be indexed' );
@@ -155,7 +161,10 @@ class Siloq_Junk_Detector {
                 $vc_posts = get_posts( array(
                     'post_type'      => $pt,
                     'post_status'    => 'publish',
-                    'posts_per_page' => -1,
+                    'posts_per_page' => 500,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
                 ) );
                 foreach ( $vc_posts as $post ) {
                     $findings[] = self::finding( $post, 'noindex', 'WPBakery builder template — should not be indexed' );
