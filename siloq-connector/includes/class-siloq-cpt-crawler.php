@@ -57,6 +57,26 @@ function get_siloq_crawlable_post_types() {
         'elementor_library',   // Elementor templates (not real pages)
         'e-floating-buttons',  // Elementor popups
         'elementor-hf',        // Elementor Header/Footer
+        // Slider / widget CPTs — visual components, not indexable content
+        'slider',              // generic slider CPT
+        'slides',
+        'slide',
+        'home_slider',         // JetEngine "Home Slider" and similar
+        'home-slider',
+        'smart-slider',
+        'rev_slider',          // Revolution Slider
+        'ml-slider',           // MetaSlider
+        'soliloquy',           // Soliloquy Slider
+        // Form / popup CPTs
+        'wpcf7_contact_form',  // CF7
+        'popup',
+        'popups',
+        'optinmonster',
+        // WooCommerce internals
+        'product_variation',
+        'shop_order',
+        'shop_coupon',
+        'shop_order_refund',
     );
 
     /**
