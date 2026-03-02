@@ -48,13 +48,43 @@ class Siloq_AI_Content_Generator {
         $page_title = $post ? $post->post_title : '';
         $page_content = $post ? $post->post_content : '';
         
-        // Mock AI generation for now
-        $job_id = 'ai_job_' . time() . '_' . rand(1000, 9999);
+        // Initialize API client
+        $api_client = new Siloq_API_Client();
+        
+        // Prepare request data
+        $request_data = array(
+            'site_id' => get_option('siloq_site_id', ''),
+            'wp_post_id' => $post_id,
+            'content_type' => $content_type,
+            'preferences' => $preferences,
+            'page_title' => $page_title,
+            'page_content' => $page_content
+        );
+        
+        // Make real API call to create content job
+        $response = $api_client->post('/content-jobs/', $request_data);
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(array(
+                'message' => 'API request failed: ' . $response->get_error_message()
+            ));
+            return;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($response_code !== 200 || !$response_body || !isset($response_body['job_id'])) {
+            wp_send_json_error(array(
+                'message' => 'API error: ' . ($response_body['message'] ?? 'Unknown error')
+            ));
+            return;
+        }
         
         wp_send_json_success(array(
-            'job_id' => $job_id,
-            'estimated_time' => 30,
-            'status' => 'processing'
+            'job_id' => $response_body['job_id'],
+            'estimated_time' => $response_body['estimated_time'] ?? 30,
+            'status' => $response_body['status'] ?? 'processing'
         ));
     }
     
@@ -76,44 +106,70 @@ class Siloq_AI_Content_Generator {
             return;
         }
         
-        // Mock content generation
-        $mock_content = array(
-            'sections' => array(
-                array(
-                    'id' => 'intro',
-                    'type' => 'introduction',
-                    'title' => 'Introduction',
-                    'content' => 'Welcome to our comprehensive guide. This section provides an overview of the key concepts and principles that will be explored throughout this content.',
-                    'word_count' => 45
-                ),
-                array(
-                    'id' => 'main',
-                    'type' => 'main_content',
-                    'title' => 'Main Content',
-                    'content' => 'In this detailed section, we explore the core aspects and provide valuable insights. Our approach focuses on delivering practical information that readers can immediately apply to their specific situations.',
-                    'word_count' => 52
-                ),
-                array(
-                    'id' => 'conclusion',
-                    'type' => 'conclusion',
-                    'title' => 'Conclusion',
-                    'content' => 'As we conclude, it\'s important to remember that these concepts work together to create a comprehensive understanding. Take the next step by implementing these strategies in your own context.',
-                    'word_count' => 38
-                )
-            ),
-            'total_word_count' => 135,
-            'quality_score' => 92,
-            'suggestions' => array(
-                'Consider adding more specific examples',
-                'Add internal links to related content',
-                'Include a stronger call-to-action'
-            )
-        );
+        // Initialize API client
+        $api_client = new Siloq_API_Client();
+        
+        // Make real API call to get job status
+        $response = $api_client->get('/content-jobs/' . $job_id . '/');
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(array(
+                'message' => 'API request failed: ' . $response->get_error_message()
+            ));
+            return;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($response_code !== 200 || !$response_body) {
+            wp_send_json_error(array(
+                'message' => 'API error: ' . ($response_body['message'] ?? 'Unknown error')
+            ));
+            return;
+        }
+        
+        // Check if content is completed and TALI ready
+        if (isset($response_body['status']) && $response_body['status'] === 'completed' && 
+            isset($response_body['tali_ready']) && $response_body['tali_ready']) {
+            
+            // Get post ID from job data
+            $post_id = isset($response_body['wp_post_id']) ? intval($response_body['wp_post_id']) : 0;
+            
+            if ($post_id) {
+                // Initialize TALI and inject content
+                if (class_exists('Siloq_TALI')) {
+                    $tali = Siloq_TALI::get_instance();
+                    $tali->inject($post_id, $response_body['content']);
+                }
+                
+                // Add schema markup to wp_head
+                if (isset($response_body['schema']) && !empty($response_body['schema'])) {
+                    self::add_schema_to_wp_head($post_id, $response_body['schema']);
+                }
+            }
+        }
         
         wp_send_json_success(array(
-            'status' => 'completed',
-            'content' => $mock_content
+            'status' => $response_body['status'] ?? 'processing',
+            'content' => $response_body['content'] ?? null,
+            'schema' => $response_body['schema'] ?? null,
+            'tali_ready' => $response_body['tali_ready'] ?? false,
+            'estimated_time' => $response_body['estimated_time'] ?? null
         ));
+    }
+    
+    /**
+     * Add schema markup to wp_head
+     */
+    private static function add_schema_to_wp_head($post_id, $schema) {
+        // Store schema for later use in wp_head
+        update_post_meta($post_id, '_siloq_schema_markup', $schema);
+        
+        // Hook into wp_head if not already hooked
+        if (!has_action('wp_head', 'siloq_output_schema_markup')) {
+            add_action('wp_head', 'siloq_output_schema_markup', 1);
+        }
     }
     
     /**

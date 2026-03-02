@@ -68,7 +68,6 @@ class Siloq_Admin {
         <div class="wrap siloq-admin-wrap">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
                     <?php _e('Siloq Settings', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('The SEO Architect — Eliminate keyword cannibalization and optimize your site structure.', 'siloq-connector'); ?></p>
@@ -219,7 +218,7 @@ class Siloq_Admin {
                         <p class="description"><?php _e('Sync your WordPress pages to Siloq for SEO analysis and optimization recommendations.', 'siloq-connector'); ?></p>
                         
                         <p>
-                            <button type="button" id="siloq-sync-all-pages" class="button button-primary button-large">
+                            <button type="button" id="siloq-sync-all" class="button button-primary button-large">
                                 <?php _e('Sync All Pages', 'siloq-connector'); ?>
                             </button>
                             <span class="description" style="margin-left: 10px;">
@@ -727,7 +726,7 @@ class Siloq_Admin {
             var siloqAreas = [];
             
             // Load business profile on page load
-            if ($('.siloq-business-profile-card').length) {
+            if ($('.siloq-business-profile-card').length && typeof siloqAjax !== 'undefined') {
                 loadBusinessProfile();
             }
             
@@ -782,21 +781,6 @@ class Siloq_Admin {
                         'Profile Incomplete' +
                         '</span>');
                 }
-            }
-                            $('#siloq-profile-form').show();
-                        } else {
-                            $('#siloq-profile-error p').text(response.data ? response.data.message : 'Failed to load profile');
-                            $('#siloq-profile-error').show();
-                            $('#siloq-profile-form').show();
-                        }
-                    },
-                    error: function() {
-                        $('#siloq-profile-loading').hide();
-                        $('#siloq-profile-error p').text('Connection error. Please try again.');
-                        $('#siloq-profile-error').show();
-                        $('#siloq-profile-form').show();
-                    }
-                });
             }
             
             function renderServices() {
@@ -884,7 +868,7 @@ class Siloq_Admin {
                 var $btn = $(this);
                 var $status = $('#siloq-profile-status');
                 
-                $btn.prop('disabled', true).text('<?php _e('Saving...', 'siloq-connector'); ?>');
+                $btn.prop('disabled', true).text('Saving...');
                 $status.removeClass('success error').text('');
                 
                 $.ajax({
@@ -898,7 +882,7 @@ class Siloq_Admin {
                         service_areas: siloqAreas
                     },
                     success: function(response) {
-                        $btn.prop('disabled', false).text('<?php _e('Save Business Profile', 'siloq-connector'); ?>');
+                        $btn.prop('disabled', false).text('Save Business Profile');
                         if (response.success) {
                             $status.addClass('success').html('<span class="dashicons dashicons-yes"></span> ' + response.data.message);
                         } else {
@@ -906,7 +890,7 @@ class Siloq_Admin {
                         }
                     },
                     error: function() {
-                        $btn.prop('disabled', false).text('<?php _e('Save Business Profile', 'siloq-connector'); ?>');
+                        $btn.prop('disabled', false).text('Save Business Profile');
                         $status.addClass('error').text('Connection error. Please try again.');
                     }
                 });
@@ -989,7 +973,6 @@ class Siloq_Admin {
         <div class="wrap siloq-admin-wrap">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
                     <?php _e('Siloq Dashboard', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('SEO Content Management Dashboard — Monitor and manage your content optimization.', 'siloq-connector'); ?></p>
@@ -1253,7 +1236,10 @@ class Siloq_Admin {
         // Get all pages with available jobs
         $pages = get_posts(array(
             'post_type' => 'page',
-            'posts_per_page' => -1,
+            'posts_per_page' => 500,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
             'post_status' => array('publish', 'draft'),
             'meta_query' => array(
                 array(

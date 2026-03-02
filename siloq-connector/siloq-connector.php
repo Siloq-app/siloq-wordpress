@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.8
+* Version: 1.5.41
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.8');
+define('SILOQ_VERSION', '1.5.41');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -26,6 +26,48 @@ if (function_exists('plugin_dir_path')) {
     define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
     define('SILOQ_PLUGIN_URL', plugin_dir_url(__FILE__));
     define('SILOQ_PLUGIN_BASENAME', plugin_basename(__FILE__));
+}
+
+/**
+ * Detect which page builder (if any) created a given post/page.
+ *
+ * Runs on every sync so the result is always fresh.
+ * Returns one of: 'elementor' | 'cornerstone' | 'divi' | 'wpbakery' |
+ *                 'beaver_builder' | 'gutenberg' | 'standard'
+ *
+ * @param int $post_id WordPress post ID.
+ * @return string Builder slug.
+ */
+function siloq_detect_builder( $post_id ) {
+    $post_content = get_post_field( 'post_content', $post_id );
+    $post_meta    = get_post_meta( $post_id );
+
+    // Elementor stores its layout in a dedicated meta key
+    if ( ! empty( $post_meta['_elementor_data'][0] ) && $post_meta['_elementor_data'][0] !== '[]' ) {
+        return 'elementor';
+    }
+    // Beaver Builder
+    if ( ! empty( $post_meta['_fl_builder_data'][0] ) ) {
+        return 'beaver_builder';
+    }
+    // Cornerstone / X Theme (shortcodes)
+    if ( strpos( $post_content, '[cs_' ) !== false || strpos( $post_content, '[x_' ) !== false ) {
+        return 'cornerstone';
+    }
+    // Divi
+    if ( strpos( $post_content, '[et_pb_' ) !== false ) {
+        return 'divi';
+    }
+    // WPBakery / Makdigital
+    if ( strpos( $post_content, '[vc_' ) !== false || strpos( $post_content, '[mkd_' ) !== false ) {
+        return 'wpbakery';
+    }
+    // Gutenberg (block editor)
+    if ( strpos( $post_content, '<!-- wp:' ) !== false ) {
+        return 'gutenberg';
+    }
+    // Plain WordPress
+    return 'standard';
 }
 
 /**
@@ -87,12 +129,24 @@ class Siloq_Connector {
         }
         
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin.php';
-        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
+        if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php' ) ) {
+    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-cpt-crawler.php';
+require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php';
+}
+if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php' ) ) {
+    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php';
+}
+require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-sync-engine.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-ai-content-generator.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-architect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
+require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
+require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
     }
     
@@ -127,6 +181,7 @@ class Siloq_Connector {
         
         // Schema injection
         add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'));
+        Siloq_Schema_Architect::init();
         
         // Page editor assets
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_page_editor_assets'));
@@ -137,9 +192,16 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_sync_all_pages', array($this, 'ajax_sync_all_pages'));
         add_action('wp_ajax_siloq_get_sync_status', array($this, 'ajax_get_sync_status'));
         add_action('wp_ajax_siloq_import_content', array($this, 'ajax_import_content'));
-        add_action('wp_ajax_siloq_generate_content', array($this, 'ajax_generate_content'));
-        add_action('wp_ajax_siloq_check_job_status', array($this, 'ajax_check_job_status'));
+        add_action('wp_ajax_siloq_generate_content',        array($this, 'ajax_generate_content'));
+        add_action('wp_ajax_siloq_check_job_status',        array($this, 'ajax_check_job_status'));
+        // AI generator action aliases (called by siloq-ai-generator.js)
+        add_action('wp_ajax_siloq_ai_generate_content',    array($this, 'ajax_generate_content'));
+        add_action('wp_ajax_siloq_ai_get_content_preview', array($this, 'ajax_check_job_status'));
+        add_action('wp_ajax_siloq_ai_insert_content',      array($this, 'ajax_ai_insert_content'));
+        add_action('wp_ajax_siloq_ai_regenerate_section',  array($this, 'ajax_generate_content'));
         add_action('wp_ajax_siloq_restore_backup', array($this, 'ajax_restore_backup'));
+        add_action('wp_ajax_siloq_scan_junk_pages', array('Siloq_Junk_Detector', 'ajax_scan'));
+        add_action('wp_ajax_siloq_apply_junk_action', array('Siloq_Junk_Detector', 'ajax_apply'));
         add_action('wp_ajax_siloq_sync_outdated', array($this, 'ajax_sync_outdated'));
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
@@ -232,12 +294,15 @@ class Siloq_Connector {
             true
         );
         
-        wp_localize_script('siloq-ai-generator', 'siloqAI', array(
-            'postId' => $post->ID,
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('siloq_ai_nonce'),
-            'preferences' => Siloq_AI_Content_Generator::get_default_preferences()
-        ));
+        $ai_localize = array(
+            'postId'      => $post->ID,
+            'ajaxUrl'     => admin_url('admin-ajax.php'),
+            'nonce'       => wp_create_nonce('siloq_ajax_nonce'), // matches check_ajax_referer in handlers
+            'preferences' => Siloq_AI_Content_Generator::get_default_preferences(),
+        );
+        wp_localize_script('siloq-ai-generator', 'siloqAI', $ai_localize);
+        // JS uses wpData.ajaxUrl / wpData.nonce — provide as alias
+        wp_localize_script('siloq-ai-generator', 'wpData', $ai_localize);
     }
     
     /**
@@ -260,7 +325,7 @@ class Siloq_Connector {
         // Get current screen (might not be available in all contexts)
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         
-        // Enqueue sync script on sync pages
+        // Enqueue sync script on sync + settings pages
         if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
             wp_enqueue_script(
                 'siloq-sync',
@@ -273,6 +338,32 @@ class Siloq_Connector {
             wp_localize_script('siloq-sync', 'siloqAdmin', array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('siloq_ajax_nonce')
+            ));
+            
+            wp_localize_script('siloq-sync', 'siloqAjax', array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('siloq_ajax_nonce'),
+                'strings' => array(
+                    'testing' => 'Testing...',
+                    'success' => 'Success:',
+                    'error'   => 'Error:'
+                )
+            ));
+        }
+        
+        // Enqueue admin JS + localize dashboard nonce on dashboard page
+        if ($screen && $screen->id === 'siloq_page_siloq-dashboard') {
+            wp_enqueue_script(
+                'siloq-admin',
+                SILOQ_PLUGIN_URL . 'assets/js/siloq-admin.js',
+                array('jquery'),
+                SILOQ_VERSION,
+                true
+            );
+            
+            wp_localize_script('siloq-admin', 'siloqAdminData', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('siloq_admin_nonce'),
             ));
         }
     }
@@ -331,15 +422,34 @@ class Siloq_Connector {
      */
     public function ajax_sync_all_pages() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
-        
+
         if (!current_user_can('edit_pages')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        
+
         $sync_engine = new Siloq_Sync_Engine();
         $result = $sync_engine->sync_all_pages();
-        
+
+        // After a successful full sync, purge stale pages from Siloq DB.
+        // Collect ALL current published/draft post IDs so the API knows what's still live.
+        $purge_result = null;
+        if ($result['success'] && !$result['has_more']) {
+            // Only purge when this is the FINAL batch (has_more = false)
+            $all_posts = get_posts(array(
+                'post_type'      => array('page', 'post'),
+                'post_status'    => array('publish', 'draft'),
+                'posts_per_page' => -1,
+                'fields'         => 'ids',
+            ));
+            if (!empty($all_posts)) {
+                $api_client  = new Siloq_API_Client();
+                $purge_result = $api_client->purge_deleted_pages($all_posts);
+            }
+        }
+
+        $result['purge'] = $purge_result;
+
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
@@ -469,6 +579,81 @@ class Siloq_Connector {
         }
     }
     
+    /**
+     * AJAX: AI Insert Content
+     * Called by siloq-ai-generator.js insertContent()
+     * insert_mode: 'draft' = new draft post, 'replace' = update existing post
+     */
+    public function ajax_ai_insert_content() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $post_id     = isset($_POST['post_id'])     ? intval($_POST['post_id'])                : 0;
+        $content     = isset($_POST['content'])     ? wp_kses_post($_POST['content'])          : '';
+        $insert_mode = isset($_POST['insert_mode']) ? sanitize_text_field($_POST['insert_mode']) : 'draft';
+
+        if (empty($content)) {
+            wp_send_json_error(array('message' => 'No content provided'));
+            return;
+        }
+
+        if ($insert_mode === 'replace' && $post_id > 0) {
+            // Backup existing content before replacing
+            $existing = get_post_field('post_content', $post_id);
+            update_post_meta($post_id, '_siloq_backup_content', $existing);
+            update_post_meta($post_id, '_siloq_backup_at', current_time('mysql'));
+
+            $result = wp_update_post(array(
+                'ID'           => $post_id,
+                'post_content' => $content,
+            ), true);
+
+            if (is_wp_error($result)) {
+                wp_send_json_error(array('message' => $result->get_error_message()));
+                return;
+            }
+
+            update_post_meta($post_id, '_siloq_content_imported', true);
+            update_post_meta($post_id, '_siloq_content_imported_at', current_time('mysql'));
+
+            wp_send_json_success(array(
+                'message'  => 'Content applied to page',
+                'edit_url' => get_edit_post_link($post_id, 'raw'),
+            ));
+
+        } else {
+            // Create new draft
+            $post        = $post_id > 0 ? get_post($post_id) : null;
+            $draft_title = $post ? 'AI Draft: ' . $post->post_title : 'AI Generated Draft';
+
+            $new_id = wp_insert_post(array(
+                'post_title'   => $draft_title,
+                'post_content' => $content,
+                'post_status'  => 'draft',
+                'post_type'    => $post ? $post->post_type : 'page',
+                'post_parent'  => $post ? $post->post_parent : 0,
+            ), true);
+
+            if (is_wp_error($new_id)) {
+                wp_send_json_error(array('message' => $new_id->get_error_message()));
+                return;
+            }
+
+            update_post_meta($new_id, '_siloq_content_imported', true);
+            update_post_meta($new_id, '_siloq_content_imported_at', current_time('mysql'));
+
+            wp_send_json_success(array(
+                'message'     => 'Draft created successfully',
+                'new_post_id' => $new_id,
+                'edit_url'    => get_edit_post_link($new_id, 'raw'),
+            ));
+        }
+    }
+
     /**
      * AJAX: Restore backup
      */
@@ -644,13 +829,14 @@ function siloq_get_dashboard_stats() {
     $content_generated = get_option('siloq_content_generated', 0);
     $seo_score = get_option('siloq_seo_score', '--');
     
-    // Count synced pages from post meta
+    // Count synced pages from post meta (sync engine sets _siloq_synced = 1)
     $synced_pages = get_posts(array(
-        'post_type' => 'page',
-        'post_status' => 'publish',
-        'meta_key' => '_siloq_sync_status',
-        'meta_value' => 'synced',
-        'posts_per_page' => -1
+        'post_type'      => array('page', 'post'),
+        'post_status'    => 'publish',
+        'meta_key'       => '_siloq_synced',
+        'meta_value'     => '1',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
     ));
     
     $pages_synced = count($synced_pages);
@@ -672,8 +858,25 @@ function siloq_get_dashboard_stats() {
     ));
 }
 
-if (function_exists('wp_ajax_siloq_get_dashboard_stats')) {
+if (!has_action('wp_ajax_siloq_get_dashboard_stats')) {
     add_action('wp_ajax_siloq_get_dashboard_stats', 'siloq_get_dashboard_stats');
+}
+
+/**
+ * Output schema markup in wp_head
+ */
+function siloq_output_schema_markup() {
+    global $post;
+    
+    if (!$post) {
+        return;
+    }
+    
+    $schema = get_post_meta($post->ID, '_siloq_schema_markup', true);
+    
+    if (!empty($schema)) {
+        echo '<script type="application/ld+json">' . wp_json_encode($schema) . '</script>' . "\n";
+    }
 }
 
 /**
@@ -690,10 +893,68 @@ function siloq_init() {
         return;
     }
     
-    return Siloq_Connector::get_instance();
+    $connector = Siloq_Connector::get_instance(); // loads all dependencies first
+
+    // Initialize webhook handler — must run AFTER get_instance() loads dependencies
+    if (class_exists('Siloq_Webhook_Handler')) {
+        Siloq_Webhook_Handler::init();
+    }
+    
+    return $connector;
 }
 
 // Start the plugin only if WordPress functions are available
 if (function_exists('add_action')) {
     add_action('plugins_loaded', 'siloq_init');
+    add_action('wp_head', 'siloq_output_schema_markup', 1);
 }
+
+/**
+ * Recursively extract plain text from Elementor widget data.
+ * Walks the nested elements/columns/sections tree.
+ */
+function siloq_extract_elementor_text( $elements, $depth = 0 ) {
+    if ( $depth > 8 || ! is_array( $elements ) ) return '';
+    $parts = array();
+    foreach ( $elements as $el ) {
+        // Text content fields
+        foreach ( array('text', 'title', 'description', 'content', 'editor', 'html') as $field ) {
+            if ( ! empty( $el['settings'][$field] ) && is_string( $el['settings'][$field] ) ) {
+                $parts[] = wp_strip_all_tags( $el['settings'][$field] );
+            }
+        }
+        // Recurse into children
+        if ( ! empty( $el['elements'] ) ) {
+            $parts[] = siloq_extract_elementor_text( $el['elements'], $depth + 1 );
+        }
+    }
+    return implode( ' ', array_filter( $parts ) );
+}
+
+/**
+ * Extract FAQ questions from Elementor accordion/toggle/FAQ widgets.
+ * Returns array of question strings.
+ */
+function siloq_extract_elementor_faqs( $elements, $depth = 0 ) {
+    if ( $depth > 8 || ! is_array( $elements ) ) return array();
+    $faqs = array();
+    foreach ( $elements as $el ) {
+        $widget_type = isset( $el['widgetType'] ) ? $el['widgetType'] : '';
+        // Accordion, toggle, and FAQ widgets all use 'tabs' with 'tab_title'
+        if ( in_array( $widget_type, array('accordion', 'toggle', 'faq'), true ) ) {
+            if ( ! empty( $el['settings']['tabs'] ) && is_array( $el['settings']['tabs'] ) ) {
+                foreach ( $el['settings']['tabs'] as $tab ) {
+                    if ( ! empty( $tab['tab_title'] ) ) {
+                        $faqs[] = wp_strip_all_tags( $tab['tab_title'] );
+                    }
+                }
+            }
+        }
+        // Recurse
+        if ( ! empty( $el['elements'] ) ) {
+            $faqs = array_merge( $faqs, siloq_extract_elementor_faqs( $el['elements'], $depth + 1 ) );
+        }
+    }
+    return array_values( array_unique( $faqs ) );
+}
+

@@ -114,29 +114,46 @@ class Siloq_TALI {
     private function detect_page_builder($post_id) {
         // Check for common page builders
         $content = get_post_field('post_content', $post_id);
-        
+
         if (strpos($content, 'wp:block') !== false) {
             return 'gutenberg';
         }
-        
+
+        // Elementor: check both old (_elementor_edit_mode) and new (elementor_edit_mode)
+        // meta keys plus _elementor_data presence for Elementor 2.x/3.x compatibility
         if (class_exists('Elementor\Plugin')) {
-            if (get_post_meta($post_id, '_elementor_edit_mode', true)) {
+            $has_elementor = get_post_meta($post_id, '_elementor_edit_mode', true)    // 2.x
+                          || get_post_meta($post_id, 'elementor_edit_mode', true)      // some versions
+                          || get_post_meta($post_id, '_elementor_data', true)          // has saved data
+                          || get_post_meta($post_id, '_elementor_template_type', true) // templates
+                          || strpos($content, 'elementor') !== false;                  // rendered markup
+            if ($has_elementor) {
                 return 'elementor';
             }
         }
-        
+
+        // Fallback: detect Elementor by post meta even if class not loaded yet
+        if (get_post_meta($post_id, '_elementor_data', true) || get_post_meta($post_id, '_elementor_edit_mode', true)) {
+            return 'elementor';
+        }
+
         if (class_exists('FLBuilderLoader')) {
             if (get_post_meta($post_id, '_fl_builder_enabled', true)) {
                 return 'beaver-builder';
             }
         }
-        
+
         if (defined('DIVI_VERSION')) {
             if (get_post_meta($post_id, '_et_pb_use_builder', true) === 'on') {
                 return 'divi';
             }
         }
-        
+
+        // WPBakery
+        if (strpos($content, '[vc_row') !== false || strpos($content, '[vc_column') !== false) {
+            return 'wpbakery';
+        }
+
         return 'classic';
     }
     
