@@ -1236,7 +1236,10 @@ class Siloq_Admin {
         // Get all pages with available jobs
         $pages = get_posts(array(
             'post_type' => 'page',
-            'posts_per_page' => -1,
+            'posts_per_page' => 500,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
             'post_status' => array('publish', 'draft'),
             'meta_query' => array(
                 array(
