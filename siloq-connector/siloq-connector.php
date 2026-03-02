@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.35
+* Version: 1.5.36
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.35');
+define('SILOQ_VERSION', '1.5.36');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -901,3 +901,53 @@ if (function_exists('add_action')) {
     add_action('plugins_loaded', 'siloq_init');
     add_action('wp_head', 'siloq_output_schema_markup', 1);
 }
+
+/**
+ * Recursively extract plain text from Elementor widget data.
+ * Walks the nested elements/columns/sections tree.
+ */
+function siloq_extract_elementor_text( $elements, $depth = 0 ) {
+    if ( $depth > 8 || ! is_array( $elements ) ) return '';
+    $parts = array();
+    foreach ( $elements as $el ) {
+        // Text content fields
+        foreach ( array('text', 'title', 'description', 'content', 'editor', 'html') as $field ) {
+            if ( ! empty( $el['settings'][$field] ) && is_string( $el['settings'][$field] ) ) {
+                $parts[] = wp_strip_all_tags( $el['settings'][$field] );
+            }
+        }
+        // Recurse into children
+        if ( ! empty( $el['elements'] ) ) {
+            $parts[] = siloq_extract_elementor_text( $el['elements'], $depth + 1 );
+        }
+    }
+    return implode( ' ', array_filter( $parts ) );
+}
+
+/**
+ * Extract FAQ questions from Elementor accordion/toggle/FAQ widgets.
+ * Returns array of question strings.
+ */
+function siloq_extract_elementor_faqs( $elements, $depth = 0 ) {
+    if ( $depth > 8 || ! is_array( $elements ) ) return array();
+    $faqs = array();
+    foreach ( $elements as $el ) {
+        $widget_type = isset( $el['widgetType'] ) ? $el['widgetType'] : '';
+        // Accordion, toggle, and FAQ widgets all use 'tabs' with 'tab_title'
+        if ( in_array( $widget_type, array('accordion', 'toggle', 'faq'), true ) ) {
+            if ( ! empty( $el['settings']['tabs'] ) && is_array( $el['settings']['tabs'] ) ) {
+                foreach ( $el['settings']['tabs'] as $tab ) {
+                    if ( ! empty( $tab['tab_title'] ) ) {
+                        $faqs[] = wp_strip_all_tags( $tab['tab_title'] );
+                    }
+                }
+            }
+        }
+        // Recurse
+        if ( ! empty( $el['elements'] ) ) {
+            $faqs = array_merge( $faqs, siloq_extract_elementor_faqs( $el['elements'], $depth + 1 ) );
+        }
+    }
+    return array_values( array_unique( $faqs ) );
+}
+
