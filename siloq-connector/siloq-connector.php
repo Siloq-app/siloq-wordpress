@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.44
+* Version: 1.5.45
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.44');
+define('SILOQ_VERSION', '1.5.45');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -436,13 +436,31 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         $purge_result = null;
         if ($result['success'] && !$result['has_more']) {
             // Only purge when this is the FINAL batch (has_more = false)
-            $all_posts = get_posts(array(
-                'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-                'post_status'    => array('publish', 'draft'),
-                'posts_per_page' => 500,
-                'fields'         => 'ids',
-                'no_found_rows'  => true,
-            ));
+            // Collect all eligible post IDs in batches to avoid memory spikes on large sites.
+            // Uses apply_filters('siloq_crawlable_post_types') for idiomatic WP extensibility,
+            // with get_siloq_crawlable_post_types() as the default when the function exists.
+            $crawlable_types = apply_filters(
+                'siloq_crawlable_post_types',
+                function_exists( 'get_siloq_crawlable_post_types' ) ? get_siloq_crawlable_post_types() : array( 'page', 'post' )
+            );
+
+            $all_posts  = array();
+            $batch_size = 200;
+            $paged      = 1;
+            do {
+                $batch = get_posts( array(
+                    'post_type'              => $crawlable_types,
+                    'post_status'            => array( 'publish', 'draft' ),
+                    'posts_per_page'         => $batch_size,
+                    'paged'                  => $paged,
+                    'fields'                 => 'ids',
+                    'no_found_rows'          => false, // Must be false for paged queries to work correctly
+                    'update_post_meta_cache' => false,
+                    'update_post_term_cache' => false,
+                ) );
+                $all_posts = array_merge( $all_posts, $batch );
+                $paged++;
+            } while ( count( $batch ) === $batch_size ); // stop when last batch was partial
             if (!empty($all_posts)) {
                 $api_client  = new Siloq_API_Client();
                 $purge_result = $api_client->purge_deleted_pages($all_posts);
