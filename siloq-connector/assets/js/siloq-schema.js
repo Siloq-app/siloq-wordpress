@@ -170,10 +170,16 @@
                 state.lastResponse = response.data;
                 renderPreview( response.data );
             } else {
-                const msg = ( response.data && response.data.message )
-                    ? response.data.message
-                    : 'Generate failed.';
-                showErrors( [ msg ] );
+                const errData = response.data || {};
+                const msg     = errData.message || 'Generate failed.';
+                // Fix 3: if the server returned a fix_url, render an inline link.
+                if ( errData.fix_url ) {
+                    $el( 'errors' )
+                        .html( '⚠️ ' + escHtml( msg ) + ' <a href="' + escHtml( errData.fix_url ) + '" target="_blank">Fix now →</a>' )
+                        .show();
+                } else {
+                    showErrors( [ msg ] );
+                }
             }
         } )
         .fail( function () {

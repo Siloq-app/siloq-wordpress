@@ -409,13 +409,18 @@ class Siloq_Schema_Intelligence {
     /**
      * Retrieve the entity profile for a post, with graceful fallbacks.
      *
-     * Priority: post meta → site option blob → individual site options.
+     * Priority:
+     *   1. Post-specific _siloq_entity_profile meta (most specific)
+     *   2. Site-wide siloq_entity_profile option blob
+     *   3. Individual Siloq/WP options (settings page + core WP options)
+     *   4. GBP sync data (fills gaps for phone/address/reviews)
+     *   5. Absolute fallback — just business name from WP
      *
      * @param int|null $post_id
      * @return array
      */
     public static function get_entity_profile( $post_id = null ) {
-        // 1. Post-level meta (synced per-page from Siloq API).
+        // 1. Post-specific entity profile (most specific).
         if ( $post_id ) {
             $post_meta_raw = get_post_meta( $post_id, '_siloq_entity_profile', true );
             if ( ! empty( $post_meta_raw ) ) {
@@ -428,41 +433,81 @@ class Siloq_Schema_Intelligence {
             }
         }
 
-        // 2. Site-wide option blob (set during onboarding wizard / sync).
-        $site_option_raw = get_option( 'siloq_entity_profile' );
-        $profile         = [];
+        // 2. Site-wide entity profile option blob.
+        $site_option_raw = get_option( 'siloq_entity_profile', '' );
         if ( ! empty( $site_option_raw ) ) {
             $decoded = is_array( $site_option_raw )
                 ? $site_option_raw
                 : json_decode( $site_option_raw, true );
             if ( is_array( $decoded ) && ! empty( $decoded ) ) {
-                $profile = $decoded;
+                return $decoded;
             }
         }
 
-        // 3. Individual site options — fill gaps only.
-        $option_keys = [
-            'business_name' => 'siloq_business_name',
-            'business_type' => 'siloq_business_type',
-            'phone'         => 'siloq_phone',
-            'address'       => 'siloq_address',
-            'city'          => 'siloq_city',
-            'state'         => 'siloq_state',
-            'zip'           => 'siloq_zip',
-            'description'   => 'siloq_description',
-            'logo_url'      => 'siloq_logo_url',
-            'website_url'   => 'siloq_website_url',
+        // 3. Build from individual Siloq options (what the settings page saves),
+        //    with WP core options as fallbacks for name/description/url.
+        $profile = [];
+
+        $field_map = [
+            'business_name'  => [ 'siloq_business_name', 'blogname' ],
+            'business_type'  => [ 'siloq_business_type', 'siloq_business_category' ],
+            'phone'          => [ 'siloq_phone', 'siloq_business_phone' ],
+            'address'        => [ 'siloq_address', 'siloq_street_address' ],
+            'city'           => [ 'siloq_city' ],
+            'state'          => [ 'siloq_state' ],
+            'zip'            => [ 'siloq_zip', 'siloq_postal_code' ],
+            'description'    => [ 'siloq_description', 'blogdescription' ],
+            'logo_url'       => [ 'siloq_logo_url' ],
+            'service_cities' => [ 'siloq_service_cities', 'siloq_service_areas' ],
+            'website_url'    => [ 'siteurl' ],
+            'review_count'   => [ 'siloq_review_count' ],
+            'average_rating' => [ 'siloq_average_rating' ],
+            'hours'          => [ 'siloq_business_hours' ],
+            'gbp_url'        => [ 'siloq_gbp_url' ],
         ];
-        foreach ( $option_keys as $field => $option_name ) {
-            if ( empty( $profile[ $field ] ) ) {
-                $val = get_option( $option_name );
+
+        foreach ( $field_map as $key => $option_names ) {
+            foreach ( $option_names as $option_name ) {
+                $val = get_option( $option_name, '' );
                 if ( ! empty( $val ) ) {
-                    $profile[ $field ] = $val;
+                    $profile[ $key ] = $val;
+                    break;
                 }
             }
         }
 
-        return $profile;
+        // 4. Fill remaining gaps from GBP sync data.
+        $gbp_data = get_option( 'siloq_gbp_data', '' );
+        if ( $gbp_data ) {
+            $gbp = is_array( $gbp_data ) ? $gbp_data : json_decode( $gbp_data, true );
+            if ( is_array( $gbp ) && ! empty( $gbp ) ) {
+                if ( empty( $profile['phone'] ) && ! empty( $gbp['phone'] ) ) {
+                    $profile['phone'] = $gbp['phone'];
+                }
+                if ( empty( $profile['address'] ) && ! empty( $gbp['address'] ) ) {
+                    $profile['address'] = $gbp['address'];
+                }
+                if ( empty( $profile['city'] ) && ! empty( $gbp['city'] ) ) {
+                    $profile['city'] = $gbp['city'];
+                }
+                if ( empty( $profile['review_count'] ) && ! empty( $gbp['review_count'] ) ) {
+                    $profile['review_count'] = $gbp['review_count'];
+                }
+                if ( empty( $profile['average_rating'] ) && ! empty( $gbp['rating'] ) ) {
+                    $profile['average_rating'] = $gbp['rating'];
+                }
+            }
+        }
+
+        if ( ! empty( $profile['business_name'] ) ) {
+            return $profile;
+        }
+
+        // 5. Absolute fallback — just business name from WP.
+        return [
+            'business_name' => get_bloginfo( 'name' ),
+            'website_url'   => get_site_url(),
+        ];
     }
 
     // ── Private: Schema Builders ─────────────────────────────────────────────
@@ -834,6 +879,24 @@ class Siloq_Schema_Intelligence {
         }
 
         $entity_profile = self::get_entity_profile( $post_id );
+
+        // Fix 3: Check minimum required fields before generating and surface a
+        // helpful, actionable error that links directly to the settings page.
+        $missing = [];
+        if ( empty( $entity_profile['phone'] ) && empty( $entity_profile['address'] ) ) {
+            $missing[] = 'phone number OR address';
+        }
+        if ( empty( $entity_profile['business_name'] ) ) {
+            $missing[] = 'business name';
+        }
+        if ( ! empty( $missing ) ) {
+            wp_send_json_error( [
+                'message'        => 'Missing required info: ' . implode( ', ', $missing ) . '. Go to Siloq Settings → Business Profile to add these.',
+                'missing_fields' => $missing,
+                'fix_url'        => admin_url( 'admin.php?page=siloq-settings&tab=business-profile' ),
+            ] );
+            return;
+        }
 
         // Load page analysis data (contains has_visible_rating, faq_items, etc.).
         $page_analysis = [];
