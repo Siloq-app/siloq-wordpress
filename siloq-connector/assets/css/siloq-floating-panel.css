@@ -455,3 +455,132 @@
 @keyframes siloq-spin {
     to { transform: rotate(360deg); }
 }
+
+/* =========================================================================
+   Edit Content tab — Widget card styles (v1.5.51)
+   ========================================================================= */
+
+/* Container for the full edit-content tab */
+#siloq-ep-content-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Individual widget card */
+.siloq-widget-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #fafafa;
+    transition: border-color 0.15s ease;
+}
+
+.siloq-widget-item:last-child {
+    margin-bottom: 12px;
+}
+
+.siloq-widget-item:hover {
+    border-color: #c7d2fe;
+}
+
+/* Widget header row: badge + label */
+.siloq-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+/* Type badge (e.g. "heading", "button") */
+.siloq-widget-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+}
+
+/* Widget label (truncated title) */
+.siloq-widget-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Italic preview of current content */
+.siloq-widget-preview {
+    font-size: 12px;
+    color: #6b7280;
+    margin: 0 0 8px 0;
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Row of per-widget action buttons */
+.siloq-widget-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* ── Suggestion panel (inline, per widget) ──────────────────────────────── */
+
+.siloq-suggestion-panel {
+    margin-top: 10px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 10px;
+}
+
+/* Section labels: CURRENT / SUGGESTED */
+.siloq-fp-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin: 0 0 4px 0;
+}
+
+/* Shared text block styles */
+.siloq-suggestion-text {
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0 0 8px 0;
+    border-radius: 6px;
+    padding: 6px 8px;
+    word-break: break-word;
+}
+
+/* "Before" — dimmed with strikethrough */
+.siloq-suggestion-old {
+    color: #9ca3af;
+    text-decoration: line-through;
+    background: #f9fafb;
+}
+
+/* "After" — highlighted green */
+.siloq-suggestion-new {
+    color: #065f46;
+    background: #d1fae5;
+}
+
+/* Apply / Skip row */
+.siloq-suggestion-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Error hint style */
+.siloq-hint-error {
+    color: #ef4444 !important;
+}
