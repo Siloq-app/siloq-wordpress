@@ -3,7 +3,8 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
-* Version: 1.5.46
+
+* Version: 1.5.47
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +19,8 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.46');
+
+define('SILOQ_VERSION', '1.5.47');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -147,6 +149,7 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
 require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
 require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
     }
     
@@ -156,6 +159,9 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
     private function init_components() {
         // Initialize admin
         Siloq_Admin::get_instance();
+
+        // Initialize Admin Meta Box
+        Siloq_Admin_Metabox::init();
         
         // Initialize AI Content Generator
         Siloq_AI_Content_Generator::init();
