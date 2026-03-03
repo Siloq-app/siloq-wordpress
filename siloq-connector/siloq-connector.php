@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.49
+* Version: 1.5.50
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.49');
+define('SILOQ_VERSION', '1.5.50');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -31,11 +31,11 @@ if (function_exists('plugin_dir_path')) {
 }
 
 /**
- * Detect which page builder (if any) created a given post/page.
+ * Legacy content-based builder detection (used by sync engine for historical data).
  *
- * Runs on every sync so the result is always fresh.
- * Returns one of: 'elementor' | 'cornerstone' | 'divi' | 'wpbakery' |
- *                 'beaver_builder' | 'gutenberg' | 'standard'
+ * NOTE: For admin panel/editor builder detection, use Siloq_Builder_Detector::detect().
+ * This function is kept for backwards compatibility with the sync engine which needs
+ * to detect a builder from saved post content (not the current editing context).
  *
  * @param int $post_id WordPress post ID.
  * @return string Builder slug.
@@ -129,16 +129,23 @@ class Siloq_Connector {
         if (!defined('SILOQ_PLUGIN_DIR')) {
             define('SILOQ_PLUGIN_DIR', plugin_dir_path(__FILE__));
         }
-        
+
+        // ------------------------------------------------------------------
+        // Load builder detector first — single source of truth for all
+        // builder detection logic throughout the plugin.
+        // ------------------------------------------------------------------
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-detector.php';
+
+        // Core dependencies (always loaded)
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin.php';
         if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php' ) ) {
-    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-cpt-crawler.php';
-require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php';
-}
-if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php' ) ) {
-    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php';
-}
-require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-cpt-crawler.php';
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-extractor.php';
+        }
+        if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php' ) ) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-analyzer.php';
+        }
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-sync-engine.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-ai-content-generator.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
@@ -147,18 +154,67 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
-require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
-require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
-        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-intelligence.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
-        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-elementor-panel.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-faq-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
-        // Elementor editor floating panel — only when Elementor is active
-        if ( class_exists( 'Elementor\Plugin' ) ) {
-            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-elementor-panel.php';
-            Siloq_Elementor_Panel::init();
+        // ------------------------------------------------------------------
+        // Builder-specific panel integration — admin context only.
+        // Siloq_Builder_Detector::detect() caches the result so subsequent
+        // calls within the same request are free.
+        // ------------------------------------------------------------------
+        if ( is_admin() ) {
+            $builder = Siloq_Builder_Detector::detect();
+
+            // Always load metabox (Classic Editor + WPBakery backend + fallback)
+            // Already required above; just ensure it's initialised.
+
+            switch ( $builder ) {
+                case Siloq_Builder_Detector::BUILDER_ELEMENTOR:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-elementor-panel.php';
+                    Siloq_Elementor_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_GUTENBERG:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-gutenberg-panel.php';
+                    Siloq_Gutenberg_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_DIVI:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-divi-panel.php';
+                    Siloq_Divi_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_BEAVER:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-beaver-panel.php';
+                    Siloq_Beaver_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_WPBAKERY:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-wpbakery-panel.php';
+                    Siloq_WPBakery_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_BRICKS:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-bricks-panel.php';
+                    Siloq_Bricks_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_OXYGEN:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-oxygen-panel.php';
+                    Siloq_Oxygen_Panel::init();
+                    break;
+
+                case Siloq_Builder_Detector::BUILDER_CORNERSTONE:
+                    require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-cornerstone-panel.php';
+                    Siloq_Cornerstone_Panel::init();
+                    break;
+
+                // BUILDER_CLASSIC: metabox already handles it — nothing extra needed.
+            }
         }
     }
     
@@ -169,29 +225,29 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         // Initialize admin
         Siloq_Admin::get_instance();
 
-        // Initialize Admin Meta Box
+        // Initialize Admin Meta Box (Classic Editor / fallback metabox)
         Siloq_Admin_Metabox::init();
-        
+
         // Initialize AI Content Generator
         Siloq_AI_Content_Generator::init();
-        
+
+        // Initialize FAQ Manager (AJAX: siloq_apply_faq_item)
+        Siloq_FAQ_Manager::init();
+
         // Initialize TALI
         if (!defined('SILOQ_TALI_DISABLED') || !SILOQ_TALI_DISABLED) {
             Siloq_TALI::get_instance();
         }
-        
+
         // Initialize redirect manager
         Siloq_Redirect_Manager::get_instance();
 
         // Initialize Schema Intelligence (AJAX handlers + wp_head output).
         Siloq_Schema_Intelligence::init();
 
-        // Initialize Admin Metabox (Schema section on post/page editor).
-        Siloq_Admin_Metabox::init();
-
-        // Initialize Elementor Panel (Schema tab in Elementor editor).
-        // Hooks are registered but no-ops if Elementor is not active.
-        Siloq_Elementor_Panel::init();
+        // NOTE: Builder-specific panel classes (Elementor, Gutenberg, Divi, etc.)
+        // are initialised in load_dependencies() via Siloq_Builder_Detector::detect()
+        // so they are registered before init_components() runs. No duplicate calls here.
     }
     
     /**
