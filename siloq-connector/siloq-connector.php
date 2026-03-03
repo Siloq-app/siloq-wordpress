@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.48
+* Version: 1.5.49
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.48');
+define('SILOQ_VERSION', '1.5.49');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -150,6 +150,9 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-api-client.php';
 require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
 require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-intelligence.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-elementor-panel.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Elementor editor floating panel — only when Elementor is active
@@ -179,6 +182,16 @@ require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
         
         // Initialize redirect manager
         Siloq_Redirect_Manager::get_instance();
+
+        // Initialize Schema Intelligence (AJAX handlers + wp_head output).
+        Siloq_Schema_Intelligence::init();
+
+        // Initialize Admin Metabox (Schema section on post/page editor).
+        Siloq_Admin_Metabox::init();
+
+        // Initialize Elementor Panel (Schema tab in Elementor editor).
+        // Hooks are registered but no-ops if Elementor is not active.
+        Siloq_Elementor_Panel::init();
     }
     
     /**

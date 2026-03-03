@@ -1,0 +1,353 @@
+/**
+ * Siloq Schema Intelligence — UI Styles
+ * Shared by Admin Metabox + Elementor Panel surfaces.
+ *
+ * @since 1.5.49
+ */
+
+/* ── CSS Variables (re-use plugin design system if available) ─────────────── */
+:root {
+    --siloq-schema-primary   : #2271b1;
+    --siloq-schema-success   : #00a32a;
+    --siloq-schema-warning   : #dba617;
+    --siloq-schema-error     : #d63638;
+    --siloq-schema-gray-100  : #f0f0f1;
+    --siloq-schema-gray-200  : #dcdcde;
+    --siloq-schema-gray-600  : #50575e;
+    --siloq-schema-gray-800  : #2c3338;
+    --siloq-schema-radius    : 6px;
+    --siloq-schema-radius-sm : 3px;
+    --siloq-schema-transition: all 0.18s ease;
+}
+
+/* ── Metabox surface ─────────────────────────────────────────────────────── */
+#siloq-schema-metabox {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ── Status area ──────────────────────────────────────────────────────────── */
+.siloq-schema-status {
+    margin-bottom: 10px;
+}
+
+.siloq-schema-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--siloq-schema-radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.6;
+}
+
+.siloq-schema-badge--applied {
+    background: #d4edda;
+    color: var(--siloq-schema-success);
+    border: 1px solid #b8dfc5;
+}
+
+.siloq-schema-badge--none {
+    background: var(--siloq-schema-gray-100);
+    color: var(--siloq-schema-gray-600);
+    border: 1px solid var(--siloq-schema-gray-200);
+}
+
+.siloq-schema-applied-types {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--siloq-schema-gray-600);
+    word-break: break-word;
+}
+
+.siloq-schema-applied-time {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--siloq-schema-gray-600);
+    font-style: italic;
+}
+
+/* ── Actions ──────────────────────────────────────────────────────────────── */
+.siloq-schema-actions {
+    margin-bottom: 8px;
+}
+
+.siloq-schema-btn {
+    width: 100%;
+    text-align: center;
+    cursor: pointer;
+    transition: var(--siloq-schema-transition);
+}
+
+.siloq-schema-btn--generate {
+    background: var(--siloq-schema-gray-100);
+    border-color: var(--siloq-schema-gray-200);
+}
+
+.siloq-schema-btn--generate:hover:not(:disabled) {
+    background: #e8f1f8;
+    border-color: var(--siloq-schema-primary);
+    color: var(--siloq-schema-primary);
+}
+
+.siloq-schema-btn--apply {
+    margin-top: 10px;
+    width: 100%;
+}
+
+.siloq-schema-btn--success {
+    background: #d4edda !important;
+    border-color: var(--siloq-schema-success) !important;
+    color: var(--siloq-schema-success) !important;
+}
+
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
+.siloq-schema-spinner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    color: var(--siloq-schema-gray-600);
+    font-size: 12px;
+}
+
+.siloq-schema-spinner .spinner {
+    float: none;
+    margin: 0;
+}
+
+/* ── Errors ───────────────────────────────────────────────────────────────── */
+.siloq-schema-errors {
+    background: #fcf0f1;
+    border: 1px solid var(--siloq-schema-error);
+    border-radius: var(--siloq-schema-radius-sm);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    color: var(--siloq-schema-error);
+    font-size: 12px;
+}
+
+.siloq-schema-error-list {
+    margin: 4px 0 0 16px;
+    padding: 0;
+    list-style: disc;
+}
+
+.siloq-schema-error-list li {
+    margin-bottom: 2px;
+}
+
+/* ── Preview panel ────────────────────────────────────────────────────────── */
+.siloq-schema-preview {
+    border: 1px solid var(--siloq-schema-gray-200);
+    border-radius: var(--siloq-schema-radius);
+    padding: 10px;
+    background: #fafafa;
+    margin-top: 8px;
+}
+
+/* Metadata rows */
+.siloq-schema-meta-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.siloq-schema-meta-label {
+    font-weight: 600;
+    color: var(--siloq-schema-gray-600);
+    white-space: nowrap;
+    min-width: 90px;
+}
+
+.siloq-schema-meta-value {
+    color: var(--siloq-schema-gray-800);
+    text-transform: capitalize;
+}
+
+/* Schema type chips */
+.siloq-schema-types-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--siloq-schema-gray-600);
+    margin: 8px 0 4px;
+}
+
+.siloq-schema-types-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.siloq-schema-type-chip {
+    display: inline-block;
+    background: #e8f1f8;
+    color: var(--siloq-schema-primary);
+    border: 1px solid #b8d4ef;
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* JSON-LD collapsible */
+.siloq-schema-json-details {
+    margin: 6px 0;
+}
+
+.siloq-schema-json-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--siloq-schema-primary);
+    user-select: none;
+    padding: 2px 0;
+}
+
+.siloq-schema-json-details summary:hover {
+    text-decoration: underline;
+}
+
+.siloq-schema-json-preview {
+    font-size: 10px;
+    line-height: 1.5;
+    background: var(--siloq-schema-gray-100);
+    border: 1px solid var(--siloq-schema-gray-200);
+    border-radius: var(--siloq-schema-radius-sm);
+    padding: 8px;
+    overflow: auto;
+    max-height: 240px;
+    white-space: pre;
+    margin: 4px 0 0;
+    color: var(--siloq-schema-gray-800);
+}
+
+/* Validation warnings */
+.siloq-schema-validation-warnings {
+    background: #fff8e5;
+    border: 1px solid #f0c040;
+    border-radius: var(--siloq-schema-radius-sm);
+    padding: 8px 10px;
+    font-size: 11px;
+    color: #5a4500;
+    margin-bottom: 8px;
+}
+
+.siloq-schema-validation-warnings ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+    list-style: disc;
+}
+
+/* ── Elementor Panel ──────────────────────────────────────────────────────── */
+
+/* Floating trigger button (fixed position inside Elementor editor) */
+.siloq-schema-el-trigger {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    z-index: 9999;
+    background: #2271b1;
+    color: #fff;
+    border-radius: 6px 0 0 6px;
+    padding: 10px 8px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+    transition: background 0.18s ease;
+    user-select: none;
+    writing-mode: horizontal-tb;
+}
+
+.siloq-schema-el-trigger:hover {
+    background: #135e96;
+}
+
+.siloq-schema-el-trigger-label {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+}
+
+/* Slide-out panel */
+.siloq-schema-el-panel {
+    position: fixed;
+    top: 0;
+    right: -340px;
+    width: 320px;
+    height: 100%;
+    background: #fff;
+    border-left: 1px solid var(--siloq-schema-gray-200);
+    box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+    z-index: 9998;
+    overflow-y: auto;
+    padding: 0;
+    transition: right 0.25s ease;
+    font-size: 13px;
+}
+
+.siloq-schema-el-panel.is-open {
+    right: 0;
+}
+
+.siloq-schema-el-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--siloq-schema-gray-200);
+    background: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.siloq-schema-el-panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--siloq-schema-gray-800);
+}
+
+.siloq-schema-el-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--siloq-schema-gray-600);
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.siloq-schema-el-close:hover {
+    color: var(--siloq-schema-error);
+}
+
+/* Inner panel content — add padding to all direct children except the header */
+.siloq-schema-el-panel > *:not(.siloq-schema-el-panel-header) {
+    padding-left: 14px;
+    padding-right: 14px;
+}
+
+.siloq-schema-el-panel .siloq-schema-status {
+    padding-top: 12px;
+}
+
+.siloq-schema-el-panel .siloq-schema-btn {
+    margin-top: 4px;
+}
+
+.siloq-schema-el-panel .siloq-schema-preview {
+    margin-bottom: 16px;
+}
