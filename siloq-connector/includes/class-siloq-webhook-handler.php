@@ -254,27 +254,82 @@ class Siloq_Webhook_Handler {
 
             if ($key === 'title') {
                 if ($aioseo_exists) {
-                    // AIOSEO — upsert (INSERT … ON DUPLICATE KEY UPDATE)
-                    $wpdb->query($wpdb->prepare(
-                        "INSERT INTO $aioseo_table (post_id, title) VALUES (%d, %s)
-                         ON DUPLICATE KEY UPDATE title = %s",
-                        $post_id, $value, $value
-                    ));
+                    // AIOSEO 4.x — check if row exists first.
+                    // ON DUPLICATE KEY requires the row to exist; missing rows need full INSERT.
+                    $existing_id = $wpdb->get_var( $wpdb->prepare(
+                        "SELECT id FROM $aioseo_table WHERE post_id = %d LIMIT 1",
+                        $post_id
+                    ) );
+                    if ( $existing_id ) {
+                        $wpdb->update(
+                            $aioseo_table,
+                            array( 'title' => $value, 'updated' => current_time('mysql') ),
+                            array( 'post_id' => $post_id ),
+                            array( '%s', '%s' ),
+                            array( '%d' )
+                        );
+                    } else {
+                        $wpdb->insert(
+                            $aioseo_table,
+                            array(
+                                'post_id'        => $post_id,
+                                'title'          => $value,
+                                'robots_default' => 1,
+                                'seo_score'      => 0,
+                                'created'        => current_time('mysql'),
+                                'updated'        => current_time('mysql'),
+                            ),
+                            array( '%d', '%s', '%d', '%d', '%s', '%s' )
+                        );
+                    }
+                    // Clear AIOSEO post cache so the new title takes effect immediately
+                    if ( function_exists( 'aioseo' ) && isset( aioseo()->meta ) ) {
+                        aioseo()->meta->flushCache( $post_id );
+                    }
+                    delete_post_meta( $post_id, '_aioseo_title_cache' );
+                    wp_cache_delete( 'aioseo_post_' . $post_id );
                 }
-                // Also update the WP post title as fallback
-                wp_update_post(array('ID' => $post_id, 'post_title' => $value));
+                // Also update the native WP post title as fallback for non-AIOSEO sites
+                wp_update_post( array( 'ID' => $post_id, 'post_title' => $value ) );
                 $updated_fields[] = 'title';
 
             } elseif ($key === 'meta_description') {
                 if ($aioseo_exists) {
-                    $wpdb->query($wpdb->prepare(
-                        "INSERT INTO $aioseo_table (post_id, description) VALUES (%d, %s)
-                         ON DUPLICATE KEY UPDATE description = %s",
-                        $post_id, $value, $value
-                    ));
+                    $existing_id = $wpdb->get_var( $wpdb->prepare(
+                        "SELECT id FROM $aioseo_table WHERE post_id = %d LIMIT 1",
+                        $post_id
+                    ) );
+                    if ( $existing_id ) {
+                        $wpdb->update(
+                            $aioseo_table,
+                            array( 'description' => $value, 'updated' => current_time('mysql') ),
+                            array( 'post_id' => $post_id ),
+                            array( '%s', '%s' ),
+                            array( '%d' )
+                        );
+                    } else {
+                        $wpdb->insert(
+                            $aioseo_table,
+                            array(
+                                'post_id'        => $post_id,
+                                'description'    => $value,
+                                'robots_default' => 1,
+                                'seo_score'      => 0,
+                                'created'        => current_time('mysql'),
+                                'updated'        => current_time('mysql'),
+                            ),
+                            array( '%d', '%s', '%d', '%d', '%s', '%s' )
+                        );
+                    }
+                    // Clear AIOSEO cache
+                    if ( function_exists( 'aioseo' ) && isset( aioseo()->meta ) ) {
+                        aioseo()->meta->flushCache( $post_id );
+                    }
+                    delete_post_meta( $post_id, '_aioseo_description_cache' );
+                    wp_cache_delete( 'aioseo_post_' . $post_id );
                 } else {
-                    // Fallback: store in standard post meta
-                    update_post_meta($post_id, '_yoast_wpseo_metadesc', $value);
+                    // Fallback: store in standard post meta (Yoast / RankMath)
+                    update_post_meta( $post_id, '_yoast_wpseo_metadesc', $value );
                 }
                 $updated_fields[] = 'meta_description';
 

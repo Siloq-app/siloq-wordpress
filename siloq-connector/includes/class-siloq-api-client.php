@@ -150,25 +150,21 @@ class Siloq_API_Client {
             : ( get_post_meta( $post->ID, '_yoast_wpseo_metadesc', true )
                 ?: get_post_meta( $post->ID, '_rank_math_description', true ) );
 
-        // Extract Elementor content + FAQ questions from _elementor_data JSON
-        // post_content for Elementor pages is just shortcode noise — real content is in postmeta
-        $elementor_text    = '';
-        $elementor_faq_qs  = array();
-        if ( $builder === 'elementor' ) {
-            $el_raw = get_post_meta( $post->ID, '_elementor_data', true );
-            if ( $el_raw ) {
-                $el_data = json_decode( $el_raw, true );
-                if ( is_array( $el_data ) ) {
-                    $elementor_text   = siloq_extract_elementor_text( $el_data );
-                    $elementor_faq_qs = siloq_extract_elementor_faqs( $el_data );
-                }
-            }
-        }
+        // Extract full content using the builder-aware Siloq_Content_Extractor
+        $extracted = class_exists( 'Siloq_Content_Extractor' )
+            ? Siloq_Content_Extractor::extract( $post->ID )
+            : array( 'raw_text' => '', 'faq_items' => array(), 'links' => array(), 'headings' => array() );
+        $extracted_text = $extracted['raw_text'] ?: '';
+        $extracted_faqs = isset( $extracted['faq_items'] ) ? array_map( function( $item ) { return $item['question'] ?? ''; }, $extracted['faq_items'] ) : array();
+        $extracted_links = $extracted['links'];
+        $extracted_headings = $extracted['headings'];
 
         $data = array(
             'wp_post_id'        => $post->ID,
             'title'             => $post->post_title,
-            'content'           => $elementor_text ?: $post->post_content,
+            'content'           => ( $extracted_text !== '' )
+                ? $extracted_text
+                : ( ( $extracted['builder'] === 'classic' || $extracted['builder'] === 'gutenberg' ) ? $post->post_content : '' ),
             'url'               => get_permalink($post->ID),
             'type'              => $post->post_type,
             'status'            => $post->post_status,
@@ -178,7 +174,9 @@ class Siloq_API_Client {
             'page_builder'      => $builder,
             'yoast_title'       => $seo_title ?: '',
             'yoast_description' => $seo_description ?: '',
-            'faq_questions'     => $elementor_faq_qs,  // extracted FAQ questions for analysis
+            'faq_questions'     => $extracted_faqs,
+            'links_extracted'   => $extracted_links,
+            'headings_extracted' => $extracted_headings,
             'junk_action'       => get_post_meta( $post->ID, '_siloq_junk_action', true ) ?: null,
             'junk_reason'       => get_post_meta( $post->ID, '_siloq_junk_reason', true ) ?: null,
         );
