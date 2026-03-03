@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.50
+* Version: 1.5.51
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.50');
+define('SILOQ_VERSION', '1.5.51');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -159,6 +159,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-intelligence.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-faq-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // ------------------------------------------------------------------
@@ -244,6 +245,9 @@ class Siloq_Connector {
 
         // Initialize Schema Intelligence (AJAX handlers + wp_head output).
         Siloq_Schema_Intelligence::init();
+
+        // Initialize Content Editor (AJAX: siloq_get_elementor_widgets, siloq_suggest_widget_edit)
+        Siloq_Content_Editor::init();
 
         // NOTE: Builder-specific panel classes (Elementor, Gutenberg, Divi, etc.)
         // are initialised in load_dependencies() via Siloq_Builder_Detector::detect()

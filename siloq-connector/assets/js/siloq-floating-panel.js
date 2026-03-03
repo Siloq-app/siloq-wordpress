@@ -77,7 +77,8 @@ var SiloqFloatingPanel = (function ($) {
 
                 '<div class="siloq-fp-tabs">',
                     '<button class="siloq-fp-tab active" data-tab="recommendations">Recommendations</button>',
-                    '<button class="siloq-fp-tab" data-tab="content">Content</button>',
+                    '<button class="siloq-fp-tab" data-tab="edit-content">&#9999;&#65039; Edit Content</button>',
+                    '<button class="siloq-fp-tab" data-tab="content">Generate</button>',
                     '<button class="siloq-fp-tab" data-tab="structure">Structure</button>',
                 '</div>',
 
@@ -94,7 +95,19 @@ var SiloqFloatingPanel = (function ($) {
                         '</div>',
                     '</div>',
 
-                    // Content tab
+                    // Edit Content tab (read widgets + suggest SEO edits + apply via Elementor JS API)
+                    '<div class="siloq-fp-tab-content" data-tab="edit-content">',
+                        '<div id="siloq-ep-content-editor">',
+                            '<p class="siloq-fp-hint">Load the page\'s widgets, then click &#128161; Suggest Edit on any item to get an AI-powered improvement.</p>',
+                            '<div id="siloq-ep-widget-loading" style="display:none">',
+                                '<p class="siloq-fp-hint"><span class="siloq-spinner"></span> Loading page widgets&#8230;</p>',
+                            '</div>',
+                            '<div id="siloq-ep-widget-list"></div>',
+                            '<button id="siloq-ep-load-widgets" class="siloq-fp-btn-primary">&#128203; Load Page Content</button>',
+                        '</div>',
+                    '</div>',
+
+                    // Generate Content tab (FAQ, services, about)
                     '<div class="siloq-fp-tab-content" data-tab="content">',
                         '<p class="siloq-fp-hint">Generate SEO content for this page.</p>',
                         '<label><input type="radio" name="siloq_ct" value="faq" checked> FAQ Section</label><br>',
@@ -170,6 +183,35 @@ var SiloqFloatingPanel = (function ($) {
             if (tab === 'structure') {
                 _loadStructure();
             }
+        });
+
+        // Edit Content tab — Load Page Content button
+        $(document).on('click', '#siloq-ep-load-widgets', _loadWidgets);
+
+        // Edit Content tab — Suggest Edit button
+        $(document).on('click', '.siloq-suggest-btn', function () {
+            var $btn     = $(this);
+            var id       = $btn.data('id');
+            var type     = $btn.data('type');
+            var content  = decodeURIComponent($btn.data('content'));
+            var field    = $btn.data('field');
+            _suggestWidgetEdit(id, type, content, field);
+        });
+
+        // Edit Content tab — Apply suggestion button
+        $(document).on('click', '.siloq-apply-btn', function () {
+            var $btn     = $(this);
+            var id       = $btn.data('id');
+            var field    = $btn.data('field');
+            var newValue = $btn.data('suggestion');
+            if (!newValue) { return; }
+            _applyWidgetEdit(id, field, newValue);
+        });
+
+        // Edit Content tab — Skip suggestion button
+        $(document).on('click', '.siloq-skip-btn', function () {
+            var id = $(this).data('id');
+            $('#siloq-suggestion-' + id).slideUp(200);
         });
 
         // Analyze
@@ -421,6 +463,234 @@ var SiloqFloatingPanel = (function ($) {
                 '</div>'
             ].join('');
         }).join('');
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit Content tab — Load widgets
+    // -----------------------------------------------------------------------
+
+    function _loadWidgets() {
+        var $list    = $('#siloq-ep-widget-list');
+        var $loading = $('#siloq-ep-widget-loading');
+        var $btn     = $('#siloq-ep-load-widgets');
+
+        $list.empty();
+        $loading.show();
+        $btn.prop('disabled', true).text('Loading…');
+
+        _ajax({ action: 'siloq_get_elementor_widgets', post_id: _postId }, function (res) {
+            $loading.hide();
+            $btn.prop('disabled', false).text('📋 Reload Page Content');
+
+            if (!res.success) {
+                $list.html('<p class="siloq-fp-hint siloq-hint-error">⚠️ ' + _esc(res.data && res.data.message ? res.data.message : 'Could not load widgets') + '</p>');
+                return;
+            }
+
+            var widgets = res.data.widgets || [];
+            if (!widgets.length) {
+                $list.html('<p class="siloq-fp-hint">No editable text widgets found on this page.</p>');
+                return;
+            }
+
+            var html = '';
+            widgets.forEach(function (w) {
+                html += _renderWidgetItem(w);
+            });
+            $list.html(html);
+            _setStatus('Loaded ' + widgets.length + ' widget' + (widgets.length === 1 ? '' : 's'), 'success');
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit Content tab — Render widget item
+    // -----------------------------------------------------------------------
+
+    function _renderWidgetItem(widget) {
+        var typeColors = {
+            'heading':    '#4f46e5',
+            'text-editor':'#0891b2',
+            'button':     '#059669',
+            'icon-box':   '#d97706',
+            'image-box':  '#d97706'
+        };
+        var color    = typeColors[widget.type] || '#6b7280';
+        var preview  = widget.content_plain || widget.content || '';
+        // Strip HTML tags for preview
+        var tmpDiv   = document.createElement('div');
+        tmpDiv.innerHTML = preview;
+        var plainPreview = tmpDiv.textContent || tmpDiv.innerText || '';
+        var truncated = plainPreview.length > 55 ? plainPreview.substring(0, 55) + '…' : plainPreview;
+        var hexColor  = color.replace('#', '');
+        // Derive a light background by parsing the hex manually for the badge
+        var badgeBg   = color + '20'; // CSS hex with alpha shorthand
+
+        return [
+            '<div class="siloq-widget-item" data-widget-id="' + widget.id + '" data-widget-type="' + widget.type + '" data-field="' + _esc(widget.field) + '">',
+                '<div class="siloq-widget-header">',
+                    '<span class="siloq-widget-badge" style="background:' + badgeBg + ';color:' + color + '">' + _esc(widget.type) + '</span>',
+                    '<span class="siloq-widget-label">' + _esc(widget.label) + '</span>',
+                '</div>',
+                '<p class="siloq-widget-preview">' + _esc(truncated) + '</p>',
+                '<div class="siloq-widget-actions">',
+                    '<button class="siloq-suggest-btn siloq-fp-btn"',
+                        ' data-id="' + widget.id + '"',
+                        ' data-type="' + widget.type + '"',
+                        ' data-content="' + encodeURIComponent(widget.content || '') + '"',
+                        ' data-field="' + _esc(widget.field) + '">',
+                        '&#128161; Suggest Edit',
+                    '</button>',
+                '</div>',
+                '<div class="siloq-suggestion-panel" id="siloq-suggestion-' + widget.id + '" style="display:none">',
+                    '<div class="siloq-suggestion-before">',
+                        '<p class="siloq-fp-section-label">CURRENT</p>',
+                        '<p class="siloq-suggestion-text siloq-suggestion-old"></p>',
+                    '</div>',
+                    '<div class="siloq-suggestion-after">',
+                        '<p class="siloq-fp-section-label">SUGGESTED</p>',
+                        '<p class="siloq-suggestion-text siloq-suggestion-new"></p>',
+                    '</div>',
+                    '<div class="siloq-suggestion-actions">',
+                        '<button class="siloq-apply-btn siloq-fp-btn-primary" data-id="' + widget.id + '" data-field="' + _esc(widget.field) + '" disabled>&#9989; Apply</button>',
+                        '<button class="siloq-skip-btn siloq-fp-btn" data-id="' + widget.id + '">Skip</button>',
+                    '</div>',
+                '</div>',
+            '</div>'
+        ].join('');
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit Content tab — Suggest widget edit via AJAX
+    // -----------------------------------------------------------------------
+
+    function _suggestWidgetEdit(widgetId, widgetType, currentContent, field) {
+        var $panel  = $('#siloq-suggestion-' + widgetId);
+        var $sugBtn = $('.siloq-suggest-btn[data-id="' + widgetId + '"]');
+
+        $sugBtn.prop('disabled', true).text('Thinking…');
+        $panel.hide();
+
+        _ajax({
+            action:          'siloq_suggest_widget_edit',
+            post_id:         _postId,
+            widget_id:       widgetId,
+            widget_type:     widgetType,
+            current_content: currentContent
+        }, function (res) {
+            $sugBtn.prop('disabled', false).text('💡 Suggest Edit');
+
+            if (!res.success) {
+                _setStatus('Suggestion failed: ' + _esc(res.data && res.data.message ? res.data.message : 'Unknown error'), 'error');
+                return;
+            }
+
+            var suggestion = res.data.suggestion || '';
+            if (!suggestion) {
+                _setStatus('No suggestion available for this widget.', 'error');
+                return;
+            }
+
+            // Populate the suggestion panel
+            $panel.find('.siloq-suggestion-old').text(currentContent);
+            $panel.find('.siloq-suggestion-new').text(suggestion);
+
+            // Store suggestion on apply button + enable it
+            var $applyBtn = $panel.find('.siloq-apply-btn');
+            $applyBtn.data('suggestion', suggestion).prop('disabled', false);
+
+            $panel.slideDown(200);
+
+            // Show source badge if available
+            var source = res.data.source || 'api';
+            if (source === 'local') {
+                _setStatus('Suggestion generated locally (no API connection).', 'loading');
+            } else {
+                _setStatus('Suggestion ready — review and apply.', 'success');
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Edit Content tab — Apply widget edit via Elementor JS API
+    // -----------------------------------------------------------------------
+
+    /**
+     * Apply a new value to a widget setting using Elementor's command system.
+     * Uses $e.run('document/elements/settings') — undoable via Ctrl+Z.
+     * Falls back to widgetModel.model.setSetting() if $e is unavailable.
+     *
+     * @param {string} widgetId   Elementor widget element ID.
+     * @param {string} field      Setting key (e.g. 'title', 'editor', 'text').
+     * @param {string} newValue   Replacement content.
+     */
+    function _applyWidgetEdit(widgetId, field, newValue) {
+        // Only attempt Elementor API when inside the editor context
+        if (typeof window.elementor === 'undefined') {
+            _setStatus('Elementor editor not detected — open this page in Elementor to apply changes.', 'error');
+            return;
+        }
+
+        var doc = window.elementor.documents && window.elementor.documents.getCurrent
+            ? window.elementor.documents.getCurrent()
+            : null;
+
+        if (!doc) {
+            _setStatus('Could not access Elementor document. Please apply manually.', 'error');
+            return;
+        }
+
+        var widgetContainer = _findWidgetById(doc.container, widgetId);
+
+        if (!widgetContainer) {
+            _setStatus('Widget not found in current document. It may have been added after loading — try reloading.', 'error');
+            return;
+        }
+
+        try {
+            // Preferred method: goes through Elementor's command bus (undoable)
+            window.$e.run('document/elements/settings', {
+                container: widgetContainer,
+                settings:  { [field]: newValue },
+                options:   { external: true }
+            });
+            window.elementor.saver.setFlagEditorChange();
+            _setStatus('✅ Applied! Remember to save the page.', 'success');
+        } catch (err) {
+            try {
+                // Fallback: direct model mutation
+                widgetContainer.model.setSetting(field, newValue);
+                window.elementor.saver.setFlagEditorChange();
+                _setStatus('✅ Applied via direct set. Save the page to keep changes.', 'success');
+            } catch (err2) {
+                _setStatus('Could not apply change automatically. Error: ' + err2.message, 'error');
+            }
+        }
+
+        // Collapse the suggestion panel after applying
+        $('#siloq-suggestion-' + widgetId).slideUp(200);
+    }
+
+    /**
+     * Recursively find a container by its Elementor element ID.
+     *
+     * @param  {Object} container  Elementor container/model object.
+     * @param  {string} targetId   Element ID to find.
+     * @return {Object|null}
+     */
+    function _findWidgetById(container, targetId) {
+        if (!container) return null;
+        if (container.id === targetId) return container;
+
+        var children = container.children
+            || (container.view && container.view._getChildViews && container.view._getChildViews())
+            || [];
+
+        var childArray = typeof children === 'object' ? Object.values(children) : children;
+        for (var i = 0; i < childArray.length; i++) {
+            var found = _findWidgetById(childArray[i], targetId);
+            if (found) return found;
+        }
+        return null;
     }
 
     // -----------------------------------------------------------------------
