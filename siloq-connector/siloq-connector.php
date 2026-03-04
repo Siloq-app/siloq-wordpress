@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.69
+* Version: 1.5.70
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.69');
+define('SILOQ_VERSION', '1.5.70');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -297,7 +297,9 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
         add_action('wp_ajax_siloq_analyze_widget', array('Siloq_Widget_Intelligence', 'ajax_analyze_widget'));
-        
+        add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
+        add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
+
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -413,10 +415,30 @@ class Siloq_Connector {
             array(),
             SILOQ_VERSION
         );
-        
-        // Get current screen (might not be available in all contexts)
+
+        // Dashboard v2 CSS + JS on dashboard page
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        
+        if ($screen && $screen->id === 'siloq_page_siloq-dashboard') {
+            wp_enqueue_style(
+                'siloq-dashboard-v2',
+                SILOQ_PLUGIN_URL . 'assets/css/siloq-dashboard-v2.css',
+                array(),
+                SILOQ_VERSION
+            );
+            wp_enqueue_script(
+                'siloq-dashboard-v2',
+                SILOQ_PLUGIN_URL . 'assets/js/siloq-dashboard-v2.js',
+                array('jquery'),
+                SILOQ_VERSION,
+                true
+            );
+            wp_localize_script('siloq-dashboard-v2', 'siloqDash', array(
+                'ajaxUrl'   => admin_url('admin-ajax.php'),
+                'nonce'     => wp_create_nonce('siloq_nonce'),
+                'siteScore' => intval(get_option('siloq_site_score', 42)),
+            ));
+        }
+
         // Enqueue sync script on sync + settings pages
         if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
             wp_enqueue_script(
@@ -1036,6 +1058,201 @@ class Siloq_Connector {
         $log[]   = $entry;
         $log     = array_slice( $log, -50 ); // keep last 50
         update_option( 'siloq_debug_log', wp_json_encode( $log ) );
+    }
+
+    /**
+     * AJAX: Get plan data — build architecture tree, priority actions, issues, roadmap
+     */
+    public function ajax_get_plan_data() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        // Check transient cache first
+        $cached = get_transient('siloq_plan_data');
+        if ($cached) {
+            wp_send_json_success($cached);
+            return;
+        }
+
+        // Gather all posts with analysis data
+        $posts = get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'posts_per_page' => -1,
+            'meta_key'       => '_siloq_analysis_data',
+            'fields'         => 'ids',
+        ));
+
+        $architecture = array();
+        $actions      = array();
+        $issues       = array('critical' => array(), 'important' => array(), 'opportunity' => array());
+        $supporting   = array();
+        $hubs         = array();
+        $orphans      = array();
+        $hub_count    = 0;
+        $orphan_count = 0;
+        $missing_count = 0;
+
+        foreach ($posts as $post_id) {
+            $raw = get_post_meta($post_id, '_siloq_analysis_data', true);
+            $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
+            if (empty($analysis)) continue;
+
+            $title     = get_the_title($post_id);
+            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'spoke';
+            $score     = isset($analysis['score']) ? intval($analysis['score']) : 0;
+
+            // Build architecture tree
+            $architecture[] = array('title' => $title, 'type' => $page_type, 'id' => $post_id, 'score' => $score);
+
+            if ($page_type === 'hub') {
+                $hub_count++;
+                $hubs[] = $post_id;
+            }
+
+            // Check for orphans (no silo relationship)
+            $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
+            if (empty($silo_data) && $page_type !== 'hub') {
+                $orphans[] = $post_id;
+                $orphan_count++;
+                $architecture[] = array('title' => $title . ' (orphan)', 'type' => 'orphan', 'id' => $post_id);
+            }
+
+            // Extract issues from analysis
+            if (isset($analysis['issues']) && is_array($analysis['issues'])) {
+                foreach ($analysis['issues'] as $issue) {
+                    $severity = isset($issue['severity']) ? strtolower($issue['severity']) : 'opportunity';
+                    if (!isset($issues[$severity])) $severity = 'opportunity';
+                    $issues[$severity][] = array(
+                        'title'   => $title,
+                        'issue'   => isset($issue['message']) ? $issue['message'] : (isset($issue['description']) ? $issue['description'] : 'Issue found'),
+                        'post_id' => $post_id,
+                    );
+                }
+            }
+
+            // Build actions from low scores or missing elements
+            if ($score < 50) {
+                $actions[] = array(
+                    'headline' => 'Improve content quality on "' . $title . '"',
+                    'priority' => 'high',
+                    'effort'   => 'Half Day',
+                    'post_id'  => $post_id,
+                );
+            } elseif ($score < 75) {
+                $actions[] = array(
+                    'headline' => 'Optimize "' . $title . '" for better rankings',
+                    'priority' => 'medium',
+                    'effort'   => 'Quick Win',
+                    'post_id'  => $post_id,
+                );
+            }
+
+            // Supporting content opportunities
+            if (isset($analysis['missing_supporting']) && is_array($analysis['missing_supporting'])) {
+                foreach ($analysis['missing_supporting'] as $ms) {
+                    $missing_count++;
+                    $supporting[] = array(
+                        'title' => isset($ms['title']) ? $ms['title'] : 'Supporting page for "' . $title . '"',
+                        'type'  => isset($ms['type']) ? $ms['type'] : 'sub-page',
+                    );
+                    $architecture[] = array(
+                        'title' => isset($ms['title']) ? $ms['title'] : 'Missing supporting page',
+                        'type'  => 'missing',
+                    );
+                }
+            }
+        }
+
+        // Sort architecture: hubs first, then spokes, then supporting, then orphans, then missing
+        $type_order = array('hub' => 0, 'spoke' => 1, 'supporting' => 2, 'orphan' => 3, 'missing' => 4);
+        usort($architecture, function($a, $b) use ($type_order) {
+            $oa = isset($type_order[$a['type']]) ? $type_order[$a['type']] : 5;
+            $ob = isset($type_order[$b['type']]) ? $type_order[$b['type']] : 5;
+            return $oa - $ob;
+        });
+
+        // Sort actions by priority
+        usort($actions, function($a, $b) {
+            $p = array('high' => 0, 'medium' => 1, 'low' => 2);
+            return ($p[$a['priority']] ?? 2) - ($p[$b['priority']] ?? 2);
+        });
+
+        // Default roadmap
+        $roadmap = array(
+            'month1' => array(
+                'Fix keyword conflicts on top pages',
+                'Add missing schema markup',
+                'Fix thin content issues',
+                'Connect Google Search Console',
+                'Complete entity profiles',
+            ),
+            'month2' => array(
+                'Create missing supporting content',
+                'Build internal linking between silos',
+                'Optimize page titles and meta descriptions',
+                'Fix orphan pages — assign to silos',
+                'Improve content depth on key pages',
+            ),
+            'month3' => array(
+                'Launch new hub pages for gaps',
+                'Create blog content supporting service pages',
+                'Monitor ranking improvements',
+                'Review and update underperforming content',
+                'Set up ongoing content calendar',
+            ),
+        );
+
+        $plan = array(
+            'architecture' => $architecture,
+            'actions'      => $actions,
+            'issues'       => $issues,
+            'supporting'   => $supporting,
+            'roadmap'      => $roadmap,
+            'hub_count'    => $hub_count,
+            'orphan_count' => $orphan_count,
+            'missing_count' => $missing_count,
+            'generated_at' => current_time('mysql'),
+        );
+
+        // Cache for 60 minutes
+        set_transient('siloq_plan_data', $plan, 3600);
+        update_option('siloq_plan_data_last', current_time('mysql'));
+
+        wp_send_json_success($plan);
+    }
+
+    /**
+     * AJAX: Save roadmap checkbox progress
+     */
+    public function ajax_save_roadmap_progress() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $key     = isset($_POST['key']) ? sanitize_text_field($_POST['key']) : '';
+        $checked = isset($_POST['checked']) ? intval($_POST['checked']) : 0;
+
+        if (empty($key)) {
+            wp_send_json_error(array('message' => 'Missing key'));
+            return;
+        }
+
+        $progress = json_decode(get_option('siloq_roadmap_progress', '{}'), true);
+        if (!is_array($progress)) $progress = array();
+
+        if ($checked) {
+            $progress[$key] = 1;
+        } else {
+            unset($progress[$key]);
+        }
+
+        update_option('siloq_roadmap_progress', wp_json_encode($progress));
+        wp_send_json_success(array('saved' => true));
     }
 
     /**
