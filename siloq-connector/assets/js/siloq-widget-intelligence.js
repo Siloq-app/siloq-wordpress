@@ -217,7 +217,8 @@
     }
 
     // Observe the panel container for DOM changes (widget switching re-renders controls)
-    var _panelObserver = null;
+    var _panelObserver    = null;
+    var _panelDebounceTimer = null;   // module-scoped — not stored as property on observer
 
     function startPanelObserver() {
         var panelEl = document.querySelector('#elementor-panel-content-wrapper') ||
@@ -226,15 +227,34 @@
 
         _panelObserver = new MutationObserver(function() {
             // Debounce — panel can mutate many times per render cycle
-            clearTimeout(_panelObserver._timer);
-            _panelObserver._timer = setTimeout(moveSiloqPanelToTop, 120);
+            clearTimeout(_panelDebounceTimer);
+            _panelDebounceTimer = setTimeout(moveSiloqPanelToTop, 120);
         });
 
         _panelObserver.observe(panelEl, { childList: true, subtree: true });
     }
 
+    function stopPanelObserver() {
+        if (_panelObserver) {
+            _panelObserver.disconnect();
+            _panelObserver = null;
+        }
+        clearTimeout(_panelDebounceTimer);
+        _panelDebounceTimer = null;
+    }
+
     // Start observing once Elementor editor is ready
     elementor.on('panel:init', startPanelObserver);
+
+    // Clean up if the editor is destroyed (prevents memory leak on re-init)
+    elementor.on('destroy', stopPanelObserver);
+    if (elementor.hooks) {
+        elementor.hooks.addAction('panel/open_editor/widget', function() {
+            // Re-run move on every widget open as a safety net
+            setTimeout(moveSiloqPanelToTop, 200);
+        });
+    }
+
     $(document).ready(function() {
         // Fallback: start observer after short delay if panel:init already fired
         setTimeout(startPanelObserver, 1500);
