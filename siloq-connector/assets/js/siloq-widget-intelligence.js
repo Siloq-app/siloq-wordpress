@@ -247,80 +247,9 @@
         }, 1000);
     });
 
-    // ── Move Siloq panel to top of widget controls ────────────────────────
-    // Elementor renders sections in registration order. Our section is added
-    // via after_section_end so it appears last. We use a MutationObserver to
-    // detect when the panel renders and physically move our accordion item
-    // to position 0 — making it the first thing the user sees.
-
-    function moveSiloqPanelToTop() {
-        var $accordion = $('.elementor-panel-navigation-wrapper').closest('.elementor-panel-content-wrapper')
-            .find('.elementor-accordion');
-
-        if (!$accordion.length) {
-            // Try simpler selector
-            $accordion = $('.elementor-panel-content-wrapper .elementor-accordion');
-        }
-        if (!$accordion.length) return;
-
-        var $siloqItem = $accordion.find('.siloq-wi-container').closest('.elementor-accordion-item');
-        if (!$siloqItem.length) return;
-
-        // Only move if not already first
-        if ($siloqItem.index() === 0) return;
-
-        $siloqItem.prependTo($accordion);
-
-        // Auto-expand the Siloq section so it's immediately visible
-        var $title = $siloqItem.find('.elementor-accordion-title').first();
-        if ($title.length && !$siloqItem.hasClass('elementor-open')) {
-            $title.trigger('click');
-        }
-    }
-
-    // Observe the panel container for DOM changes (widget switching re-renders controls)
-    var _panelObserver    = null;
-    var _panelDebounceTimer = null;   // module-scoped — not stored as property on observer
-
-    function startPanelObserver() {
-        var panelEl = document.querySelector('#elementor-panel-content-wrapper') ||
-                      document.querySelector('.elementor-panel-content-wrapper');
-        if (!panelEl || _panelObserver) return;
-
-        _panelObserver = new MutationObserver(function() {
-            // Debounce — panel can mutate many times per render cycle
-            clearTimeout(_panelDebounceTimer);
-            _panelDebounceTimer = setTimeout(moveSiloqPanelToTop, 120);
-        });
-
-        _panelObserver.observe(panelEl, { childList: true, subtree: true });
-    }
-
-    function stopPanelObserver() {
-        if (_panelObserver) {
-            _panelObserver.disconnect();
-            _panelObserver = null;
-        }
-        clearTimeout(_panelDebounceTimer);
-        _panelDebounceTimer = null;
-    }
-
-    // Start observing once Elementor editor is ready
-    elementor.on('panel:init', startPanelObserver);
-
-    // Clean up if the editor is destroyed (prevents memory leak on re-init)
-    elementor.on('destroy', stopPanelObserver);
-    if (elementor.hooks) {
-        elementor.hooks.addAction('panel/open_editor/widget', function() {
-            // Re-run move on every widget open as a safety net
-            setTimeout(moveSiloqPanelToTop, 200);
-        });
-    }
-
-    $(document).ready(function() {
-        // Fallback: start observer after short delay if panel:init already fired
-        setTimeout(startPanelObserver, 1500);
-    });
+    // ── Panel position handled by CSS sticky (see siloq-widget-intelligence.css)
+    // .elementor-control-section[data-section="siloq_intelligence"] { position: sticky; top: 0 }
+    // No DOM manipulation needed — CSS pins it to the top of the scrollable panel.
 
     // ── Analyze button (delegated — panel re-renders on widget switch) ────
 
