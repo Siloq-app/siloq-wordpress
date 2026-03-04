@@ -70,6 +70,23 @@ class Siloq_Elementor_Panel {
             $post_id = intval( $_GET['post'] );
         }
 
+        // Also enqueue content editor JS
+        wp_enqueue_script(
+            'siloq-content-editor',
+            $plugin_url . 'assets/js/siloq-floating-panel.js',
+            [ 'jquery', 'siloq-schema' ],
+            $version,
+            true
+        );
+        wp_localize_script( 'siloq-content-editor', 'siloqContentEditor', [
+            'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
+            'nonce'    => wp_create_nonce( 'siloq_ai_nonce' ),
+            'postId'   => $post_id,
+            'apiBase'  => defined('SILOQ_API_BASE') ? SILOQ_API_BASE : 'https://api.siloq.app',
+            'siteId'   => get_option('siloq_site_id', ''),
+            'apiKey'   => get_option('siloq_api_key', ''),
+        ] );
+
         wp_localize_script( 'siloq-schema', 'siloqSchema', [
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'siloq_ajax_nonce' ),
@@ -118,11 +135,14 @@ class Siloq_Elementor_Panel {
              aria-hidden="true">
 
             <div class="siloq-schema-el-panel-header">
-                <span class="siloq-schema-el-panel-title">⚡ Siloq Schema</span>
+                <div class="siloq-ep-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin:-0px;padding:0 12px;">
+                    <button class="siloq-ep-tab siloq-ep-tab--active" data-siloq-tab="schema" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #4f46e5;color:#4f46e5;">⚡ Schema</button>
+                    <button class="siloq-ep-tab" data-siloq-tab="edit-content" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">✏️ Edit Content</button>
+                </div>
                 <button type="button"
                         id="siloq-schema-el-close"
                         class="siloq-schema-el-close"
-                        aria-label="Close Siloq Schema panel">✕</button>
+                        aria-label="Close Siloq panel" style="position:absolute;top:8px;right:10px;background:none;border:none;font-size:18px;cursor:pointer;color:#6b7280;">✕</button>
             </div>
 
             <?php /* Status, generate, preview, apply — identical structure to metabox */ ?>
@@ -177,6 +197,25 @@ class Siloq_Elementor_Panel {
                 </button>
 
             </div><!-- /#siloq-schema-preview-el -->
+
+            <!-- Edit Content Tab -->
+            <div id="siloq-edit-content-tab" class="siloq-ep-tab-panel" style="display:none;padding:12px;">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Load all text widgets on this page. Get AI-suggested improvements, then apply directly in Elementor.</p>
+
+                <button type="button" id="siloq-load-widgets-btn"
+                        style="width:100%;padding:8px;background:#4f46e5;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+                    📋 Load Page Content
+                </button>
+
+                <div id="siloq-widget-loading" style="display:none;text-align:center;padding:20px;color:#6b7280;font-size:12px;">
+                    <span class="spinner is-active" style="float:none;margin:0 auto 8px;display:block;"></span>
+                    Loading widgets...
+                </div>
+
+                <div id="siloq-widget-list"></div>
+
+                <div id="siloq-ec-status" style="display:none;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;"></div>
+            </div>
 
         </div><!-- /#siloq-schema-el-panel -->
         <?php
