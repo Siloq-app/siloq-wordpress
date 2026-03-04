@@ -24,8 +24,9 @@ class Siloq_Content_Editor {
     // ── Bootstrap ────────────────────────────────────────────────────────────
 
     public static function init() {
-        add_action( 'wp_ajax_siloq_get_elementor_widgets', [ __CLASS__, 'ajax_get_elementor_widgets' ] );
-        add_action( 'wp_ajax_siloq_suggest_widget_edit',   [ __CLASS__, 'ajax_suggest_widget_edit'   ] );
+        add_action( 'wp_ajax_siloq_get_elementor_widgets',  [ __CLASS__, 'ajax_get_elementor_widgets'  ] );
+        add_action( 'wp_ajax_siloq_suggest_widget_edit',    [ __CLASS__, 'ajax_suggest_widget_edit'    ] );
+        add_action( 'wp_ajax_siloq_get_internal_links',     [ __CLASS__, 'ajax_get_internal_links'     ] );
     }
 
     // ── AJAX: get_elementor_widgets ───────────────────────────────────────────
@@ -182,6 +183,60 @@ class Siloq_Content_Editor {
         }
     }
 
+    // ── AJAX: get_internal_links ──────────────────────────────────────────────
+
+    /**
+     * Fetch related pages (internal link suggestions) from the Siloq API.
+     *
+     * POST params: nonce, post_id
+     * Returns: { should_link_to: [...], should_link_from: [...] }
+     */
+    public static function ajax_get_internal_links() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_pages' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+            return;
+        }
+
+        $post_id  = intval( $_POST['post_id'] ?? 0 );
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+
+        if ( ! $site_id || ! $api_key || ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing configuration' ] );
+            return;
+        }
+
+        $response = wp_remote_get(
+            "$api_base/api/v1/sites/$site_id/pages/$post_id/related-pages/",
+            [
+                'timeout' => 15,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                ],
+            ]
+        );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( [ 'message' => 'API unavailable' ] );
+            return;
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( $code !== 200 || ! $body ) {
+            wp_send_json_error( [ 'message' => 'Could not load link data' ] );
+            return;
+        }
+
+        wp_send_json_success( $body );
+    }
+
     // ── AJAX: suggest_widget_edit ─────────────────────────────────────────────
 
     /**
@@ -225,6 +280,27 @@ class Siloq_Content_Editor {
             true
         ) ?: [];
 
+        // Fetch related pages for link context (non-blocking on failure)
+        $related_pages  = [];
+        $links_response = wp_remote_get(
+            $api_base . "/api/v1/sites/{$site_id}/pages/{$post_id}/related-pages/",
+            [
+                'timeout' => 5,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                ],
+            ]
+        );
+        if ( ! is_wp_error( $links_response ) && wp_remote_retrieve_response_code( $links_response ) === 200 ) {
+            $links_data    = json_decode( wp_remote_retrieve_body( $links_response ), true );
+            $related_pages = array_merge(
+                $links_data['should_link_to']   ?? [],
+                $links_data['should_link_from'] ?? []
+            );
+        }
+
         $response = wp_remote_post(
             $api_base . "/api/v1/sites/{$site_id}/pages/{$post_id}/suggest-widget-edit/",
             [
@@ -240,6 +316,7 @@ class Siloq_Content_Editor {
                     'current_content' => $current_content,
                     'entity_profile'  => $entity_profile,
                     'page_analysis'   => $analysis_data,
+                    'related_pages'   => $related_pages,
                 ] ),
             ]
         );

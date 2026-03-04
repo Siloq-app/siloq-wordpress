@@ -28,13 +28,15 @@
         });
 
         // Show/hide panels
+        $('#siloq-edit-content-tab, #siloq-links-tab').hide();
+        $('#siloq-schema-el-status, .siloq-schema-actions, #siloq-schema-spinner-el, #siloq-schema-errors-el, #siloq-schema-preview-el').hide();
+
         if (tab === 'schema') {
-            $('#siloq-edit-content-tab').hide();
-            // Show all schema elements
             $('#siloq-schema-el-status, .siloq-schema-actions, #siloq-schema-spinner-el, #siloq-schema-errors-el, #siloq-schema-preview-el').show();
         } else if (tab === 'edit-content') {
-            $('#siloq-schema-el-status, .siloq-schema-actions, #siloq-schema-spinner-el, #siloq-schema-errors-el, #siloq-schema-preview-el').hide();
             $('#siloq-edit-content-tab').show();
+        } else if (tab === 'links') {
+            $('#siloq-links-tab').show();
         }
     });
 
@@ -312,6 +314,155 @@
 
     function showEcStatus(msg, type) {
         var $s = $('#siloq-ec-status');
+        var bg = type === 'error' ? '#fef2f2' : '#d1fae5';
+        var color = type === 'error' ? '#991b1b' : '#065f46';
+        $s.css({'background': bg, 'color': color}).text(msg).show();
+        setTimeout(function() { $s.fadeOut(); }, 5000);
+    }
+
+    // ── Internal Links Tab ───────────────────────────────────────────────
+    var linksLoaded = false;
+
+    $(document).on('click', '#siloq-load-links-btn', function() {
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Loading...');
+        $('#siloq-links-loading').show();
+        $('#siloq-links-content').empty();
+
+        $.ajax({
+            url: cfg.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'siloq_get_internal_links',
+                nonce: cfg.nonce,
+                post_id: postId
+            },
+            success: function(res) {
+                $('#siloq-links-loading').hide();
+                $btn.prop('disabled', false).text('🔗 Reload Link Map');
+
+                if (!res.success || !res.data) {
+                    showLinksStatus('Could not load link data: ' + (res.data && res.data.message || 'Unknown error'), 'error');
+                    return;
+                }
+
+                var shouldLinkTo   = res.data.should_link_to   || [];
+                var shouldLinkFrom = res.data.should_link_from || [];
+
+                if (!shouldLinkTo.length && !shouldLinkFrom.length) {
+                    $('#siloq-links-content').html(
+                        '<p style="font-size:12px;color:#6b7280;text-align:center;padding:20px;">No content structure detected. Sync your pages first.</p>'
+                    );
+                    return;
+                }
+
+                var html = '';
+
+                if (shouldLinkTo.length) {
+                    html += '<div style="margin-bottom:16px;">';
+                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:0 0 8px;">This page should link TO:</p>';
+                    shouldLinkTo.forEach(function(page) {
+                        html += renderLinkCard(page);
+                    });
+                    html += '</div>';
+                }
+
+                if (shouldLinkFrom.length) {
+                    html += '<div>';
+                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:0 0 8px;">Pages that should link TO this page:</p>';
+                    shouldLinkFrom.forEach(function(page) {
+                        html += renderLinkCard(page);
+                    });
+                    html += '</div>';
+                }
+
+                $('#siloq-links-content').html(html);
+                linksLoaded = true;
+            },
+            error: function() {
+                $('#siloq-links-loading').hide();
+                $btn.prop('disabled', false).text('🔗 Load Link Map');
+                showLinksStatus('Network error. Please try again.', 'error');
+            }
+        });
+    });
+
+    function renderLinkCard(page) {
+        var title      = page.title       || 'Untitled';
+        var url        = page.url         || '#';
+        var pageType   = page.page_type   || '';
+        var anchor     = page.anchor_text || title;
+        var linked     = page.already_linked;
+
+        var typeBadgeColor = '#6b7280';
+        var typeBadgeBg    = '#f3f4f6';
+        var typeLabel      = pageType.toUpperCase();
+        if (pageType === 'hub')        { typeBadgeColor = '#4f46e5'; typeBadgeBg = '#ede9fe'; }
+        if (pageType === 'spoke')      { typeBadgeColor = '#0891b2'; typeBadgeBg = '#cffafe'; }
+        if (pageType === 'supporting') { typeBadgeColor = '#059669'; typeBadgeBg = '#d1fae5'; }
+
+        var statusHtml = '';
+        if (linked === true) {
+            statusHtml = '<span style="font-size:10px;color:#065f46;font-weight:600;">Already linked ✅</span>';
+        } else if (linked === false) {
+            statusHtml = '<span style="font-size:10px;color:#92400e;font-weight:600;">Not yet linked ⚠️</span>';
+        }
+
+        var linkTag = '<a href="' + esc(url) + '">' + esc(anchor) + '</a>';
+
+        var card = '';
+        card += '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa;">';
+
+        // Title row + badge
+        card += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">';
+        if (typeLabel) {
+            card += '<span style="font-size:10px;font-weight:600;padding:2px 6px;background:' + typeBadgeBg + ';color:' + typeBadgeColor + ';border-radius:10px;">' + esc(typeLabel) + '</span>';
+        }
+        card += '<span style="font-size:12px;font-weight:500;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</span>';
+        card += '</div>';
+
+        // URL
+        card += '<p style="font-size:10px;color:#9ca3af;margin:0 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(url) + '</p>';
+
+        // Anchor text
+        card += '<p style="font-size:11px;margin:0 0 6px;">';
+        card += '<span style="color:#6b7280;">Anchor: </span>';
+        card += '<span style="color:#7c3aed;font-weight:600;background:#ede9fe;padding:1px 5px;border-radius:3px;">' + esc(anchor) + '</span>';
+        card += '</p>';
+
+        // Status + Copy button row
+        card += '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">';
+        card += statusHtml;
+        card += '<button class="siloq-copy-link-btn" data-link="' + esc(linkTag) + '" style="font-size:10px;padding:3px 8px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;color:#374151;">📋 Copy Link</button>';
+        card += '</div>';
+
+        card += '</div>';
+        return card;
+    }
+
+    // Copy link HTML to clipboard
+    $(document).on('click', '.siloq-copy-link-btn', function() {
+        var linkHtml = $(this).data('link');
+        var $btn = $(this);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(linkHtml).then(function() {
+                $btn.text('✅ Copied!');
+                setTimeout(function() { $btn.text('📋 Copy Link'); }, 2000);
+            });
+        } else {
+            // Fallback for older browsers
+            var $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(linkHtml).select();
+            document.execCommand('copy');
+            $temp.remove();
+            $btn.text('✅ Copied!');
+            setTimeout(function() { $btn.text('📋 Copy Link'); }, 2000);
+        }
+    });
+
+    function showLinksStatus(msg, type) {
+        var $s = $('#siloq-links-status');
         var bg = type === 'error' ? '#fef2f2' : '#d1fae5';
         var color = type === 'error' ? '#991b1b' : '#065f46';
         $s.css({'background': bg, 'color': color}).text(msg).show();
