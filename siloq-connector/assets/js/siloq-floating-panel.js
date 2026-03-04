@@ -178,6 +178,53 @@
         $('#siloq-sr-' + $(this).data('id')).hide();
     });
 
+    // ── Link preservation ─────────────────────────────────────────────────
+    // When the AI suggestion is plain text but the original widget content
+    // had <a> tags, re-insert the original links where the anchor text
+    // still appears in the new suggestion. Prevents Apply from silently
+    // destroying internal links.
+
+    function extractLinks(html) {
+        var links = [];
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        var anchors = tmp.querySelectorAll('a');
+        anchors.forEach(function(a) {
+            var text = (a.textContent || a.innerText || '').trim();
+            if (text) {
+                links.push({ text: text, outerHTML: a.outerHTML });
+            }
+        });
+        return links;
+    }
+
+    function restoreLinks(originalHtml, newText) {
+        var links = extractLinks(originalHtml);
+        if (!links.length) return newText;
+
+        var result = newText;
+        var restored = 0;
+        links.forEach(function(link) {
+            // Escape special regex chars in anchor text
+            var escaped = link.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var re = new RegExp(escaped, 'i');
+            if (re.test(result)) {
+                result = result.replace(re, link.outerHTML);
+                restored++;
+            }
+        });
+
+        if (restored < links.length) {
+            var missed = links.length - restored;
+            showEcStatus(
+                '✅ Applied! Note: ' + missed + ' link(s) from the original could not be matched in the new text — add them back manually.',
+                'success'
+            );
+        }
+
+        return result;
+    }
+
     // ── Apply via Elementor JS API ────────────────────────────────────────
     function applyWidgetEdit(widgetId, field, newValue) {
         if (typeof elementor === 'undefined' || !elementor.documents) {
@@ -192,20 +239,37 @@
             var container = findContainer(doc.container, widgetId);
             if (!container) throw new Error('Widget not found: ' + widgetId);
 
+            // For text-editor widgets: preserve <a> tags from the original HTML.
+            // The AI suggestion is plain text — without this, all links are lost.
+            var safeValue = newValue;
+            if (field === 'editor') {
+                var originalHtml = '';
+                try {
+                    originalHtml = container.model.getSetting('editor') || '';
+                } catch(e2) {}
+                if (originalHtml) {
+                    safeValue = restoreLinks(originalHtml, newValue);
+                }
+            }
+
             // Use Elementor command system (safe, undoable)
             if (typeof $e !== 'undefined' && $e.run) {
                 $e.run('document/elements/settings', {
                     container: container,
-                    settings: { [field]: newValue },
+                    settings: { [field]: safeValue },
                     options: { external: true }
                 });
             } else {
                 // Fallback: direct model set
-                container.model.setSetting(field, newValue);
+                container.model.setSetting(field, safeValue);
                 if (elementor.saver) elementor.saver.setFlagEditorChange();
             }
 
-            showEcStatus('✅ Applied! Click Save in Elementor to keep the change.', 'success');
+            // restoreLinks() shows its own status when links are missed.
+            // Show generic success only when no links were involved.
+            if (safeValue === newValue) {
+                showEcStatus('✅ Applied! Click Save in Elementor to keep the change.', 'success');
+            }
             $('#siloq-sr-' + widgetId).find('.siloq-apply-btn').text('✅ Applied').prop('disabled', true);
 
         } catch (e) {
