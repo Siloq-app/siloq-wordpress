@@ -403,6 +403,40 @@ class Siloq_Admin {
                                 </tr>
 
                                 <tr>
+                                    <th scope="row"><?php _e('Save History', 'siloq-connector'); ?></th>
+                                    <td>
+                                        <?php
+                                        $debug_log = json_decode( get_option( 'siloq_debug_log', '[]' ), true ) ?: [];
+                                        if ( empty( $debug_log ) ) {
+                                            echo '<p class="description">No save attempts recorded yet.</p>';
+                                        } else {
+                                            $recent = array_reverse( array_slice( $debug_log, -10 ) );
+                                            echo '<div style="background:#f6f7f7;border:1px solid #ddd;border-radius:4px;padding:10px;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;">';
+                                            foreach ( $recent as $entry ) {
+                                                $api   = $entry['api_sync'] ?? '?';
+                                                $db    = $entry['db_verified'] ? '✅' : '❌';
+                                                $color = ( $entry['db_verified'] && $api === 'ok' ) ? '#065f46' : '#7c2d12';
+                                                printf(
+                                                    '<div style="color:%s;margin-bottom:4px;">[%s] DB:%s API:%s fields:%s</div>',
+                                                    esc_attr( $color ),
+                                                    esc_html( $entry['ts'] ?? '' ),
+                                                    $db,
+                                                    esc_html( $api ),
+                                                    esc_html( implode( ',', $entry['fields'] ?? [] ) )
+                                                );
+                                            }
+                                            echo '</div>';
+                                            echo '<p><a href="' . esc_url( add_query_arg( 'siloq_clear_debug_log', '1' ) ) . '" class="button button-small" style="margin-top:6px;">Clear Log</a></p>';
+                                        }
+                                        // Handle clear action
+                                        if ( isset( $_GET['siloq_clear_debug_log'] ) && current_user_can( 'manage_options' ) ) {
+                                            delete_option( 'siloq_debug_log' );
+                                        }
+                                        ?>
+                                    </td>
+                                </tr>
+
+                                <tr>
                                     <th scope="row">
                                         <label for="siloq_sync_frequency">
                                             <?php _e('Auto-Sync Frequency', 'siloq-connector'); ?>
@@ -937,14 +971,30 @@ class Siloq_Admin {
                     success: function(response) {
                         $btn.prop('disabled', false).text('Save Business Profile');
                         if (response.success) {
-                            $status.addClass('success').html('<span class="dashicons dashicons-yes"></span> ' + response.data.message);
+                            // Success notice — green, dismissible
+                            var msg = response.data.message || 'Business profile saved successfully.';
+                            var note = response.data.api_note ? '<br><small style="opacity:.8">' + response.data.api_note + '</small>' : '';
+                            $status.removeClass('error').addClass('success')
+                                .html('<span class="dashicons dashicons-yes-alt"></span> ' + msg + note)
+                                .show();
+                            // Auto-dismiss after 6 seconds
+                            setTimeout(function() { $status.fadeOut(); }, 6000);
                         } else {
-                            $status.addClass('error').text(response.data ? response.data.message : 'Failed to save');
+                            // Error notice — red, stays visible until dismissed
+                            var errMsg = (response.data && response.data.message)
+                                ? response.data.message
+                                : 'Save failed. Please try again or contact support.';
+                            $status.removeClass('success').addClass('error')
+                                .html('<strong>Save failed:</strong> ' + errMsg +
+                                      '<br><small>Check Settings → Debug for details.</small>')
+                                .show();
                         }
                     },
-                    error: function() {
+                    error: function(xhr) {
                         $btn.prop('disabled', false).text('Save Business Profile');
-                        $status.addClass('error').text('Connection error. Please try again.');
+                        $status.removeClass('success').addClass('error')
+                            .html('<strong>Connection error.</strong> Could not reach the server. Check your internet connection and try again.')
+                            .show();
                     }
                 });
             });

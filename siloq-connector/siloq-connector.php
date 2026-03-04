@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.68
+* Version: 1.5.69
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.68');
+define('SILOQ_VERSION', '1.5.69');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -919,18 +919,42 @@ class Siloq_Connector {
             ? array_map( 'sanitize_text_field', (array) $_POST['service_areas'] )
             : [];
 
-        // Save ALL fields to WP options — this is the authoritative local store.
-        // business_type and primary_services were previously only sent to the API
-        // and lost when the API call failed. Now they survive offline too.
-        update_option( 'siloq_business_name',    $business_name );
-        update_option( 'siloq_phone',            $phone );
-        update_option( 'siloq_address',          $address );
-        update_option( 'siloq_city',             $city );
-        update_option( 'siloq_state',            $state );
-        update_option( 'siloq_zip',              $zip );
-        update_option( 'siloq_business_type',    $business_type );
-        update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) );
-        update_option( 'siloq_service_areas',    wp_json_encode( $service_areas ) );
+        // ── Save to WP options (authoritative local store) ────────────────
+        $db_results = [
+            'business_name'    => update_option( 'siloq_business_name',    $business_name ),
+            'phone'            => update_option( 'siloq_phone',            $phone ),
+            'address'          => update_option( 'siloq_address',          $address ),
+            'city'             => update_option( 'siloq_city',             $city ),
+            'state'            => update_option( 'siloq_state',            $state ),
+            'zip'              => update_option( 'siloq_zip',              $zip ),
+            'business_type'    => update_option( 'siloq_business_type',    $business_type ),
+            'primary_services' => update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) ),
+            'service_areas'    => update_option( 'siloq_service_areas',    wp_json_encode( $service_areas ) ),
+        ];
+
+        // Verify the write — read back and confirm business_name at minimum
+        $verify_name = get_option( 'siloq_business_name', '__MISSING__' );
+        $db_success  = ( $verify_name !== '__MISSING__' );
+
+        // Debug log entry
+        $log_entry = [
+            'ts'          => current_time( 'mysql' ),
+            'fields'      => array_keys( array_filter( compact( 'business_name', 'phone', 'address', 'city', 'state', 'zip', 'business_type' ) ) ),
+            'services'    => count( $primary_services ),
+            'areas'       => count( $service_areas ),
+            'db_verified' => $db_success,
+            'api_sync'    => null, // filled below
+        ];
+
+        if ( ! $db_success ) {
+            $log_entry['api_sync'] = 'skipped_db_fail';
+            self::append_debug_log( $log_entry );
+            wp_send_json_error( [
+                'message' => 'Database write failed — business profile was not saved. Check your WordPress database permissions and try again.',
+                'code'    => 'DB_WRITE_FAILED',
+            ] );
+            return;
+        }
 
         // Sync to Siloq API — correct endpoint: PATCH /sites/{id}/entity-profile/
         // Fields mapped to API schema (street_address/zip_code not address/zip).
@@ -969,10 +993,20 @@ class Siloq_Connector {
                 ]
             );
 
-            if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) >= 400 ) {
-                $api_sync_note = 'Saved. API sync will retry on next load.';
+            $api_code = is_wp_error( $response ) ? 0 : wp_remote_retrieve_response_code( $response );
+            if ( is_wp_error( $response ) || $api_code >= 400 ) {
+                $api_sync_note              = 'Saved locally. API sync failed — your data is safe but may not appear in the Siloq app until the next sync.';
+                $log_entry['api_sync']      = 'failed';
+                $log_entry['api_code']      = $api_code;
+                $log_entry['api_error']     = is_wp_error( $response ) ? $response->get_error_message() : '';
+            } else {
+                $log_entry['api_sync'] = 'ok';
             }
+        } else {
+            $log_entry['api_sync'] = 'skipped_no_credentials';
         }
+
+        self::append_debug_log( $log_entry );
 
         $profile_data = [
             'business_name'    => $business_name,
@@ -987,11 +1021,23 @@ class Siloq_Connector {
         ];
 
         wp_send_json_success( [
-            'message' => $api_sync_note ?: 'Business profile saved.',
-            'profile' => $profile_data,
+            'message'    => 'Business profile saved successfully. Siloq will use this data for all recommendations on this site.',
+            'api_note'   => $api_sync_note,
+            'profile'    => $profile_data,
         ] );
     }
     
+    /**
+     * Append a structured entry to the Siloq debug log (stored in WP options).
+     * Keeps the last 50 entries. Accessible from Settings > Debug.
+     */
+    public static function append_debug_log( $entry ) {
+        $log     = json_decode( get_option( 'siloq_debug_log', '[]' ), true ) ?: [];
+        $log[]   = $entry;
+        $log     = array_slice( $log, -50 ); // keep last 50
+        update_option( 'siloq_debug_log', wp_json_encode( $log ) );
+    }
+
     /**
      * Add settings link to plugins page
      */
