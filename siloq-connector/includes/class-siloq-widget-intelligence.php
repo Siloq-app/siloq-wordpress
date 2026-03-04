@@ -159,10 +159,20 @@ class Siloq_Widget_Intelligence {
             return;
         }
 
-        $post_id = intval( $_POST['page_id'] ?? 0 );
-        $site_id = get_option( 'siloq_site_id', '' );
-        $api_key = get_option( 'siloq_api_key', '' );
-        $payload = $_POST['payload'] ?? [];
+        $post_id     = intval( $_POST['page_id'] ?? 0 );
+        $site_id     = get_option( 'siloq_site_id', '' );
+        $api_key     = get_option( 'siloq_api_key', '' );
+        $raw_payload = wp_unslash( $_POST['payload'] ?? '' );
+
+        // JS sends JSON.stringify(payload) — decode it. Fall back to array if old format.
+        if ( is_string( $raw_payload ) && strlen( $raw_payload ) > 0 ) {
+            $payload = json_decode( $raw_payload, true );
+            if ( json_last_error() !== JSON_ERROR_NONE ) {
+                $payload = [];
+            }
+        } else {
+            $payload = is_array( $raw_payload ) ? $raw_payload : [];
+        }
 
         // Attempt live Siloq API call
         $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
