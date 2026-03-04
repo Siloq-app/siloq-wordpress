@@ -246,7 +246,7 @@ class Siloq_Admin {
                             <p><span class="spinner is-active" style="float:none;"></span> <?php _e('Loading profile...', 'siloq-connector'); ?></p>
                         </div>
                         
-                        <div id="siloq-profile-form" style="display:none;">
+                        <div id="siloq-profile-form">
                             <table class="form-table">
                                 <tr>
                                     <th scope="row">
@@ -262,6 +262,44 @@ class Siloq_Admin {
                                             <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
                                         </select>
                                         <p class="description"><?php _e('Helps Siloq suggest the best content structure.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_business_name"><?php _e('Business Name', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <input type="text" id="siloq_business_name" name="siloq_business_name" class="regular-text" placeholder="<?php _e('e.g. Able Electric Inc', 'siloq-connector'); ?>">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_phone"><?php _e('Phone Number', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <input type="text" id="siloq_phone" name="siloq_phone" class="regular-text" placeholder="<?php _e('e.g. (913) 384-5203', 'siloq-connector'); ?>">
+                                        <p class="description"><?php _e('Required for LocalBusiness schema.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
+                                        <label for="siloq_address"><?php _e('Street Address', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <input type="text" id="siloq_address" name="siloq_address" class="regular-text" placeholder="<?php _e('e.g. 123 Main St', 'siloq-connector'); ?>">
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
+                                        <label><?php _e('City / State / Zip', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                            <input type="text" id="siloq_city" name="siloq_city" placeholder="<?php _e('City', 'siloq-connector'); ?>" style="width:160px;">
+                                            <input type="text" id="siloq_state" name="siloq_state" placeholder="<?php _e('State (e.g. MO)', 'siloq-connector'); ?>" style="width:100px;" maxlength="2">
+                                            <input type="text" id="siloq_zip" name="siloq_zip" placeholder="<?php _e('ZIP', 'siloq-connector'); ?>" style="width:90px;" maxlength="10">
+                                        </div>
+                                        <p class="description"><?php _e('Used for LocalBusiness schema and location-based recommendations.', 'siloq-connector'); ?></p>
                                     </td>
                                 </tr>
                                 <tr>
@@ -744,8 +782,15 @@ class Siloq_Admin {
                     },
                     success: function(response) {
                         $('#siloq-profile-loading').hide();
+                        $('#siloq-profile-form').show();
                         if (response.success && response.data) {
                             var profile = response.data;
+                            $('#siloq_business_name').val(profile.business_name || '');
+                            $('#siloq_phone').val(profile.phone || '');
+                            $('#siloq_address').val(profile.address || '');
+                            $('#siloq_city').val(profile.city || '');
+                            $('#siloq_state').val(profile.state || '');
+                            $('#siloq_zip').val(profile.zip || '');
                             $('#siloq_business_type').val(profile.business_type || '');
                             siloqServices = profile.primary_services || [];
                             siloqAreas = profile.service_areas || [];
@@ -757,9 +802,11 @@ class Siloq_Admin {
                             showNotification('Failed to load business profile', 'error');
                             $('#siloq-profile-error').show();
                         }
+                        // Always show form even on error so user can fill it in manually
                     },
                     error: function() {
                         $('#siloq-profile-loading').hide();
+                        $('#siloq-profile-form').show();
                         showNotification('Network error loading profile', 'error');
                         $('#siloq-profile-error').show();
                     }
@@ -877,6 +924,12 @@ class Siloq_Admin {
                     data: {
                         action: 'siloq_save_business_profile',
                         nonce: siloqAjax.nonce,
+                        business_name: $('#siloq_business_name').val(),
+                        phone: $('#siloq_phone').val(),
+                        address: $('#siloq_address').val(),
+                        city: $('#siloq_city').val(),
+                        state: $('#siloq_state').val(),
+                        zip: $('#siloq_zip').val(),
                         business_type: $('#siloq_business_type').val(),
                         primary_services: siloqServices,
                         service_areas: siloqAreas

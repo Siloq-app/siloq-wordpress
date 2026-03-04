@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.52
+* Version: 1.5.53
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.52');
+define('SILOQ_VERSION', '1.5.53');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -826,9 +826,32 @@ class Siloq_Connector {
         $result = $api_client->get_business_profile();
         
         if ($result['success']) {
-            wp_send_json_success($result);
+            // Merge locally stored fields into the API result
+            if (!isset($result['data']) || !is_array($result['data'])) {
+                $result['data'] = array();
+            }
+            $result['data'] = array_merge(array(
+                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
+                'phone'         => get_option('siloq_phone', ''),
+                'address'       => get_option('siloq_address', ''),
+                'city'          => get_option('siloq_city', ''),
+                'state'         => get_option('siloq_state', ''),
+                'zip'           => get_option('siloq_zip', ''),
+            ), $result['data']);
+            wp_send_json_success($result['data']);
         } else {
-            wp_send_json_error($result);
+            // Even on API failure return locally stored fields so form is usable
+            wp_send_json_success(array(
+                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
+                'phone'         => get_option('siloq_phone', ''),
+                'address'       => get_option('siloq_address', ''),
+                'city'          => get_option('siloq_city', ''),
+                'state'         => get_option('siloq_state', ''),
+                'zip'           => get_option('siloq_zip', ''),
+                'business_type' => '',
+                'primary_services' => [],
+                'service_areas'    => [],
+            ));
         }
     }
     
@@ -842,14 +865,39 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        
+
+        // Save new local fields to WP options
+        $business_name = sanitize_text_field($_POST['business_name'] ?? '');
+        $phone         = sanitize_text_field($_POST['phone'] ?? '');
+        $address       = sanitize_text_field($_POST['address'] ?? '');
+        $city          = sanitize_text_field($_POST['city'] ?? '');
+        $state         = sanitize_text_field(strtoupper($_POST['state'] ?? ''));
+        $zip           = sanitize_text_field($_POST['zip'] ?? '');
+
+        update_option('siloq_business_name', $business_name);
+        update_option('siloq_phone',         $phone);
+        update_option('siloq_address',       $address);
+        update_option('siloq_city',          $city);
+        update_option('siloq_state',         $state);
+        update_option('siloq_zip',           $zip);
+
         $profile_data = isset($_POST['profile']) ? $_POST['profile'] : array();
-        
+
+        // Build profile_data from POST fields if not sent as nested array
         if (empty($profile_data)) {
-            wp_send_json_error(array('message' => 'Missing profile data'));
-            return;
+            $profile_data = array(
+                'business_name'    => $business_name,
+                'phone'            => $phone,
+                'address'          => $address,
+                'city'             => $city,
+                'state'            => $state,
+                'zip'              => $zip,
+                'business_type'    => sanitize_text_field($_POST['business_type'] ?? ''),
+                'primary_services' => isset($_POST['primary_services']) ? array_map('sanitize_text_field', (array) $_POST['primary_services']) : [],
+                'service_areas'    => isset($_POST['service_areas']) ? array_map('sanitize_text_field', (array) $_POST['service_areas']) : [],
+            );
         }
-        
+
         $api_client = new Siloq_API_Client();
         $result = $api_client->save_business_profile($profile_data);
         
