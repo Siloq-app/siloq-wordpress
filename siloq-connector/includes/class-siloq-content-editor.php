@@ -156,6 +156,28 @@ class Siloq_Content_Editor {
                         ];
                     }
                     break;
+
+                case 'accordion':
+                case 'toggle':
+                    // Each accordion/toggle item = one FAQ entry.
+                    // Added as read-only analysis items (apply not supported for
+                    // individual tabs — user must edit manually in Elementor).
+                    $tabs = $settings['tabs'] ?? [];
+                    foreach ( $tabs as $i => $tab ) {
+                        $q = wp_strip_all_tags( $tab['tab_title']   ?? '' );
+                        $a = wp_strip_all_tags( $tab['tab_content'] ?? '' );
+                        if ( $q ) {
+                            $widgets[] = [
+                                'id'       => $id . '_tab_' . $i,
+                                'type'     => 'faq-item',
+                                'label'    => 'FAQ: ' . substr( $q, 0, 50 ) . ( strlen( $q ) > 50 ? '…' : '' ),
+                                'content'  => $q . ( $a ? "\n" . $a : '' ),
+                                'field'    => 'tabs',
+                                'readonly' => true,  // Apply not supported per-tab
+                            ];
+                        }
+                    }
+                    break;
             }
         }
     }

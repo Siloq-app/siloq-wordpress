@@ -83,9 +83,10 @@
         var typeLabels = {
             'heading': '🔤 Heading',
             'text-editor': '📝 Text',
-            'button': '🔘 Button',
-            'icon-box': '📦 Box',
-            'image-box': '🖼️ Box'
+            'button':    '🔘 Button',
+            'icon-box':  '📦 Box',
+            'image-box': '🖼️ Box',
+            'faq-item':  '❓ FAQ'
         };
         var html = '';
         widgetList.forEach(function(w) {
@@ -98,17 +99,23 @@
             html += '<span style="font-size:10px;font-weight:600;padding:2px 6px;background:#ede9fe;color:#4f46e5;border-radius:10px;">' + esc(label) + '</span>';
             html += '</div>';
             html += '<p style="font-size:11px;color:#6b7280;margin:0 0 8px;font-style:italic;">' + esc(preview) + '</p>';
-            html += '<button class="siloq-suggest-btn" data-id="' + esc(w.id) + '" data-type="' + esc(w.type) + '" data-field="' + esc(w.field) + '" data-content="' + encodeURIComponent(w.content || '') + '" style="font-size:11px;padding:4px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;color:#374151;">💡 Suggest Edit</button>';
-            // Suggestion result area
-            html += '<div class="siloq-suggestion-result" id="siloq-sr-' + esc(w.id) + '" style="display:none;margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">';
-            html += '<p style="font-size:10px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;">Current</p>';
-            html += '<p class="siloq-sr-before" style="font-size:11px;color:#9ca3af;text-decoration:line-through;margin:0 0 8px;"></p>';
-            html += '<p style="font-size:10px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;">Suggested</p>';
-            html += '<p class="siloq-sr-after" style="font-size:11px;color:#065f46;background:#d1fae5;padding:6px 8px;border-radius:5px;margin:0 0 8px;"></p>';
-            html += '<div style="display:flex;gap:6px;">';
-            html += '<button class="siloq-apply-btn" data-id="' + esc(w.id) + '" data-field="' + esc(w.field) + '" style="font-size:11px;padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:5px;cursor:pointer;">✅ Apply</button>';
-            html += '<button class="siloq-skip-btn" data-id="' + esc(w.id) + '" style="font-size:11px;padding:4px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;">Skip</button>';
-            html += '</div></div>';
+
+            if (w.readonly || w.type === 'faq-item') {
+                // FAQ items: show as read-only with note (apply not supported per-tab)
+                html += '<p style="font-size:10px;color:#9ca3af;margin:0;font-style:italic;">✅ Detected for FAQPage schema · Edit in Elementor accordion widget</p>';
+            } else {
+                html += '<button class="siloq-suggest-btn" data-id="' + esc(w.id) + '" data-type="' + esc(w.type) + '" data-field="' + esc(w.field) + '" data-content="' + encodeURIComponent(w.content || '') + '" style="font-size:11px;padding:4px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;color:#374151;">💡 Suggest Edit</button>';
+                // Suggestion result area
+                html += '<div class="siloq-suggestion-result" id="siloq-sr-' + esc(w.id) + '" style="display:none;margin-top:10px;border-top:1px solid #e5e7eb;padding-top:10px;">';
+                html += '<p style="font-size:10px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;">Current</p>';
+                html += '<p class="siloq-sr-before" style="font-size:11px;color:#9ca3af;text-decoration:line-through;margin:0 0 8px;"></p>';
+                html += '<p style="font-size:10px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;">Suggested</p>';
+                html += '<p class="siloq-sr-after" style="font-size:11px;color:#065f46;background:#d1fae5;padding:6px 8px;border-radius:5px;margin:0 0 8px;"></p>';
+                html += '<div style="display:flex;gap:6px;">';
+                html += '<button class="siloq-apply-btn" data-id="' + esc(w.id) + '" data-field="' + esc(w.field) + '" style="font-size:11px;padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:5px;cursor:pointer;">✅ Apply</button>';
+                html += '<button class="siloq-skip-btn" data-id="' + esc(w.id) + '" style="font-size:11px;padding:4px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;">Skip</button>';
+                html += '</div></div>';
+            }
             html += '</div>';
         });
         $('#siloq-widget-list').html(html);

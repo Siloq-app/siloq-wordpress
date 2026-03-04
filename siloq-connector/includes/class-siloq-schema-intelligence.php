@@ -790,6 +790,59 @@ class Siloq_Schema_Intelligence {
      * @param array $page_analysis
      * @return array
      */
+    /**
+     * Read FAQ Q&A pairs directly from Elementor page data (_elementor_data).
+     * Extracts accordion and toggle widgets — the most common FAQ widget types.
+     * Used when _siloq_analysis_data doesn't yet contain faq_items (e.g. before
+     * the first sync, or when accordion content was added after last sync).
+     *
+     * @param int $post_id
+     * @return array Array of { question: string, answer: string }
+     */
+    private static function extract_faq_from_elementor( $post_id ) {
+        $raw = get_post_meta( $post_id, '_elementor_data', true );
+        if ( empty( $raw ) ) {
+            return [];
+        }
+        $elements = json_decode( $raw, true );
+        if ( ! is_array( $elements ) ) {
+            return [];
+        }
+        return self::extract_faq_items_recursive( $elements );
+    }
+
+    /**
+     * Recursive walker for extract_faq_from_elementor().
+     *
+     * @param array $elements
+     * @return array
+     */
+    private static function extract_faq_items_recursive( $elements ) {
+        $faqs = [];
+        foreach ( $elements as $el ) {
+            if ( ! empty( $el['elements'] ) ) {
+                $faqs = array_merge( $faqs, self::extract_faq_items_recursive( $el['elements'] ) );
+            }
+            if ( ( $el['elType'] ?? '' ) !== 'widget' ) {
+                continue;
+            }
+            $type     = $el['widgetType'] ?? '';
+            $settings = $el['settings']   ?? [];
+
+            if ( in_array( $type, [ 'accordion', 'toggle' ], true ) ) {
+                $tabs = $settings['tabs'] ?? [];
+                foreach ( $tabs as $tab ) {
+                    $q = wp_strip_all_tags( $tab['tab_title']   ?? '' );
+                    $a = wp_strip_all_tags( $tab['tab_content'] ?? '' );
+                    if ( $q && $a ) {
+                        $faqs[] = [ 'question' => $q, 'answer' => $a ];
+                    }
+                }
+            }
+        }
+        return $faqs;
+    }
+
     private static function resolve_faq_items( $post_id, $page_analysis = [] ) {
         // 1. From page analysis (highest priority — freshest data).
         if ( ! empty( $page_analysis['faq_items'] ) && is_array( $page_analysis['faq_items'] ) ) {
@@ -910,6 +963,16 @@ class Siloq_Schema_Intelligence {
         // Allow JS to pass has_visible_rating directly in the request.
         if ( isset( $_POST['has_visible_rating'] ) ) {
             $page_analysis['has_visible_rating'] = (bool) $_POST['has_visible_rating'];
+        }
+
+        // Supplement faq_items from live Elementor data when not already in analysis.
+        // The sync may not have extracted accordion/toggle Q&A pairs — reading directly
+        // from _elementor_data ensures FAQPage schema is generated when FAQs exist on page.
+        if ( empty( $page_analysis['faq_items'] ) ) {
+            $live_faqs = self::extract_faq_from_elementor( $post_id );
+            if ( ! empty( $live_faqs ) ) {
+                $page_analysis['faq_items'] = $live_faqs;
+            }
         }
 
         $schemas = self::generate( $post_id, $entity_profile, $page_analysis );
