@@ -1,5 +1,5 @@
 /**
- * Siloq Admin Dashboard — v1.5.60
+ * Siloq Admin Dashboard — v1.5.63
  * Tab switching, AJAX stats, SVG score ring, readiness meter, sync handler.
  */
 (function () {
