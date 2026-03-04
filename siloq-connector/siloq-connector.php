@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.53
+* Version: 1.5.54
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.53');
+define('SILOQ_VERSION', '1.5.54');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -898,14 +898,23 @@ class Siloq_Connector {
             );
         }
 
-        $api_client = new Siloq_API_Client();
-        $result = $api_client->save_business_profile($profile_data);
-        
-        if ($result['success']) {
-            wp_send_json_success($result);
-        } else {
-            wp_send_json_error($result);
+        // WP options already saved above — return success immediately.
+        // Attempt to sync to the Siloq API as a best-effort bonus (non-blocking).
+        $api_sync_note = '';
+        try {
+            $api_client = new Siloq_API_Client();
+            $result = $api_client->save_business_profile($profile_data);
+            if ( ! $result['success'] ) {
+                $api_sync_note = 'Saved locally. API sync pending.';
+            }
+        } catch ( Exception $e ) {
+            $api_sync_note = 'Saved locally. API sync pending.';
         }
+
+        wp_send_json_success( array(
+            'message' => $api_sync_note ?: 'Business profile saved.',
+            'profile' => $profile_data,
+        ) );
     }
     
     /**
