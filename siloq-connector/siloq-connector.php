@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.59
+* Version: 1.5.60
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.59');
+define('SILOQ_VERSION', '1.5.60');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -166,6 +166,41 @@ class Siloq_Connector {
         if ( is_admin() ) {
             require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-widget-intelligence.php';
             Siloq_Widget_Intelligence::init();
+        }
+
+        // ── Widget Intelligence Core + per-builder intelligence ──────────
+        // Shared core must be loaded before any builder intelligence class.
+        // Each builder intelligence class enqueues its own JS/CSS on the
+        // appropriate hook so assets only load in the relevant editor.
+        if ( is_admin() ) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-widget-intelligence-core.php';
+
+            $intelligence_map = [
+                Siloq_Builder_Detector::BUILDER_GUTENBERG   => 'class-siloq-gutenberg-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_DIVI        => 'class-siloq-divi-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_BEAVER      => 'class-siloq-beaver-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_WPBAKERY    => 'class-siloq-wpbakery-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_BRICKS      => 'class-siloq-bricks-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_OXYGEN      => 'class-siloq-oxygen-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_CORNERSTONE => 'class-siloq-cornerstone-intelligence.php',
+                Siloq_Builder_Detector::BUILDER_CLASSIC     => 'class-siloq-classic-intelligence.php',
+            ];
+
+            $detected_builder = Siloq_Builder_Detector::detect();
+
+            if ( isset( $intelligence_map[ $detected_builder ] ) ) {
+                require_once SILOQ_PLUGIN_DIR . 'includes/' . $intelligence_map[ $detected_builder ];
+
+                // Derive class name from filename:
+                // e.g. class-siloq-gutenberg-intelligence.php → Siloq_Gutenberg_Intelligence
+                $file       = $intelligence_map[ $detected_builder ];
+                $class_name = str_replace( [ 'class-', '-', '.php' ], [ '', '_', '' ], $file );
+                $class_name = implode( '_', array_map( 'ucfirst', explode( '_', $class_name ) ) );
+
+                if ( class_exists( $class_name ) ) {
+                    call_user_func( [ $class_name, 'init' ] );
+                }
+            }
         }
 
         // ------------------------------------------------------------------
