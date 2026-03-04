@@ -846,37 +846,51 @@ class Siloq_Connector {
             return;
         }
         
-        $api_client = new Siloq_API_Client();
-        $result = $api_client->get_business_profile();
-        
-        if ($result['success']) {
-            // Merge locally stored fields into the API result
-            if (!isset($result['data']) || !is_array($result['data'])) {
-                $result['data'] = array();
+        // Build local profile from WP options — always available, API-independent
+        $local = [
+            'business_name'    => get_option( 'siloq_business_name', get_bloginfo( 'name' ) ),
+            'phone'            => get_option( 'siloq_phone', '' ),
+            'address'          => get_option( 'siloq_address', '' ),
+            'city'             => get_option( 'siloq_city', '' ),
+            'state'            => get_option( 'siloq_state', '' ),
+            'zip'              => get_option( 'siloq_zip', '' ),
+            'business_type'    => get_option( 'siloq_business_type', '' ),
+            'primary_services' => json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [],
+            'service_areas'    => json_decode( get_option( 'siloq_service_areas',    '[]' ), true ) ?: [],
+        ];
+
+        // Try to supplement with API data (fresher, includes service_cities etc.)
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+
+        if ( $site_id && $api_key ) {
+            $response = wp_remote_get(
+                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                [
+                    'timeout' => 8,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Accept'        => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                ]
+            );
+
+            if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 ) {
+                $api_data = json_decode( wp_remote_retrieve_body( $response ), true );
+                if ( is_array( $api_data ) ) {
+                    // Normalize API field names to form field names
+                    if ( isset( $api_data['street_address'] ) ) $api_data['address']       = $api_data['street_address'];
+                    if ( isset( $api_data['zip_code'] ) )       $api_data['zip']            = $api_data['zip_code'];
+                    if ( isset( $api_data['service_cities'] ) ) $api_data['service_areas']  = $api_data['service_cities'];
+                    // API wins over local for overlapping fields
+                    $local = array_merge( $local, array_filter( $api_data, fn( $v ) => $v !== null && $v !== '' ) );
+                }
             }
-            $result['data'] = array_merge(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-            ), $result['data']);
-            wp_send_json_success($result['data']);
-        } else {
-            // Even on API failure return locally stored fields so form is usable
-            wp_send_json_success(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-                'business_type' => '',
-                'primary_services' => [],
-                'service_areas'    => [],
-            ));
         }
+
+        wp_send_json_success( $local );
     }
     
     /**
@@ -890,55 +904,92 @@ class Siloq_Connector {
             return;
         }
 
-        // Save new local fields to WP options
-        $business_name = sanitize_text_field($_POST['business_name'] ?? '');
-        $phone         = sanitize_text_field($_POST['phone'] ?? '');
-        $address       = sanitize_text_field($_POST['address'] ?? '');
-        $city          = sanitize_text_field($_POST['city'] ?? '');
-        $state         = sanitize_text_field(strtoupper($_POST['state'] ?? ''));
-        $zip           = sanitize_text_field($_POST['zip'] ?? '');
+        // Sanitize all fields
+        $business_name    = sanitize_text_field( $_POST['business_name']    ?? '' );
+        $phone            = sanitize_text_field( $_POST['phone']            ?? '' );
+        $address          = sanitize_text_field( $_POST['address']          ?? '' );
+        $city             = sanitize_text_field( $_POST['city']             ?? '' );
+        $state            = sanitize_text_field( strtoupper( $_POST['state'] ?? '' ) );
+        $zip              = sanitize_text_field( $_POST['zip']              ?? '' );
+        $business_type    = sanitize_text_field( $_POST['business_type']    ?? '' );
+        $primary_services = isset( $_POST['primary_services'] )
+            ? array_map( 'sanitize_text_field', (array) $_POST['primary_services'] )
+            : [];
+        $service_areas    = isset( $_POST['service_areas'] )
+            ? array_map( 'sanitize_text_field', (array) $_POST['service_areas'] )
+            : [];
 
-        update_option('siloq_business_name', $business_name);
-        update_option('siloq_phone',         $phone);
-        update_option('siloq_address',       $address);
-        update_option('siloq_city',          $city);
-        update_option('siloq_state',         $state);
-        update_option('siloq_zip',           $zip);
+        // Save ALL fields to WP options — this is the authoritative local store.
+        // business_type and primary_services were previously only sent to the API
+        // and lost when the API call failed. Now they survive offline too.
+        update_option( 'siloq_business_name',    $business_name );
+        update_option( 'siloq_phone',            $phone );
+        update_option( 'siloq_address',          $address );
+        update_option( 'siloq_city',             $city );
+        update_option( 'siloq_state',            $state );
+        update_option( 'siloq_zip',              $zip );
+        update_option( 'siloq_business_type',    $business_type );
+        update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) );
+        update_option( 'siloq_service_areas',    wp_json_encode( $service_areas ) );
 
-        $profile_data = isset($_POST['profile']) ? $_POST['profile'] : array();
+        // Sync to Siloq API — correct endpoint: PATCH /sites/{id}/entity-profile/
+        // Fields mapped to API schema (street_address/zip_code not address/zip).
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
 
-        // Build profile_data from POST fields if not sent as nested array
-        if (empty($profile_data)) {
-            $profile_data = array(
+        $api_sync_note = '';
+        if ( $site_id && $api_key ) {
+            $api_payload = array_filter( [
                 'business_name'    => $business_name,
                 'phone'            => $phone,
-                'address'          => $address,
+                'street_address'   => $address,    // API field name
                 'city'             => $city,
                 'state'            => $state,
-                'zip'              => $zip,
-                'business_type'    => sanitize_text_field($_POST['business_type'] ?? ''),
-                'primary_services' => isset($_POST['primary_services']) ? array_map('sanitize_text_field', (array) $_POST['primary_services']) : [],
-                'service_areas'    => isset($_POST['service_areas']) ? array_map('sanitize_text_field', (array) $_POST['service_areas']) : [],
+                'zip_code'         => $zip,        // API field name
+                'business_type'    => $business_type,
+                'primary_services' => $primary_services,
+                'service_cities'   => $service_areas,  // API field name
+            ], function( $v ) {
+                return $v !== '' && $v !== null && $v !== [];
+            } );
+
+            $response = wp_remote_request(
+                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                [
+                    'method'  => 'PATCH',
+                    'timeout' => 10,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                        'Accept'        => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                    'body' => wp_json_encode( $api_payload ),
+                ]
             );
-        }
 
-        // WP options already saved above — return success immediately.
-        // Attempt to sync to the Siloq API as a best-effort bonus (non-blocking).
-        $api_sync_note = '';
-        try {
-            $api_client = new Siloq_API_Client();
-            $result = $api_client->save_business_profile($profile_data);
-            if ( ! $result['success'] ) {
-                $api_sync_note = 'Saved locally. API sync pending.';
+            if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) >= 400 ) {
+                $api_sync_note = 'Saved. API sync will retry on next load.';
             }
-        } catch ( Exception $e ) {
-            $api_sync_note = 'Saved locally. API sync pending.';
         }
 
-        wp_send_json_success( array(
+        $profile_data = [
+            'business_name'    => $business_name,
+            'phone'            => $phone,
+            'address'          => $address,
+            'city'             => $city,
+            'state'            => $state,
+            'zip'              => $zip,
+            'business_type'    => $business_type,
+            'primary_services' => $primary_services,
+            'service_areas'    => $service_areas,
+        ];
+
+        wp_send_json_success( [
             'message' => $api_sync_note ?: 'Business profile saved.',
             'profile' => $profile_data,
-        ) );
+        ] );
     }
     
     /**
