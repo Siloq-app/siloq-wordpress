@@ -930,7 +930,7 @@ class Siloq_Schema_Intelligence {
             'count'         => count( $schemas ),
             'schema_types'  => $schema_types,
             'page_type'     => self::detect_page_type( $post_id, $page_analysis ),
-            'business_type' => $entity_profile['business_type'] ?? 'unknown',
+            'business_type' => self::map_business_type( $entity_profile['business_type'] ?? '' ) ?: ( $entity_profile['business_type'] ?? 'LocalBusiness' ),
             'validation'    => $validation,
         ] );
     }
