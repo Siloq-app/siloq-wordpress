@@ -80,7 +80,7 @@ class Siloq_Elementor_Panel {
         );
         wp_localize_script( 'siloq-content-editor', 'siloqContentEditor', [
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'siloq_ai_nonce' ),
+            'nonce'    => wp_create_nonce( 'siloq_ajax_nonce' ),
             'postId'   => $post_id,
             'apiBase'  => defined('SILOQ_API_BASE') ? SILOQ_API_BASE : 'https://api.siloq.app',
             'siteId'   => get_option('siloq_site_id', ''),
