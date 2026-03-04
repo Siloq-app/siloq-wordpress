@@ -1021,60 +1021,243 @@ class Siloq_Admin {
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
-        
+
         ?>
-        <div class="wrap siloq-admin-wrap">
-            <div class="siloq-header">
-                <h1>
-                    <?php _e('Siloq Dashboard', 'siloq-connector'); ?>
-                </h1>
-                <p class="siloq-tagline"><?php _e('SEO Content Management Dashboard — Monitor and manage your content optimization.', 'siloq-connector'); ?></p>
-            </div>
-            
-            <div class="siloq-dashboard-container">
-                <div class="siloq-card">
-                    <h2><?php _e('Overview', 'siloq-connector'); ?></h2>
-                    <p><?php _e('Welcome to the Siloq Dashboard. Here you can monitor your SEO performance and manage content optimization.', 'siloq-connector'); ?></p>
-                    
-                    <div class="siloq-stats-grid">
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('Pages Synced', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-pages-synced">0</div>
+        <div class="wrap siloq-admin-wrap siloq-dash-wrap">
+
+            <!-- ======= Tab Navigation ======= -->
+            <nav class="siloq-dash-tabs" role="tablist">
+                <button class="siloq-dash-tab is-active" data-tab="dashboard" role="tab" aria-selected="true">
+                    <span class="dashicons dashicons-dashboard"></span>
+                    <?php esc_html_e('Dashboard', 'siloq-connector'); ?>
+                </button>
+                <button class="siloq-dash-tab" data-tab="pages" role="tab" aria-selected="false">
+                    <span class="dashicons dashicons-admin-page"></span>
+                    <?php esc_html_e('Pages', 'siloq-connector'); ?>
+                </button>
+                <button class="siloq-dash-tab" data-tab="schema" role="tab" aria-selected="false">
+                    <span class="dashicons dashicons-businessman"></span>
+                    <?php esc_html_e('Business Data', 'siloq-connector'); ?>
+                </button>
+                <button class="siloq-dash-tab" data-tab="settings" role="tab" aria-selected="false">
+                    <span class="dashicons dashicons-admin-generic"></span>
+                    <?php esc_html_e('Settings', 'siloq-connector'); ?>
+                </button>
+            </nav>
+
+            <!-- ======= DASHBOARD TAB ======= -->
+            <div class="siloq-dash-panel is-active" data-panel="dashboard" role="tabpanel">
+
+                <!-- ZONE 1 — Site Health Hero -->
+                <div class="siloq-hero-card">
+                    <div class="siloq-hero-inner">
+                        <div class="siloq-score-ring-wrap">
+                            <svg class="siloq-score-ring" viewBox="0 0 140 140">
+                                <circle class="siloq-score-ring__bg" cx="70" cy="70" r="60" />
+                                <circle class="siloq-score-ring__fg" cx="70" cy="70" r="60"
+                                    stroke-dasharray="376.99"
+                                    stroke-dashoffset="376.99" />
+                            </svg>
+                            <span class="siloq-score-ring__value" id="siloq-health-score">—</span>
                         </div>
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('Content Generated', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-content-generated">0</div>
-                        </div>
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('SEO Score', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-seo-score">--</div>
-                        </div>
+                        <p class="siloq-hero-sentence" id="siloq-hero-sentence">
+                            <?php esc_html_e('Loading your site health score…', 'siloq-connector'); ?>
+                        </p>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-sync')); ?>"
+                           class="siloq-btn siloq-btn--primary" id="siloq-hero-cta">
+                            <?php esc_html_e('Sync Pages Now', 'siloq-connector'); ?>
+                        </a>
                     </div>
                 </div>
-                
+
+                <!-- ZONE 2 — Three Cards -->
+                <div class="siloq-cards-row">
+
+                    <!-- Card 1: AI Citation Readiness -->
+                    <div class="siloq-dash-card" id="siloq-card-readiness">
+                        <h3><?php esc_html_e('AI Citation Readiness', 'siloq-connector'); ?></h3>
+                        <div class="siloq-readiness-meter-wrap">
+                            <div class="siloq-readiness-meter">
+                                <svg class="siloq-readiness-svg" viewBox="0 0 80 80">
+                                    <circle class="siloq-readiness-bg" cx="40" cy="40" r="34" />
+                                    <circle class="siloq-readiness-fg" cx="40" cy="40" r="34"
+                                        stroke-dasharray="213.63"
+                                        stroke-dashoffset="213.63" />
+                                </svg>
+                                <span class="siloq-readiness-pct" id="siloq-readiness-pct">—</span>
+                            </div>
+                        </div>
+                        <ul class="siloq-missing-fields" id="siloq-missing-fields">
+                            <li class="siloq-placeholder"><?php esc_html_e('Loading…', 'siloq-connector'); ?></li>
+                        </ul>
+                    </div>
+
+                    <!-- Card 2: Pages Needing Attention -->
+                    <div class="siloq-dash-card" id="siloq-card-attention">
+                        <h3><?php esc_html_e('Pages Needing Attention', 'siloq-connector'); ?></h3>
+                        <ul class="siloq-attention-list" id="siloq-attention-list">
+                            <li class="siloq-placeholder"><?php esc_html_e('Loading…', 'siloq-connector'); ?></li>
+                        </ul>
+                    </div>
+
+                    <!-- Card 3: Recent Wins -->
+                    <div class="siloq-dash-card" id="siloq-card-wins">
+                        <h3><?php esc_html_e('Recent Wins', 'siloq-connector'); ?></h3>
+                        <ul class="siloq-wins-list" id="siloq-wins-list">
+                            <li class="siloq-placeholder"><?php esc_html_e('Loading…', 'siloq-connector'); ?></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- ZONE 3 — Activity Footer -->
+                <div class="siloq-activity-footer">
+                    <span class="siloq-last-synced" id="siloq-last-synced">
+                        <?php esc_html_e('Last synced: checking…', 'siloq-connector'); ?>
+                    </span>
+                    <button type="button" class="siloq-btn siloq-btn--outline" id="siloq-sync-now-btn">
+                        <span class="dashicons dashicons-update"></span>
+                        <?php esc_html_e('Sync Now', 'siloq-connector'); ?>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ======= PAGES TAB ======= -->
+            <div class="siloq-dash-panel" data-panel="pages" role="tabpanel" hidden>
                 <div class="siloq-card">
-                    <h2><?php _e('Quick Actions', 'siloq-connector'); ?></h2>
+                    <h2><?php esc_html_e('Page Management', 'siloq-connector'); ?></h2>
+                    <p><?php esc_html_e('Sync and manage your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
                     <div class="siloq-actions-grid">
-                        <a href="<?php echo admin_url('admin.php?page=siloq-sync'); ?>" class="siloq-action-card">
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-sync')); ?>" class="siloq-action-card">
                             <span class="dashicons dashicons-update"></span>
-                            <h3><?php _e('Sync Pages', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Sync your WordPress pages with Siloq platform', 'siloq-connector'); ?></p>
+                            <h3><?php esc_html_e('Sync Pages', 'siloq-connector'); ?></h3>
+                            <p><?php esc_html_e('Sync your WordPress pages with Siloq platform', 'siloq-connector'); ?></p>
                         </a>
-                        <a href="<?php echo admin_url('admin.php?page=siloq-content-import'); ?>" class="siloq-action-card">
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-content-import')); ?>" class="siloq-action-card">
                             <span class="dashicons dashicons-download"></span>
-                            <h3><?php _e('Import Content', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Import AI-generated content from Siloq', 'siloq-connector'); ?></p>
+                            <h3><?php esc_html_e('Import Content', 'siloq-connector'); ?></h3>
+                            <p><?php esc_html_e('Import AI-generated content from Siloq', 'siloq-connector'); ?></p>
                         </a>
-                        <a href="<?php echo admin_url('admin.php?page=siloq-tali'); ?>" class="siloq-action-card">
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-tali')); ?>" class="siloq-action-card">
                             <span class="dashicons dashicons-admin-appearance"></span>
-                            <h3><?php _e('Theme Intelligence', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Configure theme-aware layout intelligence', 'siloq-connector'); ?></p>
+                            <h3><?php esc_html_e('Theme Intelligence', 'siloq-connector'); ?></h3>
+                            <p><?php esc_html_e('Configure theme-aware layout intelligence', 'siloq-connector'); ?></p>
                         </a>
                     </div>
+                </div>
+            </div>
+
+            <!-- ======= SCHEMA (BUSINESS DATA) TAB ======= -->
+            <div class="siloq-dash-panel" data-panel="schema" role="tabpanel" hidden>
+                <div class="siloq-card">
+                    <h2><?php esc_html_e('Business Profile', 'siloq-connector'); ?></h2>
+                    <p><?php esc_html_e('Manage your business data used for AI citation readiness and structured data.', 'siloq-connector'); ?></p>
+                    <p>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-btn siloq-btn--primary">
+                            <?php esc_html_e('Edit Business Profile', 'siloq-connector'); ?>
+                        </a>
+                    </p>
+                </div>
+            </div>
+
+            <!-- ======= SETTINGS TAB ======= -->
+            <div class="siloq-dash-panel" data-panel="settings" role="tabpanel" hidden>
+                <div class="siloq-card">
+                    <h2><?php esc_html_e('Plugin Settings', 'siloq-connector'); ?></h2>
+                    <p><?php esc_html_e('Configure your Siloq connection and plugin preferences.', 'siloq-connector'); ?></p>
+                    <p>
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-btn siloq-btn--primary">
+                            <?php esc_html_e('Open Settings', 'siloq-connector'); ?>
+                        </a>
+                    </p>
                 </div>
             </div>
         </div>
         <?php
+    }
+
+    /**
+     * AJAX handler: fetch dashboard stats from Siloq API
+     */
+    public static function ajax_get_dashboard_stats() {
+        check_ajax_referer('siloq_admin_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $api_base = rtrim(get_option('siloq_api_url', self::DEFAULT_API_URL), '/');
+        $api_key  = get_option('siloq_api_key', '');
+        $site_id  = get_option('siloq_site_id', '');
+
+        $headers = array(
+            'Authorization' => 'Bearer ' . $api_key,
+            'Accept'        => 'application/json',
+        );
+
+        $health   = array();
+        $schema   = array();
+        $pages    = array();
+        $wins     = array();
+
+        // 1. Site health scores
+        if ($site_id && $api_key) {
+            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/silo-health/scores/", array(
+                'headers' => $headers,
+                'timeout' => 10,
+            ));
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $health = json_decode(wp_remote_retrieve_body($resp), true);
+            }
+
+            // 2. Business data completeness
+            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/schema-graph/completeness/", array(
+                'headers' => $headers,
+                'timeout' => 10,
+            ));
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $schema = json_decode(wp_remote_retrieve_body($resp), true);
+            }
+
+            // 3. Pages needing attention
+            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/pages/?limit=6", array(
+                'headers' => $headers,
+                'timeout' => 10,
+            ));
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $pages = json_decode(wp_remote_retrieve_body($resp), true);
+            }
+
+            // 4. Recent wins (completed content jobs)
+            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/content-jobs/?status=completed&limit=3", array(
+                'headers' => $headers,
+                'timeout' => 10,
+            ));
+            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                $wins = json_decode(wp_remote_retrieve_body($resp), true);
+            }
+        }
+
+        // Fallback: local data if API returned nothing
+        $synced_count = count(get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'post_status'    => 'publish',
+            'meta_key'       => '_siloq_synced',
+            'meta_value'     => '1',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        )));
+
+        $last_sync = get_option('siloq_last_sync_time', '');
+
+        wp_send_json_success(array(
+            'health'       => $health,
+            'schema'       => $schema,
+            'pages'        => $pages,
+            'wins'         => $wins,
+            'synced_count' => $synced_count,
+            'last_sync'    => $last_sync,
+        ));
     }
     
     /**
