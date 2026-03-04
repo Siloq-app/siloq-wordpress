@@ -469,7 +469,7 @@ class Siloq_Connector {
             wp_enqueue_script(
                 'siloq-admin-dashboard',
                 SILOQ_PLUGIN_URL . 'assets/js/siloq-admin-dashboard.js',
-                array(),
+                array('siloq-admin'),   // guarantees siloqAdminData is defined first
                 SILOQ_VERSION,
                 true
             );

@@ -24,7 +24,7 @@
                 });
                 panels.forEach(function (p) {
                     p.classList.remove('is-active');
-                    p.hidden = true;
+                    // Use class only — don't mix hidden attr with CSS display:none (specificity conflict)
                 });
 
                 tab.classList.add('is-active');
@@ -33,7 +33,6 @@
                 var panel = $('[data-panel="' + target + '"]');
                 if (panel) {
                     panel.classList.add('is-active');
-                    panel.hidden = false;
                 }
             });
         });
@@ -141,7 +140,7 @@
                     return '<li>' +
                         '<span class="siloq-attention-dot siloq-attention-dot--' + dotClass + '"></span>' +
                         '<span class="siloq-attention-label">' + escHtml(p.title || p.url || 'Untitled') + '</span>' +
-                        '<a href="' + escAttr(p.edit_url || '#') + '" class="siloq-btn siloq-btn--small siloq-btn--outline">Fix It</a>' +
+                        '<a href="' + escAttr(safeUrl(p.edit_url)) + '" class="siloq-btn siloq-btn--small siloq-btn--outline">Fix It</a>' +
                         '</li>';
                 }).join('');
             } else {
@@ -237,7 +236,13 @@
     }
 
     function escAttr(s) {
-        return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+                        .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/`/g, '&#96;');
+    }
+
+    // Validate URLs from API responses — reject javascript: and other non-http schemes
+    function safeUrl(u) {
+        return (u && /^https?:\/\//i.test(u)) ? u : '#';
     }
 
     /* ── Init ── */

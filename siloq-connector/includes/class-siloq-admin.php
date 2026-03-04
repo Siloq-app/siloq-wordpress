@@ -1027,26 +1027,26 @@ class Siloq_Admin {
 
             <!-- ======= Tab Navigation ======= -->
             <nav class="siloq-dash-tabs" role="tablist">
-                <button class="siloq-dash-tab is-active" data-tab="dashboard" role="tab" aria-selected="true">
+                <button class="siloq-dash-tab is-active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="siloq-panel-dashboard" id="siloq-tab-dashboard">
                     <span class="dashicons dashicons-dashboard"></span>
                     <?php esc_html_e('Dashboard', 'siloq-connector'); ?>
                 </button>
-                <button class="siloq-dash-tab" data-tab="pages" role="tab" aria-selected="false">
+                <button class="siloq-dash-tab" data-tab="pages" role="tab" aria-selected="false" aria-controls="siloq-panel-pages" id="siloq-tab-pages">
                     <span class="dashicons dashicons-admin-page"></span>
                     <?php esc_html_e('Pages', 'siloq-connector'); ?>
                 </button>
-                <button class="siloq-dash-tab" data-tab="schema" role="tab" aria-selected="false">
+                <button class="siloq-dash-tab" data-tab="schema" role="tab" aria-selected="false" aria-controls="siloq-panel-schema" id="siloq-tab-schema">
                     <span class="dashicons dashicons-businessman"></span>
                     <?php esc_html_e('Business Data', 'siloq-connector'); ?>
                 </button>
-                <button class="siloq-dash-tab" data-tab="settings" role="tab" aria-selected="false">
+                <button class="siloq-dash-tab" data-tab="settings" role="tab" aria-selected="false" aria-controls="siloq-panel-settings" id="siloq-tab-settings">
                     <span class="dashicons dashicons-admin-generic"></span>
                     <?php esc_html_e('Settings', 'siloq-connector'); ?>
                 </button>
             </nav>
 
             <!-- ======= DASHBOARD TAB ======= -->
-            <div class="siloq-dash-panel is-active" data-panel="dashboard" role="tabpanel">
+            <div class="siloq-dash-panel is-active" data-panel="dashboard" role="tabpanel" id="siloq-panel-dashboard" aria-labelledby="siloq-tab-dashboard">
 
                 <!-- ZONE 1 — Site Health Hero -->
                 <div class="siloq-hero-card">
@@ -1122,7 +1122,7 @@ class Siloq_Admin {
             </div>
 
             <!-- ======= PAGES TAB ======= -->
-            <div class="siloq-dash-panel" data-panel="pages" role="tabpanel" hidden>
+            <div class="siloq-dash-panel" data-panel="pages" role="tabpanel" id="siloq-panel-pages" aria-labelledby="siloq-tab-pages">
                 <div class="siloq-card">
                     <h2><?php esc_html_e('Page Management', 'siloq-connector'); ?></h2>
                     <p><?php esc_html_e('Sync and manage your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
@@ -1147,7 +1147,7 @@ class Siloq_Admin {
             </div>
 
             <!-- ======= SCHEMA (BUSINESS DATA) TAB ======= -->
-            <div class="siloq-dash-panel" data-panel="schema" role="tabpanel" hidden>
+            <div class="siloq-dash-panel" data-panel="schema" role="tabpanel" id="siloq-panel-schema" aria-labelledby="siloq-tab-schema">
                 <div class="siloq-card">
                     <h2><?php esc_html_e('Business Profile', 'siloq-connector'); ?></h2>
                     <p><?php esc_html_e('Manage your business data used for AI citation readiness and structured data.', 'siloq-connector'); ?></p>
@@ -1160,7 +1160,7 @@ class Siloq_Admin {
             </div>
 
             <!-- ======= SETTINGS TAB ======= -->
-            <div class="siloq-dash-panel" data-panel="settings" role="tabpanel" hidden>
+            <div class="siloq-dash-panel" data-panel="settings" role="tabpanel" id="siloq-panel-settings" aria-labelledby="siloq-tab-settings">
                 <div class="siloq-card">
                     <h2><?php esc_html_e('Plugin Settings', 'siloq-connector'); ?></h2>
                     <p><?php esc_html_e('Configure your Siloq connection and plugin preferences.', 'siloq-connector'); ?></p>
@@ -1195,46 +1195,49 @@ class Siloq_Admin {
             'Accept'        => 'application/json',
         );
 
+        // Serve from transient cache (10 min TTL) to avoid 4 sequential blocking requests
+        $cache_key = 'siloq_dash_stats_' . md5( $site_id . $api_key );
+        $cached    = get_transient( $cache_key );
+
+        if ( $cached ) {
+            wp_send_json_success( $cached );
+            return;
+        }
+
         $health   = array();
         $schema   = array();
         $pages    = array();
         $wins     = array();
 
-        // 1. Site health scores
         if ($site_id && $api_key) {
-            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/silo-health/scores/", array(
-                'headers' => $headers,
-                'timeout' => 10,
-            ));
-            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                $health = json_decode(wp_remote_retrieve_body($resp), true);
+            // Fire all 4 requests non-blocking so they run in parallel
+            $args_nb = array( 'headers' => $headers, 'timeout' => 10, 'blocking' => false );
+            wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/silo-health/scores/",               $args_nb );
+            wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/schema-graph/completeness/",         $args_nb );
+            wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/pages/?limit=6",                    $args_nb );
+            wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/content-jobs/?status=completed&limit=3", $args_nb );
+
+            // Now fetch blocking (results should be ready or nearly ready)
+            $args_b = array( 'headers' => $headers, 'timeout' => 8 );
+
+            $resp = wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/silo-health/scores/", $args_b );
+            if ( !is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200 ) {
+                $health = json_decode( wp_remote_retrieve_body($resp), true );
             }
 
-            // 2. Business data completeness
-            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/schema-graph/completeness/", array(
-                'headers' => $headers,
-                'timeout' => 10,
-            ));
-            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                $schema = json_decode(wp_remote_retrieve_body($resp), true);
+            $resp = wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/schema-graph/completeness/", $args_b );
+            if ( !is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200 ) {
+                $schema = json_decode( wp_remote_retrieve_body($resp), true );
             }
 
-            // 3. Pages needing attention
-            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/pages/?limit=6", array(
-                'headers' => $headers,
-                'timeout' => 10,
-            ));
-            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                $pages = json_decode(wp_remote_retrieve_body($resp), true);
+            $resp = wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/pages/?limit=6", $args_b );
+            if ( !is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200 ) {
+                $pages = json_decode( wp_remote_retrieve_body($resp), true );
             }
 
-            // 4. Recent wins (completed content jobs)
-            $resp = wp_remote_get("{$api_base}/api/v1/sites/{$site_id}/content-jobs/?status=completed&limit=3", array(
-                'headers' => $headers,
-                'timeout' => 10,
-            ));
-            if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                $wins = json_decode(wp_remote_retrieve_body($resp), true);
+            $resp = wp_remote_get( "{$api_base}/api/v1/sites/{$site_id}/content-jobs/?status=completed&limit=3", $args_b );
+            if ( !is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200 ) {
+                $wins = json_decode( wp_remote_retrieve_body($resp), true );
             }
         }
 
@@ -1250,14 +1253,19 @@ class Siloq_Admin {
 
         $last_sync = get_option('siloq_last_sync_time', '');
 
-        wp_send_json_success(array(
+        $payload = array(
             'health'       => $health,
             'schema'       => $schema,
             'pages'        => $pages,
             'wins'         => $wins,
             'synced_count' => $synced_count,
             'last_sync'    => $last_sync,
-        ));
+        );
+
+        // Cache for 10 minutes — invalidated on next manual sync
+        set_transient( $cache_key, $payload, 10 * MINUTE_IN_SECONDS );
+
+        wp_send_json_success( $payload );
     }
     
     /**
