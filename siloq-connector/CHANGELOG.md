@@ -43,10 +43,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.5.57] — 2026-03-04 — [PR #59](https://github.com/Siloq-app/siloq-wordpress/pull/59)
+## [1.5.57] — 2026-03-01 — [PR #59](https://github.com/Siloq-app/siloq-wordpress/pull/59)
 
 ### Added
-- Widget Intelligence System — initial release for Elementor
+- Widget Intelligence System — first production release for Elementor
+  (an early prototype was scaffolded in v1.5.16 but never shipped; this is
+  the first complete, functional version available to users)
   - Native panel injection into Elementor widget settings sidebar via
     `elementor/element/*/after_section_end` hooks
   - Supported widgets: text-editor, heading, icon-box, image-box,
@@ -87,6 +89,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Added
 - Webhook handler with HMAC-SHA256 signature validation
   (replaced `__return_true` permission callback on data-writing endpoint)
+  `includes/class-siloq-webhook-handler.php`
+- Widget Intelligence prototype scaffolded (Elementor-only, admin-gated);
+  not shipped to users. First production release is v1.5.57.
 
 ### Fixed
 - JS SyntaxError: `<?php _e() ?>` inside JavaScript string literal — caused
