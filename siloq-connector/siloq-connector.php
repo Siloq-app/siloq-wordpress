@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.59
+* Version: 1.5.61
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.59');
+define('SILOQ_VERSION', '1.5.61');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -832,30 +832,38 @@ class Siloq_Connector {
         $api_client = new Siloq_API_Client();
         $result = $api_client->get_business_profile();
         
-        if ($result['success']) {
-            // Merge locally stored fields into the API result
-            if (!isset($result['data']) || !is_array($result['data'])) {
-                $result['data'] = array();
-            }
-            $result['data'] = array_merge(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-            ), $result['data']);
-            wp_send_json_success($result['data']);
+        if ($result['success'] && !empty($result['data'])) {
+            $api = $result['data'];
+            // Normalize API field names → form field names expected by JS
+            $profile = array(
+                'business_name'    => $api['business_name']    ?? get_option('siloq_business_name', get_bloginfo('name')),
+                'phone'            => $api['phone']            ?? get_option('siloq_phone', ''),
+                'address'          => $api['street_address']   ?? get_option('siloq_address', ''),
+                'city'             => $api['city']             ?? get_option('siloq_city', ''),
+                'state'            => $api['state']            ?? get_option('siloq_state', ''),
+                'zip'              => $api['zip_code']         ?? get_option('siloq_zip', ''),
+                'business_type'    => $api['business_type']    ?? '',
+                'primary_services' => $api['primary_services'] ?? [],
+                'service_areas'    => $api['service_cities']   ?? $api['service_areas'] ?? [],
+            );
+            // Keep local WP options in sync so fallback stays fresh
+            update_option('siloq_business_name', $profile['business_name']);
+            update_option('siloq_phone',         $profile['phone']);
+            update_option('siloq_address',       $profile['address']);
+            update_option('siloq_city',          $profile['city']);
+            update_option('siloq_state',         $profile['state']);
+            update_option('siloq_zip',           $profile['zip']);
+            wp_send_json_success($profile);
         } else {
-            // Even on API failure return locally stored fields so form is usable
+            // API unavailable — return locally stored fields so form is usable
             wp_send_json_success(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-                'business_type' => '',
+                'business_name'    => get_option('siloq_business_name', get_bloginfo('name')),
+                'phone'            => get_option('siloq_phone', ''),
+                'address'          => get_option('siloq_address', ''),
+                'city'             => get_option('siloq_city', ''),
+                'state'            => get_option('siloq_state', ''),
+                'zip'              => get_option('siloq_zip', ''),
+                'business_type'    => '',
                 'primary_services' => [],
                 'service_areas'    => [],
             ));

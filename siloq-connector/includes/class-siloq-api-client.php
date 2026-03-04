@@ -102,14 +102,33 @@ class Siloq_API_Client {
      * Get business profile
      */
     public function get_business_profile() {
-        return $this->make_request('/business/profile', 'GET');
+        return $this->make_request('/sites/' . $this->site_id . '/entity-profile/', 'GET');
     }
     
     /**
      * Save business profile
      */
     public function save_business_profile($profile_data) {
-        return $this->make_request('/business/profile', 'POST', $profile_data);
+        // Map WP plugin field names → API field names
+        $mapped = array(
+            'business_name'  => $profile_data['business_name']  ?? '',
+            'phone'          => $profile_data['phone']          ?? '',
+            'street_address' => $profile_data['address']        ?? $profile_data['street_address'] ?? '',
+            'city'           => $profile_data['city']           ?? '',
+            'state'          => $profile_data['state']          ?? '',
+            'zip_code'       => $profile_data['zip']            ?? $profile_data['zip_code']       ?? '',
+            'business_type'  => $profile_data['business_type']  ?? '',
+        );
+        if (!empty($profile_data['primary_services'])) {
+            $mapped['primary_services'] = $profile_data['primary_services'];
+        }
+        if (!empty($profile_data['service_areas'])) {
+            $mapped['service_areas'] = $profile_data['service_areas'];
+        }
+        // Remove empty strings so we don't overwrite existing data with blanks
+        $mapped = array_filter($mapped, function($v) { return $v !== '' && $v !== null; });
+
+        return $this->make_request('/sites/' . $this->site_id . '/entity-profile/', 'PATCH', $mapped);
     }
     
     /**
@@ -201,6 +220,10 @@ class Siloq_API_Client {
         if ($method === 'POST' && !empty($data)) {
             $args['body'] = json_encode($data);
             $response = wp_remote_post($url, $args);
+        } elseif ($method === 'PATCH' && !empty($data)) {
+            $args['method'] = 'PATCH';
+            $args['body']   = json_encode($data);
+            $response = wp_remote_request($url, $args);
         } else {
             $response = wp_remote_get($url, $args);
         }
