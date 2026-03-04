@@ -12,7 +12,28 @@
 (function($) {
     'use strict';
 
-    if (typeof siloqWI === 'undefined' || typeof elementor === 'undefined') return;
+    // Guard: siloqWI is set by wp_localize_script; elementor by Elementor's editor JS.
+    // Even with elementor-editor as a script dependency, elementor JS object may not
+    // be instantiated yet. We retry up to 50 times (5 seconds) before giving up.
+    if (typeof siloqWI === 'undefined') return;
+
+    if (typeof elementor === 'undefined') {
+        var _retries = 0;
+        var _retryTimer = setInterval(function() {
+            _retries++;
+            if (typeof elementor !== 'undefined') {
+                clearInterval(_retryTimer);
+                initSiloqWI($);
+            } else if (_retries >= 50) {
+                clearInterval(_retryTimer);
+            }
+        }, 100);
+        return;
+    }
+
+    initSiloqWI($);
+
+    function initSiloqWI($) {
 
     var cfg            = siloqWI;
     var pageMap        = null;  // Cached page structure
@@ -528,5 +549,7 @@
         }).text(msg).show();
         setTimeout(function() { $s.fadeOut(); }, 4000);
     }
+
+    } // end initSiloqWI
 
 })(jQuery);

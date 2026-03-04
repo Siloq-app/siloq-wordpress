@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.64
+* Version: 1.5.65
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.64');
+define('SILOQ_VERSION', '1.5.65');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -503,6 +503,13 @@ class Siloq_Connector {
         $result = $sync_engine->sync_page($post_id);
         
         if ($result['success']) {
+            // Update sync time + bust dashboard cache on any successful page sync
+            update_option( 'siloq_last_sync_time', current_time( 'mysql' ) );
+            $api_key = get_option( 'siloq_api_key', '' );
+            $site_id = get_option( 'siloq_site_id', '' );
+            if ( $api_key && $site_id ) {
+                delete_transient( 'siloq_dash_stats_' . md5( $site_id . $api_key ) );
+            }
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
@@ -562,6 +569,16 @@ class Siloq_Connector {
         $result['purge'] = $purge_result;
 
         if ($result['success']) {
+            // Record sync time — dashboard reads this option for "Last synced" display
+            update_option( 'siloq_last_sync_time', current_time( 'mysql' ) );
+
+            // Bust dashboard stats cache so next load reflects fresh data
+            $api_key = get_option( 'siloq_api_key', '' );
+            $site_id = get_option( 'siloq_site_id', '' );
+            if ( $api_key && $site_id ) {
+                delete_transient( 'siloq_dash_stats_' . md5( $site_id . $api_key ) );
+            }
+
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);

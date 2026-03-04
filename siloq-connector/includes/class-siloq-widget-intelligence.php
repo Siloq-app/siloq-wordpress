@@ -168,7 +168,7 @@ class Siloq_Widget_Intelligence {
         wp_enqueue_script(
             'siloq-wi',
             SILOQ_PLUGIN_URL . 'assets/js/siloq-widget-intelligence.js',
-            [ 'jquery' ],
+            [ 'jquery', 'elementor-editor' ],  // must load AFTER Elementor's editor JS
             SILOQ_VERSION,
             true
         );
