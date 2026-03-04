@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.54
+* Version: 1.5.55
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.54');
+define('SILOQ_VERSION', '1.5.55');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
