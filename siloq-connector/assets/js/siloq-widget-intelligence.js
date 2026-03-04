@@ -93,20 +93,50 @@
     }
 
     // ── Active widget reader ──────────────────────────────────────────────
+    // Elementor 3.x broke the old getPanelView().getCurrentPageView() path.
+    // We use three fallback strategies so this works across Elementor versions.
+
+    function getModelFromPanel() {
+        try {
+            // Strategy 1: Elementor 3.x selection API (most reliable)
+            if (elementor.selection && elementor.selection.getElements) {
+                var els = elementor.selection.getElements();
+                if (els && els.length) return els[0].model || els[0];
+            }
+        } catch(e) {}
+
+        try {
+            // Strategy 2: panel currentPageView (Elementor 2.x / early 3.x)
+            var panel = elementor.getPanelView && elementor.getPanelView();
+            if (panel) {
+                var view = panel.currentPageView || (panel.getCurrentPageView && panel.getCurrentPageView());
+                if (view && view.model) return view.model;
+                // Elementor 3.24+: currentView is nested inside currentPageView
+                if (view && view.currentView && view.currentView.model) return view.currentView.model;
+            }
+        } catch(e) {}
+
+        try {
+            // Strategy 3: channels editor (fallback for odd Elementor builds)
+            if (elementor.channels && elementor.channels.editor) {
+                var editedElement = elementor.channels.editor.request('panel/current-widgets-panel');
+                if (editedElement && editedElement.currentView && editedElement.currentView.model) {
+                    return editedElement.currentView.model;
+                }
+            }
+        } catch(e) {}
+
+        return null;
+    }
 
     function getActiveWidgetContent() {
-        if (!elementor.getPanelView) return null;
-        var panel = elementor.getPanelView();
-        if (!panel) return null;
+        var model = getModelFromPanel();
+        if (!model) return null;
 
-        var view = panel.getCurrentPageView ? panel.getCurrentPageView() : null;
-        if (!view || !view.model) return null;
-
-        var model    = view.model;
         var type     = model.get('widgetType') || model.get('elType');
         var id       = model.get('id');
         var settings = model.get('settings');
-        if (!settings) return null;
+        if (!settings || !type) return null;
 
         var content = '';
         if (type === 'text-editor') content = settings.get('editor')        || '';
@@ -127,20 +157,17 @@
 
     function applyToWidget(widgetId, field, value) {
         try {
-            var panel = elementor.getPanelView();
-            if (!panel) throw new Error('No panel');
-
-            var view = panel.getCurrentPageView ? panel.getCurrentPageView() : null;
-            if (!view || !view.model) throw new Error('No model');
+            var model = getModelFromPanel();
+            if (!model) throw new Error('No model');
 
             if (typeof $e !== 'undefined' && $e.run) {
                 $e.run('document/elements/settings', {
-                    container: elementor.getContainer ? elementor.getContainer(widgetId) : view,
+                    container: elementor.getContainer ? elementor.getContainer(widgetId) : model,
                     settings:  { [field]: value },
                     options:   { external: true },
                 });
             } else {
-                view.model.get('settings').set(field, value);
+                model.get('settings').set(field, value);
                 if (elementor.saver) elementor.saver.setFlagEditorChange();
             }
             return true;
@@ -156,6 +183,61 @@
         setTimeout(function() {
             pageMap = buildPageMap();
         }, 1000);
+    });
+
+    // ── Move Siloq panel to top of widget controls ────────────────────────
+    // Elementor renders sections in registration order. Our section is added
+    // via after_section_end so it appears last. We use a MutationObserver to
+    // detect when the panel renders and physically move our accordion item
+    // to position 0 — making it the first thing the user sees.
+
+    function moveSiloqPanelToTop() {
+        var $accordion = $('.elementor-panel-navigation-wrapper').closest('.elementor-panel-content-wrapper')
+            .find('.elementor-accordion');
+
+        if (!$accordion.length) {
+            // Try simpler selector
+            $accordion = $('.elementor-panel-content-wrapper .elementor-accordion');
+        }
+        if (!$accordion.length) return;
+
+        var $siloqItem = $accordion.find('.siloq-wi-container').closest('.elementor-accordion-item');
+        if (!$siloqItem.length) return;
+
+        // Only move if not already first
+        if ($siloqItem.index() === 0) return;
+
+        $siloqItem.prependTo($accordion);
+
+        // Auto-expand the Siloq section so it's immediately visible
+        var $title = $siloqItem.find('.elementor-accordion-title').first();
+        if ($title.length && !$siloqItem.hasClass('elementor-open')) {
+            $title.trigger('click');
+        }
+    }
+
+    // Observe the panel container for DOM changes (widget switching re-renders controls)
+    var _panelObserver = null;
+
+    function startPanelObserver() {
+        var panelEl = document.querySelector('#elementor-panel-content-wrapper') ||
+                      document.querySelector('.elementor-panel-content-wrapper');
+        if (!panelEl || _panelObserver) return;
+
+        _panelObserver = new MutationObserver(function() {
+            // Debounce — panel can mutate many times per render cycle
+            clearTimeout(_panelObserver._timer);
+            _panelObserver._timer = setTimeout(moveSiloqPanelToTop, 120);
+        });
+
+        _panelObserver.observe(panelEl, { childList: true, subtree: true });
+    }
+
+    // Start observing once Elementor editor is ready
+    elementor.on('panel:init', startPanelObserver);
+    $(document).ready(function() {
+        // Fallback: start observer after short delay if panel:init already fired
+        setTimeout(startPanelObserver, 1500);
     });
 
     // ── Analyze button (delegated — panel re-renders on widget switch) ────
@@ -198,13 +280,14 @@
         };
 
         $.ajax({
-            url:  cfg.ajaxUrl,
-            type: 'POST',
+            url:         cfg.ajaxUrl,
+            type:        'POST',
+            contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
             data: {
                 action:  'siloq_analyze_widget',
                 nonce:   cfg.nonce,
                 page_id: cfg.postId,
-                payload: payload,
+                payload: JSON.stringify(payload),   // stringify so nested arrays survive WP serialization
             },
             success: function(res) {
                 $loading.hide();
