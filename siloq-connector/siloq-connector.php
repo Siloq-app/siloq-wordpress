@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.56
+* Version: 1.5.57
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.56');
+define('SILOQ_VERSION', '1.5.57');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -162,6 +162,12 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
+        // Widget Intelligence — native Elementor panel controls
+        if ( is_admin() ) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-widget-intelligence.php';
+            Siloq_Widget_Intelligence::init();
+        }
+
         // ------------------------------------------------------------------
         // Builder-specific panel integration — admin context only.
         // Siloq_Builder_Detector::detect() caches the result so subsequent
@@ -290,6 +296,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_sync_outdated', array($this, 'ajax_sync_outdated'));
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
+        add_action('wp_ajax_siloq_analyze_widget', array('Siloq_Widget_Intelligence', 'ajax_analyze_widget'));
         
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
