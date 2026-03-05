@@ -1295,7 +1295,7 @@ class Siloq_Admin {
 
                 <!-- Zone 3: Insight Cards -->
                 <div class="siloq-grid-3">
-                    <div class="siloq-card">
+                    <div class="siloq-card" data-entity-score="<?php echo intval($entity_pct); ?>">
                         <div class="siloq-insight-icon siloq-insight-icon--schema">&#9881;</div>
                         <div class="siloq-insight-value"><?php echo intval($entity_pct); ?>%</div>
                         <div class="siloq-insight-label">Entity &amp; Schema Completeness</div>
@@ -1447,20 +1447,82 @@ class Siloq_Admin {
 
             <!-- ═══════ SCHEMA TAB ═══════ -->
             <div id="siloq-tab-schema" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
-                <div class="siloq-card">
+
+                <!-- Section 1: Entity Profile Completeness -->
+                <?php
+                $entity_fields = self::get_entity_field_status();
+                $entity_color = $entity_pct >= 75 ? 'var(--siloq-success)' : ($entity_pct >= 50 ? 'var(--siloq-warning)' : 'var(--siloq-danger)');
+                ?>
+                <div class="siloq-card siloq-schema-completeness">
                     <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Entity &amp; Schema Health</h3>
+                        <h3 class="siloq-card-title">Entity Profile Completeness</h3>
                     </div>
-                    <div class="siloq-entity-meter">
-                        <div class="siloq-entity-meter__bar">
-                            <div class="siloq-entity-meter__fill" style="width:<?php echo intval($entity_pct); ?>%;background:<?php echo $entity_pct >= 75 ? 'var(--siloq-success)' : ($entity_pct >= 50 ? 'var(--siloq-warning)' : 'var(--siloq-danger)'); ?>"></div>
+                    <div class="siloq-schema-completeness__body">
+                        <div class="siloq-schema-completeness__ring">
+                            <div class="siloq-score-ring-wrap siloq-score-ring-wrap--sm">
+                                <svg class="siloq-score-ring siloq-score-ring--entity" viewBox="0 0 120 120">
+                                    <circle class="siloq-score-ring__bg" cx="60" cy="60" r="48"/>
+                                    <circle class="siloq-score-ring__fg siloq-entity-ring-fg" cx="60" cy="60" r="48"
+                                            stroke="<?php echo esc_attr($entity_color); ?>"
+                                            data-score="<?php echo intval($entity_pct); ?>"
+                                            data-radius="48"/>
+                                </svg>
+                                <div class="siloq-score-ring__label">
+                                    <span class="siloq-score-ring__value siloq-entity-ring-value"><?php echo intval($entity_pct); ?></span>
+                                    <span class="siloq-score-ring__caption">%</span>
+                                </div>
+                            </div>
                         </div>
-                        <span class="siloq-entity-meter__value"><?php echo intval($entity_pct); ?>%</span>
+                        <div class="siloq-schema-completeness__fields">
+                            <?php foreach ($entity_fields as $field): ?>
+                                <div class="siloq-entity-field <?php echo $field['filled'] ? 'siloq-entity-field--ok' : 'siloq-entity-field--missing'; ?>">
+                                    <span class="siloq-entity-field__icon"><?php echo $field['filled'] ? '&#10003;' : '&#10007;'; ?></span>
+                                    <span class="siloq-entity-field__label"><?php echo esc_html($field['label']); ?></span>
+                                    <span class="siloq-entity-field__weight">(<?php echo intval($field['weight']); ?>pts)</span>
+                                </div>
+                            <?php endforeach; ?>
+                            <div style="margin-top:12px;">
+                                <a href="#siloq-tab-settings" class="siloq-btn siloq-btn--outline siloq-btn--sm siloq-tab-btn" aria-controls="siloq-tab-settings">Edit Business Profile</a>
+                            </div>
+                        </div>
                     </div>
-                    <p>Entity completeness across your site pages.</p>
-                    <br>
-                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/schema'); ?>" target="_blank" class="siloq-btn siloq-btn--outline">Manage Schema in Siloq App &rarr;</a>
                 </div>
+
+                <!-- Section 2: Schema Applied Per Page -->
+                <div class="siloq-card siloq-schema-pages">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Schema Applied Per Page</h3>
+                        <button type="button" id="siloq-schema-refresh" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+                            <span class="dashicons dashicons-update"></span> Refresh
+                        </button>
+                    </div>
+                    <div id="siloq-schema-pages-list" class="siloq-schema-pages__list">
+                        <div class="siloq-pages-loading">
+                            <span class="siloq-spinner"></span>
+                            <span>Loading schema status...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Schema Graph -->
+                <div class="siloq-card siloq-schema-graph">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Schema Graph</h3>
+                    </div>
+                    <div id="siloq-schema-graph-content" class="siloq-schema-graph__content">
+                        <?php if (!empty(get_option('siloq_site_id', ''))): ?>
+                            <div class="siloq-pages-loading">
+                                <span class="siloq-spinner"></span>
+                                <span>Loading schema graph...</span>
+                            </div>
+                        <?php else: ?>
+                            <div class="siloq-empty">
+                                <p>Schema graph available after site analysis. Connect to Siloq API in Settings to enable.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             </div><!-- /schema tab -->
 
             <!-- ═══════ GSC TAB ═══════ -->
@@ -2577,5 +2639,47 @@ class Siloq_Admin {
         })();
         </script>
         <?php
+    }
+
+    /**
+     * Compute entity profile completeness as weighted percentage.
+     */
+    public static function compute_entity_completeness() {
+        $fields = self::get_entity_field_status();
+        $total_weight = 0;
+        $filled_weight = 0;
+        foreach ($fields as $f) {
+            $total_weight += $f['weight'];
+            if ($f['filled']) {
+                $filled_weight += $f['weight'];
+            }
+        }
+        return $total_weight > 0 ? intval(round(($filled_weight / $total_weight) * 100)) : 0;
+    }
+
+    /**
+     * Get entity profile field status with fill state and weights.
+     */
+    public static function get_entity_field_status() {
+        $business_name = get_option('siloq_business_name', '');
+        $business_type = get_option('siloq_business_type', '');
+        $phone = get_option('siloq_phone', '');
+        $address = get_option('siloq_address', '');
+        $city = get_option('siloq_city', '');
+        $state = get_option('siloq_state', '');
+        $zip = get_option('siloq_zip', '');
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+
+        $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
+
+        return [
+            ['key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => !empty($business_name)],
+            ['key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => !empty($business_type)],
+            ['key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => !empty($phone)],
+            ['key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled],
+            ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
+            ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
+        ];
     }
 }
