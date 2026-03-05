@@ -1361,23 +1361,26 @@ class Siloq_Admin {
 <?php
 // Build profile completeness fields for display
 $profile_fields = self::get_entity_field_status();
-$missing_fields = array_filter($profile_fields, fn($f) => !$f['complete']);
+$missing_fields = array_filter($profile_fields, function($f) { return empty($f['filled']); });
 $missing_count_profile = count($missing_fields);
 
-// Build hub data from page hierarchy + analysis
-$hub_pages_raw = get_posts(array(
+// Build hub data: pages marked as hub in analysis, OR pages that have child pages
+$all_synced_pages = get_posts(array(
     'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
     'post_status'    => 'publish',
-    'post_parent'    => 0,
-    'posts_per_page' => 10,
+    'posts_per_page' => -1,
     'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
 $hub_data = array();
-foreach ($hub_pages_raw as $hp) {
+$non_hub_ids = array();
+foreach ($all_synced_pages as $hp) {
     $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
     $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
-    $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
+    $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : '';
     $children = get_posts(array('post_type' => 'any', 'post_parent' => $hp->ID, 'post_status' => 'publish', 'posts_per_page' => -1));
+    $is_hub = ($page_type === 'hub') || (count($children) > 0 && $hp->post_parent == 0);
+    if (!$is_hub) { $non_hub_ids[] = $hp->ID; continue; }
+    $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
     $missing_supporting = isset($analysis['missing_supporting']) ? (array)$analysis['missing_supporting'] : array();
     $hub_data[] = array(
         'id'           => $hp->ID,
@@ -1391,30 +1394,53 @@ foreach ($hub_pages_raw as $hp) {
         'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
     );
 }
+// If no hubs found (flat site), use top-level pages as hubs
+if (empty($hub_data)) {
+    foreach ($all_synced_pages as $hp) {
+        if ($hp->post_parent != 0) continue;
+        $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
+        $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
+        $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
+        $missing_supporting = isset($analysis['missing_supporting']) ? (array)$analysis['missing_supporting'] : array();
+        $hub_data[] = array(
+            'id'           => $hp->ID,
+            'title'        => get_the_title($hp->ID),
+            'url'          => get_permalink($hp->ID),
+            'edit_url'     => get_edit_post_link($hp->ID, 'raw'),
+            'elementor_url'=> admin_url('post.php?post=' . $hp->ID . '&action=elementor'),
+            'score'        => $score,
+            'children'     => array(),
+            'missing'      => $missing_supporting,
+            'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
+        );
+    }
+}
 
-// Get orphan pages
-$all_synced = get_posts(array(
-    'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
-    'post_status' => 'publish',
-    'posts_per_page' => -1,
-    'fields'      => 'ids',
-    'meta_query'  => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
-));
+// Build menu link map once (not per-page)
+$menu_linked_ids = array();
+$all_menus = wp_get_nav_menus();
+foreach ($all_menus as $menu_obj) {
+    $menu_items = wp_get_nav_menu_items($menu_obj->term_id) ?: array();
+    foreach ($menu_items as $mi) { $menu_linked_ids[intval($mi->object_id)] = true; }
+}
+// Homepage never an orphan
+$hp_id = intval(get_option('page_on_front'));
+if ($hp_id) $menu_linked_ids[$hp_id] = true;
+
+// Collect all hub + child ids
 $hub_child_ids = array();
 foreach ($hub_data as $h) {
     $hub_child_ids[] = $h['id'];
     foreach ($h['children'] as $c) $hub_child_ids[] = $c->ID;
 }
-$true_orphan_posts = array_filter($all_synced, function($id) use ($hub_child_ids) {
-    if (in_array($id, $hub_child_ids)) return false;
-    $menus = wp_get_nav_menus();
-    foreach ($menus as $m) {
-        $items = wp_get_nav_menu_items($m->term_id) ?: array();
-        foreach ($items as $item) { if (intval($item->object_id) === $id) return false; }
-    }
-    return true;
-});
-$true_orphan_posts = array_values($true_orphan_posts);
+
+$all_synced_ids = wp_list_pluck($all_synced_pages, 'ID');
+$true_orphan_posts = array();
+foreach ($all_synced_ids as $oid) {
+    if (in_array($oid, $hub_child_ids)) continue;
+    if (isset($menu_linked_ids[$oid])) continue;
+    $true_orphan_posts[] = $oid;
+}
 
 // Score label
 if ($site_score >= 90) { $score_grade = 'Excellent!'; $score_color_cls = 'teal'; }
@@ -1564,9 +1590,9 @@ if ($has_plan && isset($plan_data['issues'])) {
     <div class="siloq-entity-fields">
       <?php foreach (array_slice($profile_fields, 0, 4) as $field): ?>
       <div class="siloq-entity-field">
-        <div class="siloq-field-dot <?php echo $field['complete'] ? 'good' : 'bad'; ?>"></div>
+        <div class="siloq-field-dot <?php echo !empty($field['filled']) ? 'good' : 'bad'; ?>"></div>
         <div class="siloq-field-name"><?php echo esc_html($field['label']); ?></div>
-        <?php if (!$field['complete']): ?>
+        <?php if (empty($field['filled'])): ?>
         <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-field-action">Add &rarr;</a>
         <?php else: ?>
         <span style="font-size:10px;color:#16a34a">&#10003;</span>
@@ -1691,8 +1717,8 @@ if ($has_plan && isset($plan_data['issues'])) {
   </div>
 
   <!-- Summary stats -->
-  <?php $live_spoke_count = array_sum(array_map(fn($h) => count($h['children']), $hub_data));
-        $missing_spoke_count = array_sum(array_map(fn($h) => count($h['missing']), $hub_data)); ?>
+  <?php $live_spoke_count = array_sum(array_map(function($h){ return count($h['children']); }, $hub_data));
+        $missing_spoke_count = array_sum(array_map(function($h){ return count($h['missing']); }, $hub_data)); ?>
   <div class="siloq-arch-summary">
     <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n indigo"><?php echo count($hub_data); ?></div><div class="siloq-arch-sum-l">Hub Pages</div></div>
     <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n green"><?php echo $live_spoke_count; ?></div><div class="siloq-arch-sum-l">Live Supporting</div></div>
