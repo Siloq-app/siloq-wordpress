@@ -52,7 +52,7 @@ class Siloq_Widget_Intelligence {
         // Single generic hook — fires after every section end on every element.
         // We filter to supported widget types and inject after their FIRST section.
         // This is version-proof: it doesn't depend on knowing Elementor section IDs.
-        add_action( 'elementor/element/after_section_end', [ $this, 'maybe_add_siloq_section' ], 10, 3 );
+        add_action( 'elementor/element/before_section_start', [ $this, 'maybe_add_siloq_section' ], 10, 3 );
 
         // Editor assets
         add_action( 'elementor/editor/before_enqueue_scripts', [ $this, 'enqueue_editor_assets' ] );

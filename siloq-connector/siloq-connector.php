@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.88
+* Version: 1.5.89
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.88');
+define('SILOQ_VERSION', '1.5.89');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1084,12 +1084,12 @@ class Siloq_Connector {
             return;
         }
 
-        // Check transient cache first
-        $cached = get_transient('siloq_plan_data');
-        if ($cached) {
-            wp_send_json_success($cached);
-            return;
-        }
+        // Transient disabled during testing — re-enable when data is stable
+        // $cached = get_transient('siloq_plan_data');
+        // if ($cached) {
+        //     wp_send_json_success($cached);
+        //     return;
+        // }
 
         // Query all synced pages (_siloq_synced set by sync engine on every page sync)
         // _siloq_analysis_data only exists for pages run through Widget Intelligence
@@ -1117,6 +1117,36 @@ class Siloq_Connector {
         $orphan_count = 0;
         $missing_count = 0;
 
+        // Build complete inbound link map — nav menus + page content
+        $inbound_links = array(); // $post_id => true means it has inbound links
+
+        // 1. Nav menu items
+        $all_menus = wp_get_nav_menus();
+        foreach ($all_menus as $menu) {
+            $menu_items = wp_get_nav_menu_items($menu->term_id);
+            if (!$menu_items) continue;
+            foreach ($menu_items as $item) {
+                if ($item->object === 'page' || $item->object === 'post') {
+                    $inbound_links[$item->object_id] = true;
+                }
+            }
+        }
+
+        // 2. Homepage always has inbound links (it IS the root)
+        $homepage_id = intval(get_option('page_on_front'));
+        if ($homepage_id) $inbound_links[$homepage_id] = true;
+
+        // 3. Internal links from page content
+        foreach ($posts as $pid) {
+            $content = get_post_field('post_content', $pid);
+            if (empty($content)) continue;
+            preg_match_all('/<a[^>]+href=["\']([^"\']+)["\'][^>]*>/i', $content, $matches);
+            foreach ($matches[1] as $href) {
+                $linked_id = url_to_postid($href);
+                if ($linked_id) $inbound_links[$linked_id] = true;
+            }
+        }
+
         foreach ($posts as $post_id) {
             $raw      = get_post_meta($post_id, '_siloq_analysis_data', true);
             $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
@@ -1128,15 +1158,75 @@ class Siloq_Connector {
             $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'supporting';
             $score     = isset($analysis['score']) ? intval($analysis['score']) : 0;
 
-            // If no analysis: flag as opportunity (needs Widget Intelligence run)
-            if (empty($analysis)) {
-                $issues['opportunity'][] = array(
-                    'title'   => $title,
-                    'issue'   => 'Run Widget Intelligence to get SEO recommendations for this page.',
-                    'post_id' => $post_id,
-                );
+            // Real content issue checks — even for unanalyzed pages
+            $edit_url = get_edit_post_link($post_id, 'raw');
+            $elementor_url = admin_url('post.php?post=' . $post_id . '&action=elementor');
+            $page_url = get_permalink($post_id);
+
+            // Check meta title
+            $meta_title = '';
+            $meta_desc  = '';
+            global $wpdb;
+            $aioseo_row = $wpdb->get_row($wpdb->prepare(
+                "SELECT title, description FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d LIMIT 1", $post_id
+            ));
+            if ($aioseo_row) {
+                $meta_title = $aioseo_row->title;
+                $meta_desc  = $aioseo_row->description;
+            } else {
+                $meta_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
+                $meta_desc  = get_post_meta($post_id, '_yoast_wpseo_metadesc', true);
+                if (!$meta_title) {
+                    $meta_title = get_post_meta($post_id, '_aioseop_title', true);
+                    $meta_desc  = get_post_meta($post_id, '_aioseop_description', true);
+                }
             }
 
+            // Check schema
+            $applied_schema = get_post_meta($post_id, '_siloq_applied_types', true);
+            $has_schema = !empty($applied_schema);
+
+            // Check content length
+            $page_content = get_post_field('post_content', $post_id);
+            $word_count = str_word_count(strip_tags($page_content));
+
+            // Build issues from checks
+            if (empty($meta_title)) {
+                $issues['important'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'Missing SEO title — set a title tag with your primary keyword',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
+            }
+            if (empty($meta_desc)) {
+                $issues['important'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'Missing meta description — write a compelling 150-character summary',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
+            }
+            if (!$has_schema) {
+                $issues['opportunity'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'No structured data — AI tools can\'t reliably cite this page without schema',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
+            }
+            if ($word_count < 300 && $word_count > 0) {
+                $issues['important'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'Thin content — only ' . $word_count . ' words. Aim for 500+ for better rankings.',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
+            }
             // Check silo relationship FIRST, then add to architecture once only
             $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
             $has_analysis = !empty($analysis);
@@ -1148,13 +1238,24 @@ class Siloq_Connector {
             } elseif (!$has_analysis) {
                 // Not analyzed yet — show as pending, not orphan
                 $arch_type = 'pending';
-            } elseif (empty($silo_data)) {
-                // Analyzed but not assigned to a silo
+            } elseif (empty($silo_data) && !isset($inbound_links[$post_id])) {
+                // Analyzed but not assigned to a silo AND no inbound links
                 $orphans[] = $post_id;
                 $orphan_count++;
                 $arch_type = 'orphan';
             } else {
                 $arch_type = $page_type;
+            }
+
+            // No inbound links check (after arch_type is determined)
+            if (!isset($inbound_links[$post_id]) && $arch_type !== 'hub') {
+                $issues['critical'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'No internal links pointing to this page — Google may not be crawling it',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
             }
 
             $architecture[] = array('title' => $title, 'type' => $arch_type, 'id' => $post_id, 'score' => $score);
@@ -1165,17 +1266,16 @@ class Siloq_Connector {
                     $severity = isset($issue['severity']) ? strtolower($issue['severity']) : 'opportunity';
                     if (!isset($issues[$severity])) $severity = 'opportunity';
                     $issues[$severity][] = array(
-                        'title'   => $title,
-                        'issue'   => isset($issue['message']) ? $issue['message'] : (isset($issue['description']) ? $issue['description'] : 'Issue found'),
-                        'post_id' => $post_id,
+                        'title'        => $title,
+                        'issue'        => isset($issue['message']) ? $issue['message'] : (isset($issue['description']) ? $issue['description'] : 'Issue found'),
+                        'post_id'      => $post_id,
+                        'edit_url'     => $edit_url,
+                        'elementor_url'=> $elementor_url,
                     );
                 }
             }
 
             // Build actions — include links so Fix It buttons actually work
-            $edit_url     = get_edit_post_link($post_id, 'raw');
-            $elementor_url = admin_url('post.php?post=' . $post_id . '&action=elementor');
-
             if (!$has_analysis) {
                 $actions[] = array(
                     'headline'      => 'Analyze "' . $title . '" in Widget Intelligence',

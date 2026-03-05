@@ -179,7 +179,7 @@
       });
       $('#siloq-actions-content').html(actHtml);
     } else {
-      $('#siloq-actions-content').html('<p class="siloq-empty-hint">Run Widget Intelligence on your pages to get priority actions.</p>');
+      $('#siloq-actions-content').html('<p class="siloq-empty-hint">No priority actions found. Analyze your pages to get recommendations.</p>');
     }
 
     // Content issues
@@ -192,8 +192,11 @@
           + '<h4 class="siloq-issues-group__title siloq-issues-group__title--' + level + '">'
           + level.charAt(0).toUpperCase() + level.slice(1) + '</h4>';
         items.forEach(function (iss) {
+          var fixLink = iss.elementor_url
+            ? '<a href="' + escAttr(iss.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline">Fix It &rarr;</a>'
+            : (iss.edit_url ? '<a href="' + escAttr(iss.edit_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline">Edit &rarr;</a>' : '');
           issueHtml += '<div class="siloq-issue-row"><span>' + escHtml(iss.title) + ' &mdash; ' + escHtml(iss.issue) + '</span>'
-            + '<button class="siloq-btn siloq-btn--sm siloq-btn--outline">Fix It</button></div>';
+            + fixLink + '</div>';
         });
         issueHtml += '</div>';
       });
