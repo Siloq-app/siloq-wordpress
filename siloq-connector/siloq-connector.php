@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.78
+* Version: 1.5.79
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.78');
+define('SILOQ_VERSION', '1.5.79');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -431,7 +431,7 @@ class Siloq_Connector {
 
         // Dashboard v2 CSS + JS on dashboard page
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        if ($screen && $screen->id === 'siloq_page_siloq-dashboard') {
+        if ($screen && ($screen->id === 'siloq-settings_page_siloq-dashboard' || (isset($_GET['page']) && $_GET['page'] === 'siloq-dashboard'))) {
             wp_enqueue_style(
                 'siloq-dashboard-v2',
                 SILOQ_PLUGIN_URL . 'assets/css/siloq-dashboard-v2.css',
@@ -454,7 +454,7 @@ class Siloq_Connector {
         }
 
         // Enqueue sync script on sync + settings pages
-        if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
+        if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq-settings_page_siloq-dashboard' || (isset($_GET['page']) && in_array($_GET['page'], ['siloq-settings', 'siloq-dashboard', 'siloq-sync'])))) {
             wp_enqueue_script(
                 'siloq-sync',
                 SILOQ_PLUGIN_URL . 'assets/js/siloq-sync.js',
@@ -480,7 +480,7 @@ class Siloq_Connector {
         }
         
         // Enqueue admin JS + localize dashboard nonce on dashboard page
-        if ($screen && $screen->id === 'siloq_page_siloq-dashboard') {
+        if ($screen && ($screen->id === 'siloq-settings_page_siloq-dashboard' || (isset($_GET['page']) && $_GET['page'] === 'siloq-dashboard'))) {
             wp_enqueue_script(
                 'siloq-admin',
                 SILOQ_PLUGIN_URL . 'assets/js/siloq-admin.js',
@@ -1078,7 +1078,7 @@ class Siloq_Connector {
      * AJAX: Get plan data — build architecture tree, priority actions, issues, roadmap
      */
     public function ajax_get_plan_data() {
-        check_ajax_referer('siloq_nonce', 'nonce');
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
@@ -1097,10 +1097,14 @@ class Siloq_Connector {
         $posts = get_posts(array(
             'post_type'      => array('page', 'post'),
             'posts_per_page' => -1,
-            'meta_key'       => '_siloq_synced',
-            'meta_value'     => '1',
             'post_status'    => 'publish',
             'fields'         => 'ids',
+            'meta_query'     => array(
+                array(
+                    'key'     => '_siloq_synced',
+                    'compare' => 'EXISTS',
+                ),
+            ),
         ));
 
         $architecture = array();
@@ -1288,7 +1292,7 @@ class Siloq_Connector {
      * AJAX handler: get paginated pages list for Pages tab
      */
     public function ajax_get_pages_list() {
-        check_ajax_referer('siloq_nonce', 'nonce');
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
@@ -1301,11 +1305,15 @@ class Siloq_Connector {
             'post_type'      => array('page', 'post'),
             'posts_per_page' => 20,
             'offset'         => $offset,
-            'meta_key'       => '_siloq_synced',
-            'meta_value'     => '1',
             'post_status'    => 'publish',
             'orderby'        => 'modified',
             'order'          => 'DESC',
+            'meta_query'     => array(
+                array(
+                    'key'     => '_siloq_synced',
+                    'compare' => 'EXISTS',
+                ),
+            ),
         );
 
         $posts = get_posts($args);
