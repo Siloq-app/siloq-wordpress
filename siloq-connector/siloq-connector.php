@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.80
+* Version: 1.5.81
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.80');
+define('SILOQ_VERSION', '1.5.81');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1373,18 +1373,40 @@ class Siloq_Connector {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Unauthorized'), 403);
+            return;
         }
 
         $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key', '');
         $site_id = get_option('siloq_site_id', '');
 
-        if (empty($api_key) || empty($site_id)) {
-            wp_send_json_error(array('message' => 'Plugin not connected. Configure your API key first.'));
+        if (empty($api_key)) {
+            wp_send_json_error(array('message' => 'No API key configured. Add your API key in Settings first.'));
+            return;
         }
 
-        // The auth-url endpoint is at /gsc/auth-url/?site_id={id}
-        // NOT at /sites/{id}/gsc/auth-url/ which returns 404
+        // Auto-recover missing site_id — fetch from API just like the wizard does
+        if (empty($site_id)) {
+            $sites_resp = wp_remote_get(
+                trailingslashit($api_url) . 'sites/',
+                array('headers' => array('Authorization' => 'Bearer ' . $api_key, 'Accept' => 'application/json'), 'timeout' => 15)
+            );
+            if (!is_wp_error($sites_resp)) {
+                $sites_data = json_decode(wp_remote_retrieve_body($sites_resp), true);
+                $sites_list = isset($sites_data['results']) ? $sites_data['results'] : (is_array($sites_data) ? $sites_data : array());
+                if (!empty($sites_list[0]['id'])) {
+                    $site_id = $sites_list[0]['id'];
+                    update_option('siloq_site_id', $site_id);
+                }
+            }
+        }
+
+        if (empty($site_id)) {
+            wp_send_json_error(array('message' => 'Could not find your site ID. Please re-run the setup wizard or check Settings.'));
+            return;
+        }
+
+        // Endpoint: GET /api/v1/gsc/auth-url/?site_id={id}
         $response = wp_remote_get(
             trailingslashit($api_url) . 'gsc/auth-url/?site_id=' . $site_id,
             array(
@@ -1397,14 +1419,17 @@ class Siloq_Connector {
         );
 
         if (is_wp_error($response)) {
-            wp_send_json_error(array('message' => $response->get_error_message()));
+            wp_send_json_error(array('message' => 'Connection failed: ' . $response->get_error_message()));
+            return;
         }
 
         $body = json_decode(wp_remote_retrieve_body($response), true);
         $code = wp_remote_retrieve_response_code($response);
 
         if ($code >= 400 || empty($body['auth_url'])) {
-            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Failed to get OAuth URL'));
+            $err = isset($body['error']) ? $body['error'] : (isset($body['detail']) ? $body['detail'] : 'HTTP ' . $code);
+            wp_send_json_error(array('message' => 'API error (' . $code . '): ' . $err));
+            return;
         }
 
         wp_send_json_success(array('auth_url' => $body['auth_url']));
