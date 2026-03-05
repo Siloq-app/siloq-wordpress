@@ -227,7 +227,7 @@ class Siloq_Widget_Intelligence {
 
         // Build a specific, actionable edit instruction
         $edit_instruction = "Rewrite this {$widget_type} to be significantly better for local SEO and conversions. "
-            . "Page: "{$post_title}". Business: {$business}"
+            . 'Page: "' . $post_title . '". Business: ' . $business
             . ( $city_name ? " in {$city_name}." : '.' )
             . ( $service_str ? " Services offered: {$service_str}." : '' )
             . " Page type: {$layer}."
