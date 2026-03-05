@@ -1169,6 +1169,7 @@ class Siloq_Admin {
         // Clear connection verification if credentials changed
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {
             delete_transient('siloq_connection_verified');
+            delete_transient('siloq_plan_data');
         }
         
         add_settings_error(
@@ -1352,15 +1353,11 @@ class Siloq_Admin {
             <div id="siloq-tab-plan" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
                 <div class="siloq-plan-section">
 
-                    <?php if (!$has_plan): ?>
-                        <div class="siloq-card siloq-empty" style="padding:48px">
-                            <div class="siloq-empty__icon">&#128640;</div>
-                            <h3>Generate your personalized SEO/GEO plan</h3>
-                            <p>We'll analyze your pages, find gaps, and create a priority action plan.</p>
-                            <br>
-                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
+                    <div style="text-align:right;margin-bottom:8px">
+                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">
+                                <?php echo $has_plan ? '&#8635; Refresh Plan' : 'Generate Your SEO Plan &rarr;'; ?>
+                            </button>
                         </div>
-                    <?php endif; ?>
 
                     <!-- Section 1: Site Architecture Map -->
                     <div class="siloq-accordion">

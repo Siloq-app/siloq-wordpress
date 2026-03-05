@@ -88,27 +88,46 @@
   }
 
   /* ─── Plan Generation AJAX ───────────────────── */
+  var planLoaded = false;
+
+  function loadPlanData($btn) {
+    if ($btn) { $btn.prop('disabled', true).text('Generating...'); }
+    $.post(cfg.ajaxUrl, {
+      action: 'siloq_get_plan_data',
+      nonce: cfg.nonce
+    }, function (resp) {
+      if (resp.success && resp.data) {
+        planLoaded = true;
+        renderPlanData(resp.data);
+        if ($btn) { $btn.text('Refresh Plan').addClass('siloq-btn--success').prop('disabled', false); }
+      } else {
+        if ($btn) { $btn.prop('disabled', false).text('Generate Your SEO Plan →'); }
+        var msg = resp.data && resp.data.message ? resp.data.message : 'Failed to generate plan. Please try again.';
+        $('#siloq-architecture-content').html('<p class="siloq-empty" style="color:#c0392b">' + msg + '</p>');
+      }
+    }).fail(function () {
+      if ($btn) { $btn.prop('disabled', false).text('Generate Your SEO Plan →'); }
+    });
+  }
+
   function initPlanGeneration() {
+    // Manual generate button
     $(document).on('click', '.siloq-generate-plan-btn', function (e) {
       e.preventDefault();
-      var $btn = $(this);
-      $btn.prop('disabled', true).text('Generating...');
-
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_get_plan_data',
-        nonce: cfg.nonce
-      }, function (resp) {
-        if (resp.success && resp.data) {
-          renderPlanData(resp.data);
-          $btn.text('Plan Generated').addClass('siloq-btn--success');
-        } else {
-          $btn.prop('disabled', false).text('Generate Your SEO Plan →');
-          alert(resp.data && resp.data.message ? resp.data.message : 'Failed to generate plan. Please try again.');
-        }
-      }).fail(function () {
-        $btn.prop('disabled', false).text('Generate Your SEO Plan →');
-      });
+      loadPlanData($(this));
     });
+
+    // Auto-load when plan tab becomes active (covers "View Priority Actions" click too)
+    $(document).on('click', '[aria-controls="siloq-tab-plan"], .siloq-tab-btn[aria-controls="siloq-tab-plan"]', function () {
+      if (!planLoaded) {
+        setTimeout(function () { loadPlanData(null); }, 100);
+      }
+    });
+
+    // Auto-load if plan tab is already active on page load (URL hash)
+    if (window.location.hash === '#siloq-tab-plan' || $('#siloq-tab-plan').hasClass('active')) {
+      setTimeout(function () { loadPlanData(null); }, 300);
+    }
   }
 
   function renderPlanData(data) {
