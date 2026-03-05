@@ -1664,7 +1664,11 @@ class Siloq_Admin {
                             <div class="siloq-gsc-status__icon">&#128270;</div>
                             <h3>Connect Google Search Console</h3>
                             <p style="color:var(--siloq-muted);margin:8px 0 20px">Link your GSC property to unlock performance data and keyword insights.</p>
-                            <button type="button" id="siloq-gsc-connect-btn-tab" class="siloq-btn siloq-btn--primary">Connect Google Search Console &rarr;</button>
+                            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                                <a href="https://app.siloq.ai/dashboard?tab=gsc" target="_blank" class="siloq-btn siloq-btn--primary">Connect GSC in Siloq Dashboard &rarr;</a>
+                                <button type="button" id="siloq-gsc-check-btn-tab" class="siloq-btn siloq-btn--outline">Check Connection</button>
+                            </div>
+                            <p style="color:var(--siloq-muted);font-size:13px;margin-top:12px;">Connect in the Siloq dashboard, then click "Check Connection" to confirm.</p>
                             <span id="siloq-gsc-tab-msg" class="siloq-status-message" style="display:block;margin-top:8px;"></span>
                         <?php endif; ?>
                     </div>
@@ -1705,9 +1709,8 @@ class Siloq_Admin {
 
                 // GSC tab handlers (Dashboard page)
                 jQuery(document).ready(function($){
-                    var sa = window.siloqAjax || {};
-                    var nonce = sa.nonce || '';
-                    var ajaxUrl = sa.ajaxurl || (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+                    var nonce = '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>';
+                    var ajaxUrl = '<?php echo esc_js(admin_url("admin-ajax.php")); ?>';
 
                     function tabMsg(text, type) {
                         var $m = $('#siloq-gsc-tab-msg');
@@ -1715,28 +1718,18 @@ class Siloq_Admin {
                         if (type !== 'error') setTimeout(function(){ $m.fadeOut(); }, 5000);
                     }
 
-                    // Connect via OAuth (GSC tab)
-                    $('#siloq-gsc-connect-btn-tab').on('click', function(){
-                        var $btn = $(this);
-                        $btn.prop('disabled', true).text('Connecting...');
-                        $.post(ajaxUrl, { action: 'siloq_gsc_init_oauth', nonce: nonce }, function(r){
-                            if (r.success && r.data.auth_url) {
-                                var popup = window.open(r.data.auth_url, 'siloq_gsc_oauth', 'width=600,height=700,scrollbars=yes');
-                                var poll = setInterval(function(){
-                                    if (!popup || popup.closed) {
-                                        clearInterval(poll);
-                                        $.post(ajaxUrl, { action: 'siloq_gsc_check_status', nonce: nonce }, function(r2){
-                                            if (r2.success && r2.data.connected) location.reload();
-                                            else { tabMsg('Not connected yet — try again.', 'error'); $btn.prop('disabled',false).text('Connect Google Search Console →'); }
-                                        });
-                                    }
-                                }, 1000);
+                    // Check Connection (GSC tab — no popup, connect via app.siloq.ai instead)
+                    $('#siloq-gsc-check-btn-tab').on('click', function(){
+                        var $btn = $(this).prop('disabled', true).text('Checking...');
+                        $.post(ajaxUrl, { action: 'siloq_gsc_check_status', nonce: nonce }, function(r){
+                            $btn.prop('disabled', false).text('Check Connection');
+                            if (r.success && r.data && r.data.connected) {
+                                tabMsg('Connected! Refreshing...', 'success');
+                                setTimeout(function(){ location.reload(); }, 800);
                             } else {
-                                console.error('GSC OAuth error:', r.data && r.data.message);
-                                tabMsg('GSC connection requires an API update. Your Siloq account team will enable this shortly.', 'error');
-                                $btn.prop('disabled',false).text('Connect Google Search Console →');
+                                tabMsg('Not connected yet. Connect at app.siloq.ai/dashboard first, then check again.', 'error');
                             }
-                        }).fail(function(xhr){ console.error('GSC OAuth failed:', xhr.status); $btn.prop('disabled',false).text('Connect Google Search Console →'); tabMsg('Connection failed (HTTP ' + xhr.status + '). Check browser console for details.','error'); });
+                        }).fail(function(xhr){ $btn.prop('disabled', false).text('Check Connection'); tabMsg('Request failed (HTTP ' + xhr.status + ').', 'error'); });
                     });
 
                     // Sync (GSC tab)
