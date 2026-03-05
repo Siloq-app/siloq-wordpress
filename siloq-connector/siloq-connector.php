@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.94
+* Version: 1.5.95
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.94');
+define('SILOQ_VERSION', '1.5.95');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -304,6 +304,8 @@ class Siloq_Connector {
         // GSC connection handlers
         add_action('wp_ajax_siloq_gsc_init_oauth', array($this, 'ajax_gsc_init_oauth'));
         add_action('wp_ajax_siloq_gsc_check_status', array($this, 'ajax_gsc_check_status'));
+        // Detect post-OAuth return: ?siloq_gsc=connected or ?siloq_gsc=error
+        add_action('admin_init', array($this, 'handle_gsc_oauth_return'));
         add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
         add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
         // Onboarding wizard handlers
@@ -1532,6 +1534,56 @@ class Siloq_Connector {
      * GSC Connection Handlers
      * ──────────────────────────────────────────────── */
 
+    // ── Post-OAuth return handler ─────────────────────────────────────────
+    // Called on every admin_init. If ?siloq_gsc=connected is in the URL (Google bounce-back),
+    // call the status API to confirm, store the result, and show an admin notice.
+    public function handle_gsc_oauth_return() {
+        if (!isset($_GET['siloq_gsc']) || !current_user_can('manage_options')) return;
+
+        $result = sanitize_text_field($_GET['siloq_gsc']);
+
+        if ($result === 'connected') {
+            // Confirm connection with API
+            $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+            $api_key = get_option('siloq_api_key', '');
+            $site_id = get_option('siloq_site_id', '');
+
+            if ($api_key && $site_id) {
+                $resp = wp_remote_get(
+                    trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/status/',
+                    array('headers' => array('Authorization' => 'Bearer ' . $api_key), 'timeout' => 15)
+                );
+                if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
+                    $body = json_decode(wp_remote_retrieve_body($resp), true);
+                    if (!empty($body['connected'])) {
+                        update_option('siloq_gsc_connected', 'yes');
+                        update_option('siloq_gsc_property', sanitize_text_field($body['property'] ?? ''));
+                        if (!empty($body['account_email'])) {
+                            update_option('siloq_gsc_account_email', sanitize_text_field($body['account_email']));
+                        }
+                        if (!empty($body['last_sync'])) {
+                            update_option('siloq_gsc_last_sync', sanitize_text_field($body['last_sync']));
+                        }
+                        add_action('admin_notices', function() {
+                            echo '<div class="notice notice-success is-dismissible"><p>✅ <strong>Google Search Console connected!</strong> Siloq will now use GSC data to prioritize your SEO recommendations.</p></div>';
+                        });
+                    }
+                }
+            }
+            // Redirect to clean URL (remove ?siloq_gsc param)
+            if (!headers_sent()) {
+                $clean_url = remove_query_arg(array('siloq_gsc', 'gsc_error'), wp_get_referer() ?: admin_url('admin.php?page=siloq-settings&tab=gsc'));
+                wp_safe_redirect(admin_url('admin.php?page=siloq-settings&tab=gsc'));
+                exit;
+            }
+        } elseif ($result === 'error') {
+            $error = sanitize_text_field($_GET['gsc_error'] ?? 'unknown');
+            add_action('admin_notices', function() use ($error) {
+                echo '<div class="notice notice-error is-dismissible"><p>❌ <strong>GSC connection failed:</strong> ' . esc_html($error) . '. Please try again.</p></div>';
+            });
+        }
+    }
+
     public function ajax_gsc_init_oauth() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
@@ -1569,9 +1621,12 @@ class Siloq_Connector {
             return;
         }
 
-        // Endpoint: GET /api/v1/gsc/auth-url/?site_id={id}
+        // Build the WP admin return URL for post-OAuth redirect
+        $return_url = admin_url('admin.php?page=siloq-settings&tab=gsc');
+
+        // Endpoint: GET /api/v1/gsc/auth-url/?site_id={id}&wp_return_url={encoded}
         $response = wp_remote_get(
-            trailingslashit($api_url) . 'gsc/auth-url/?site_id=' . $site_id . '&popup=1',
+            trailingslashit($api_url) . 'gsc/auth-url/?site_id=' . $site_id . '&wp_return_url=' . rawurlencode($return_url),
             array(
                 'headers' => array(
                     'Authorization' => 'Bearer ' . $api_key,

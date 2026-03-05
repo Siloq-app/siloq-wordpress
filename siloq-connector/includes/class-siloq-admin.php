@@ -1114,62 +1114,29 @@ class Siloq_Admin {
                 $('#siloq-gsc-status-msg').text(text).css('color', color || '#555');
             }
 
-            // ── GSC Connect via popup (stays in WP admin — no redirect to app.siloq.ai) ──
+            // ── GSC Connect: OAuth Proxy Pattern ──
+            // Plugin fetches auth URL from API (which encodes wp_return_url in state).
+            // Browser redirects to Google OAuth — stays in same tab.
+            // Google bounces to api.siloq.ai callback, which exchanges token and 
+            // redirects browser back to WP admin with ?siloq_gsc=connected.
+            // Plugin detects that param on load (see PHP admin_init hook).
             window.siloqOpenGSCPopup = function() {
-                var $btn = $('#siloq-gsc-connect-btn, .siloq-gsc-connect-popup').prop('disabled', true).text('Opening...');
-                gscMsg('Opening Google authorization...', '#555');
+                var $btn = $('#siloq-gsc-connect-btn, #siloq-gsc-connect-btn-tab, .siloq-gsc-connect-popup');
+                $btn.prop('disabled', true).text('Loading...');
+                gscMsg('Getting authorization URL...', '#555');
                 $.post(ajaxUrl, {action: 'siloq_gsc_init_oauth', nonce: nonce}, function(r) {
                     if (!r.success || !r.data || !r.data.auth_url) {
                         $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
-                        gscMsg(r.data && r.data.message ? r.data.message : 'Could not get authorization URL.', '#dc2626');
+                        gscMsg(r.data && r.data.message ? r.data.message : 'Could not get authorization URL. Check your API key.', '#dc2626');
                         return;
                     }
-                    // Open popup — 600×700 centered
-                    var w = 600, h = 700;
-                    var left = Math.max(0, (screen.width - w) / 2 + (screen.availLeft || 0));
-                    var top  = Math.max(0, (screen.height - h) / 2 + (screen.availTop || 0));
-                    var popup = window.open(r.data.auth_url, 'siloqGSCAuth',
-                        'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
-                        ',scrollbars=yes,resizable=yes');
-                    $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
-                    gscMsg('Waiting for Google authorization...', '#555');
-
-                    // Listen for postMessage from popup close page
-                    function onGSCMessage(e) {
-                        if (e.data === 'siloq_gsc_connected' || e.data === 'siloq_gsc_error') {
-                            window.removeEventListener('message', onGSCMessage);
-                            clearInterval(pollTimer);
-                            if (e.data === 'siloq_gsc_connected') {
-                                gscMsg('Connected! Refreshing...', '#16a34a');
-                                setTimeout(function(){ location.reload(); }, 800);
-                            } else {
-                                gscMsg('Authorization failed or was cancelled.', '#dc2626');
-                            }
-                        }
-                    }
-                    window.addEventListener('message', onGSCMessage);
-
-                    // Fallback poll every 3s in case popup can't postMessage (cross-origin edge case)
-                    var pollTimer = setInterval(function() {
-                        if (popup && popup.closed) {
-                            clearInterval(pollTimer);
-                            window.removeEventListener('message', onGSCMessage);
-                            // Check if OAuth completed after popup closed
-                            $.post(ajaxUrl, {action: 'siloq_gsc_check_status', nonce: nonce}, function(r2) {
-                                if (r2.success && r2.data && r2.data.connected) {
-                                    gscMsg('Connected! Refreshing...', '#16a34a');
-                                    setTimeout(function(){ location.reload(); }, 800);
-                                } else {
-                                    gscMsg('Window closed. If you completed authorization, click Check Connection.', '#555');
-                                }
-                            });
-                        }
-                    }, 1500);
+                    // Direct redirect — same tab. Google OAuth → api.siloq.ai callback → back here.
+                    window.location.href = r.data.auth_url;
                 }).fail(function(xhr){
                     $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
-                    gscMsg('Request failed (HTTP ' + xhr.status + '). Check your API key in Settings.', '#dc2626');
+                    gscMsg('Request failed (HTTP ' + xhr.status + ').', '#dc2626');
                 });
-            }
+            };
 
             $(document).on('click', '#siloq-gsc-connect-btn, .siloq-gsc-connect-popup', function() {
                 window.siloqOpenGSCPopup();
