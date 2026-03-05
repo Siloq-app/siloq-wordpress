@@ -2078,9 +2078,9 @@ class Siloq_Admin {
                 text-align: center;
                 margin-bottom: 16px;
             }
-            .siloq-wizard-logo svg {
-                width: 48px;
+            .siloq-wizard-logo img {
                 height: 48px;
+                width: auto;
             }
             .siloq-wizard-field {
                 margin-bottom: 16px;
@@ -2296,10 +2296,7 @@ class Siloq_Admin {
                 <!-- STEP 1: Connect to Siloq -->
                 <div class="siloq-wizard-panel active" id="siloq-wizard-step-1">
                     <div class="siloq-wizard-logo">
-                        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="48" height="48" rx="12" fill="#4f46e5"/>
-                            <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-family="Arial,sans-serif" font-size="22" font-weight="bold">S</text>
-                        </svg>
+                        <img src="https://siloq.ai/wp-content/uploads/2026/01/logo-siloq.webp" alt="Siloq" style="height:48px;width:auto;" />
                     </div>
                     <h2><?php _e('Welcome to Siloq', 'siloq-connector'); ?></h2>
                     <p class="siloq-wizard-subtitle"><?php _e('Connect your site to start optimizing your SEO architecture.', 'siloq-connector'); ?></p>
