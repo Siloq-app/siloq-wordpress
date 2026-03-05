@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.87
+* Version: 1.5.88
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.87');
+define('SILOQ_VERSION', '1.5.88');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1137,21 +1137,27 @@ class Siloq_Connector {
                 );
             }
 
-            // Build architecture tree
-            $architecture[] = array('title' => $title, 'type' => $page_type, 'id' => $post_id, 'score' => $score);
+            // Check silo relationship FIRST, then add to architecture once only
+            $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
+            $has_analysis = !empty($analysis);
 
             if ($page_type === 'hub') {
                 $hub_count++;
                 $hubs[] = $post_id;
-            }
-
-            // Check for orphans (no silo relationship)
-            $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
-            if (empty($silo_data) && $page_type !== 'hub') {
+                $arch_type = 'hub';
+            } elseif (!$has_analysis) {
+                // Not analyzed yet — show as pending, not orphan
+                $arch_type = 'pending';
+            } elseif (empty($silo_data)) {
+                // Analyzed but not assigned to a silo
                 $orphans[] = $post_id;
                 $orphan_count++;
-                $architecture[] = array('title' => $title . ' (orphan)', 'type' => 'orphan', 'id' => $post_id);
+                $arch_type = 'orphan';
+            } else {
+                $arch_type = $page_type;
             }
+
+            $architecture[] = array('title' => $title, 'type' => $arch_type, 'id' => $post_id, 'score' => $score);
 
             // Extract issues from analysis
             if (isset($analysis['issues']) && is_array($analysis['issues'])) {
@@ -1166,36 +1172,58 @@ class Siloq_Connector {
                 }
             }
 
-            // Build actions from low scores or missing elements
-            if ($score < 50) {
+            // Build actions — include links so Fix It buttons actually work
+            $edit_url     = get_edit_post_link($post_id, 'raw');
+            $elementor_url = admin_url('post.php?post=' . $post_id . '&action=elementor');
+
+            if (!$has_analysis) {
                 $actions[] = array(
-                    'headline' => 'Improve content quality on "' . $title . '"',
-                    'priority' => 'high',
-                    'effort'   => 'Half Day',
-                    'post_id'  => $post_id,
+                    'headline'      => 'Analyze "' . $title . '" in Widget Intelligence',
+                    'detail'        => 'Open this page in Elementor and click Analyze to get SEO recommendations.',
+                    'priority'      => 'high',
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
+                    'elementor_url' => $elementor_url,
+                );
+            } elseif ($score < 50) {
+                $actions[] = array(
+                    'headline'      => 'Improve content quality on "' . $title . '"',
+                    'detail'        => 'Score: ' . $score . '/100. Open in Widget Intelligence to see specific recommendations.',
+                    'priority'      => 'high',
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
+                    'elementor_url' => $elementor_url,
                 );
             } elseif ($score < 75) {
                 $actions[] = array(
-                    'headline' => 'Optimize "' . $title . '" for better rankings',
-                    'priority' => 'medium',
-                    'effort'   => 'Quick Win',
-                    'post_id'  => $post_id,
+                    'headline'      => 'Optimize "' . $title . '" for better rankings',
+                    'detail'        => 'Score: ' . $score . '/100. Minor improvements available.',
+                    'priority'      => 'medium',
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
+                    'elementor_url' => $elementor_url,
                 );
             }
 
-            // Supporting content opportunities
+            // Supporting content — from analysis if available, otherwise suggest from page structure
             if (isset($analysis['missing_supporting']) && is_array($analysis['missing_supporting'])) {
                 foreach ($analysis['missing_supporting'] as $ms) {
                     $missing_count++;
                     $supporting[] = array(
-                        'title' => isset($ms['title']) ? $ms['title'] : 'Supporting page for "' . $title . '"',
-                        'type'  => isset($ms['type']) ? $ms['type'] : 'sub-page',
-                    );
-                    $architecture[] = array(
-                        'title' => isset($ms['title']) ? $ms['title'] : 'Missing supporting page',
-                        'type'  => 'missing',
+                        'title'  => isset($ms['title']) ? $ms['title'] : 'Supporting page for "' . $title . '"',
+                        'type'   => isset($ms['type']) ? $ms['type'] : 'sub-page',
+                        'parent' => $title,
                     );
                 }
+            } elseif ($arch_type === 'hub' || $page_type === 'hub') {
+                // Hub pages should have supporting content — flag it
+                $missing_count++;
+                $supporting[] = array(
+                    'title'  => 'Add supporting pages under "' . $title . '"',
+                    'type'   => 'sub-page',
+                    'parent' => $title,
+                    'detail' => 'This hub page needs spoke pages that cover specific subtopics in depth.',
+                );
             }
         }
 

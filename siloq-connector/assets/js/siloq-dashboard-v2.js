@@ -139,11 +139,18 @@
       var html = '<ul class="siloq-tree">';
       data.architecture.forEach(function (node) {
         var cls = 'siloq-tree--' + (node.type || 'spoke');
-        html += '<li class="' + cls + '">' + escHtml(node.title);
-        if (node.type === 'missing') {
-          html += ' <button class="siloq-btn siloq-btn--sm siloq-btn--outline">Create</button>';
+        var label = node.title;
+        var extra = '';
+        if (node.type === 'pending') {
+          extra = ' <span style="color:#999;font-size:11px;">(not yet analyzed)</span>';
+        } else if (node.type === 'orphan') {
+          extra = ' <span style="color:#f59e0b;font-size:11px;">(no structure assigned)</span>';
+        } else if (node.type === 'hub') {
+          extra = ' <span style="color:#0ea5e9;font-size:11px;">HUB</span>';
+        } else if (node.type === 'missing') {
+          extra = ' <button class="siloq-btn siloq-btn--sm siloq-btn--outline">Create</button>';
         }
-        html += '</li>';
+        html += '<li class="' + cls + '">' + escHtml(label) + extra + '</li>';
       });
       html += '</ul>';
       $archContent.html(html);
@@ -156,18 +163,19 @@
       var actHtml = '';
       data.actions.forEach(function (act, i) {
         var prioClass = act.priority === 'high' ? 'red' : (act.priority === 'medium' ? 'amber' : 'blue');
-        var effortLabel = act.effort || 'Quick Win';
+        var fixBtn = act.elementor_url
+          ? '<a href="' + escAttr(act.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Fix in Elementor &rarr;</a>'
+          : (act.edit_url ? '<a href="' + escAttr(act.edit_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Edit Page &rarr;</a>' : '');
         actHtml += '<div class="siloq-action-card">'
           + '<span class="siloq-action-card__number">' + (i + 1) + '</span>'
           + '<div class="siloq-action-card__body">'
           + '<p class="siloq-action-card__headline">' + escHtml(act.headline) + '</p>'
+          + (act.detail ? '<p style="color:#666;font-size:13px;margin:4px 0 8px">' + escHtml(act.detail) + '</p>' : '')
           + '<div class="siloq-action-card__meta">'
-          + '<span class="siloq-badge siloq-badge--' + prioClass + '">' + escHtml(act.priority) + '</span>'
-          + '<span class="siloq-badge siloq-badge--gray">' + escHtml(effortLabel) + '</span>'
+          + '<span class="siloq-badge siloq-badge--' + prioClass + '">' + escHtml(act.priority) + ' priority</span>'
           + '</div>'
-          + '<div class="siloq-action-card__actions">'
-          + '<button class="siloq-btn siloq-btn--sm siloq-btn--primary">Fix It</button>'
-          + '</div></div></div>';
+          + (fixBtn ? '<div class="siloq-action-card__actions" style="margin-top:8px">' + fixBtn + '</div>' : '')
+          + '</div></div>';
       });
       $('#siloq-actions-content').html(actHtml);
     } else {
@@ -199,10 +207,8 @@
         var bClass = s.type === 'sub-page' ? 'blue' : 'purple';
         supHtml += '<div class="siloq-action-card"><div class="siloq-action-card__body">'
           + '<p class="siloq-action-card__headline">' + escHtml(s.title) + '</p>'
-          + '<div class="siloq-action-card__meta">'
-          + '<span class="siloq-badge siloq-badge--' + bClass + '">' + escHtml(s.type) + '</span>'
-          + '</div>'
-          + '<button class="siloq-btn siloq-btn--sm siloq-btn--outline">Create Draft</button>'
+          + (s.detail ? '<p style="color:#666;font-size:13px;margin:4px 0 8px">' + escHtml(s.detail) + '</p>' : '')
+          + (s.parent ? '<p style="color:#999;font-size:12px;margin:0 0 8px">Under: ' + escHtml(s.parent) + '</p>' : '')
           + '</div></div>';
       });
       $('#siloq-supporting-content').html(supHtml);
