@@ -1207,7 +1207,7 @@ class Siloq_Admin {
         }
 
         // Insight data
-        $synced_pages = get_posts(array('post_type' => array('page', 'post'), 'meta_key' => '_siloq_last_sync', 'posts_per_page' => -1, 'fields' => 'ids'));
+        $synced_pages = get_posts(array('post_type' => array('page', 'post'), 'meta_key' => '_siloq_synced', 'meta_value' => '1', 'posts_per_page' => -1, 'fields' => 'ids'));
         $hub_count = 0; $orphan_count = 0; $missing_count = 0;
         if ($has_plan) {
             $hub_count = isset($plan_data['hub_count']) ? intval($plan_data['hub_count']) : 0;

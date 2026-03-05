@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.77
+* Version: 1.5.78
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.77');
+define('SILOQ_VERSION', '1.5.78');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1091,11 +1091,15 @@ class Siloq_Connector {
             return;
         }
 
-        // Gather all posts with analysis data
+        // Query all synced pages (_siloq_synced set by sync engine on every page sync)
+        // _siloq_analysis_data only exists for pages run through Widget Intelligence
+        // so we use _siloq_synced as the base query and optionally read analysis data
         $posts = get_posts(array(
             'post_type'      => array('page', 'post'),
             'posts_per_page' => -1,
-            'meta_key'       => '_siloq_analysis_data',
+            'meta_key'       => '_siloq_synced',
+            'meta_value'     => '1',
+            'post_status'    => 'publish',
             'fields'         => 'ids',
         ));
 
@@ -1110,13 +1114,24 @@ class Siloq_Connector {
         $missing_count = 0;
 
         foreach ($posts as $post_id) {
-            $raw = get_post_meta($post_id, '_siloq_analysis_data', true);
+            $raw      = get_post_meta($post_id, '_siloq_analysis_data', true);
             $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
-            if (empty($analysis)) continue;
+            if (!is_array($analysis)) $analysis = array();
+            // Pages without Widget Intelligence analysis still show in the plan
+            // with basic data from sync — page_type defaults to 'supporting'
 
             $title     = get_the_title($post_id);
-            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'spoke';
+            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'supporting';
             $score     = isset($analysis['score']) ? intval($analysis['score']) : 0;
+
+            // If no analysis: flag as opportunity (needs Widget Intelligence run)
+            if (empty($analysis)) {
+                $issues['opportunity'][] = array(
+                    'title'   => $title,
+                    'issue'   => 'Run Widget Intelligence to get SEO recommendations for this page.',
+                    'post_id' => $post_id,
+                );
+            }
 
             // Build architecture tree
             $architecture[] = array('title' => $title, 'type' => $page_type, 'id' => $post_id, 'score' => $score);
@@ -1286,7 +1301,8 @@ class Siloq_Connector {
             'post_type'      => array('page', 'post'),
             'posts_per_page' => 20,
             'offset'         => $offset,
-            'meta_key'       => '_siloq_analysis_data',
+            'meta_key'       => '_siloq_synced',
+            'meta_value'     => '1',
             'post_status'    => 'publish',
             'orderby'        => 'modified',
             'order'          => 'DESC',
