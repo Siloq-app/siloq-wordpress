@@ -6,7 +6,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.5.72] — 2026-03-05
+## [1.5.74] — 2026-03-05
 
 ### Added
 - **Schema Tab** — full 3-section implementation replacing placeholder:
