@@ -394,6 +394,7 @@
     else if (page.page_type === 'spoke') typeBadgeClass = 'spoke';
     else if (page.page_type === 'supporting') typeBadgeClass = 'supporting';
     else if (page.page_type === 'orphan') typeBadgeClass = 'orphan';
+    else if (page.page_type === 'pending') typeBadgeClass = 'pending';
 
     // Top 3 issues as pills
     var pillsHtml = '';
@@ -434,7 +435,7 @@
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="Page not yet assigned to a content structure"' : '') + '>' + escHtml(page.page_type.toUpperCase()) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Open in Elementor and run Analyze."' : '') + (page.page_type === 'pending' ? ' title="Open in Elementor and run Analyze to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : escHtml(page.page_type.toUpperCase())) + '</span>'
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'
       + (pillsHtml ? '<div class="siloq-page-card__issues-pills">' + pillsHtml + '</div>' : '')

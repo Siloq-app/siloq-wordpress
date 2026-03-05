@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.81
+* Version: 1.5.82
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.81');
+define('SILOQ_VERSION', '1.5.82');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -898,11 +898,11 @@ class Siloq_Connector {
         // Try to supplement with API data (fresher, includes service_cities etc.)
         $site_id  = get_option( 'siloq_site_id', '' );
         $api_key  = get_option( 'siloq_api_key', '' );
-        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
         if ( $site_id && $api_key ) {
             $response = wp_remote_get(
-                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                trailingslashit($api_base) . "sites/$site_id/entity-profile/",
                 [
                     'timeout' => 8,
                     'headers' => [
@@ -996,7 +996,7 @@ class Siloq_Connector {
         // Fields mapped to API schema (street_address/zip_code not address/zip).
         $site_id  = get_option( 'siloq_site_id', '' );
         $api_key  = get_option( 'siloq_api_key', '' );
-        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
         $api_sync_note = '';
         if ( $site_id && $api_key ) {
@@ -1015,7 +1015,7 @@ class Siloq_Connector {
             } );
 
             $response = wp_remote_request(
-                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                trailingslashit($api_base) . "sites/$site_id/entity-profile/",
                 [
                     'method'  => 'PATCH',
                     'timeout' => 10,
@@ -1095,7 +1095,7 @@ class Siloq_Connector {
         // _siloq_analysis_data only exists for pages run through Widget Intelligence
         // so we use _siloq_synced as the base query and optionally read analysis data
         $posts = get_posts(array(
-            'post_type'      => array('page', 'post'),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'posts_per_page' => -1,
             'post_status'    => 'publish',
             'fields'         => 'ids',
@@ -1302,7 +1302,7 @@ class Siloq_Connector {
         $filter = sanitize_text_field($_POST['filter'] ?? 'all');
 
         $args = array(
-            'post_type'      => array('page', 'post'),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'posts_per_page' => 20,
             'offset'         => $offset,
             'post_status'    => 'publish',
@@ -1324,9 +1324,17 @@ class Siloq_Connector {
             if (!is_array($analysis)) $analysis = array();
 
             $silo_data = get_post_meta($post->ID, '_siloq_silo_data', true);
-            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : (isset($analysis['page_type']) ? $analysis['page_type'] : 'supporting');
-            if (empty($silo_data) && $page_type !== 'hub') {
-                $page_type = 'orphan';
+            $has_analysis = !empty($analysis);
+            if ($has_analysis) {
+                // Page has been through Widget Intelligence — use its classification
+                $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] :
+                             (isset($analysis['page_type']) ? $analysis['page_type'] : 'supporting');
+                if (empty($silo_data) && $page_type !== 'hub') {
+                    $page_type = 'orphan';
+                }
+            } else {
+                // Not yet analyzed — don't label as orphan, just "pending"
+                $page_type = 'pending';
             }
 
             if ($filter !== 'all' && $page_type !== $filter) {
@@ -1932,7 +1940,7 @@ function siloq_get_dashboard_stats() {
     
     // Count synced pages from post meta (sync engine sets _siloq_synced = 1)
     $synced_pages = get_posts(array(
-        'post_type'      => array('page', 'post'),
+        'post_type'      => (function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post')),
         'post_status'    => 'publish',
         'posts_per_page' => -1,
         'fields'         => 'ids',

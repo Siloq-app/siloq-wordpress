@@ -1251,3 +1251,11 @@
     flex-wrap: wrap;
   }
 }
+
+/* Pending (not yet analyzed) badge */
+.siloq-badge--pending {
+    background: #f0f0f0;
+    color: #666;
+    border: 1px solid #ddd;
+    font-style: italic;
+}

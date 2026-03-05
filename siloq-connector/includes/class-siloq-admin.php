@@ -1157,6 +1157,14 @@ class Siloq_Admin {
         update_option('siloq_signup_url', $signup_url);
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
         update_option('siloq_show_advanced', $show_advanced);
+
+        // Save content types to sync (Advanced Settings checkboxes)
+        if (isset($_POST['siloq_content_types']) && is_array($_POST['siloq_content_types'])) {
+            $content_types = array_map('sanitize_key', $_POST['siloq_content_types']);
+            // Always ensure page and post are included
+            $content_types = array_unique(array_merge($content_types, array('page', 'post')));
+            update_option('siloq_content_types', $content_types);
+        }
         
         // Clear connection verification if credentials changed
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {

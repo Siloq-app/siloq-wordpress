@@ -86,7 +86,18 @@ function get_siloq_crawlable_post_types() {
      */
     $excluded = apply_filters( 'siloq_exclude_post_types', $excluded );
 
-    return array_values( array_diff( $all_types, $excluded ) );
+    $crawlable = array_values( array_diff( $all_types, $excluded ) );
+
+    // If admin has explicitly selected content types in Advanced Settings,
+    // intersect with that selection (so unchecked types are skipped).
+    $saved_types = get_option( 'siloq_content_types', array() );
+    if ( ! empty( $saved_types ) && is_array( $saved_types ) ) {
+        // Always include page + post regardless of saved selection
+        $saved_types = array_unique( array_merge( $saved_types, array( 'page', 'post' ) ) );
+        $crawlable = array_values( array_intersect( $crawlable, $saved_types ) );
+    }
+
+    return $crawlable;
 }
 
 // =============================================================================
