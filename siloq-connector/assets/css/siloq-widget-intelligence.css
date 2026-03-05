@@ -6,6 +6,21 @@
  * @since   1.5.57
  */
 
+/* ── Sticky panel — always visible at top of widget controls ──────────── */
+/*
+ * Elementor renders sections in registration order so ours lands second.
+ * CSS sticky pins it to the top of the scrollable panel content area,
+ * making it the first thing users see regardless of render position.
+ * No JS DOM manipulation needed — this is the reliable fix.
+ */
+.elementor-control-section[data-section="siloq_intelligence"] {
+    position: sticky !important;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
 /* ── Panel wrapper ────────────────────────────────────────────────────── */
 .siloq-wi-panel {
     margin: -10px -10px 0;

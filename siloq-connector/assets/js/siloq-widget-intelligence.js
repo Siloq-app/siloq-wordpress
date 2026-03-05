@@ -12,10 +12,32 @@
 (function($) {
     'use strict';
 
-    if (typeof siloqWI === 'undefined' || typeof elementor === 'undefined') return;
+    // Guard: siloqWI is set by wp_localize_script; elementor by Elementor's editor JS.
+    // Even with elementor-editor as a script dependency, elementor JS object may not
+    // be instantiated yet. We retry up to 50 times (5 seconds) before giving up.
+    if (typeof siloqWI === 'undefined') return;
 
-    var cfg     = siloqWI;
-    var pageMap = null; // Cached page structure
+    if (typeof elementor === 'undefined') {
+        var _retries = 0;
+        var _retryTimer = setInterval(function() {
+            _retries++;
+            if (typeof elementor !== 'undefined') {
+                clearInterval(_retryTimer);
+                initSiloqWI($);
+            } else if (_retries >= 50) {
+                clearInterval(_retryTimer);
+            }
+        }, 100);
+        return;
+    }
+
+    initSiloqWI($);
+
+    function initSiloqWI($) {
+
+    var cfg            = siloqWI;
+    var pageMap        = null;  // Cached page structure
+    var _cachedModel   = null;  // Cached from panel/open_editor/widget hook — most reliable source
 
     // ── Page map builder ──────────────────────────────────────────────────
 
@@ -92,13 +114,47 @@
         return {};
     }
 
+    // ── Widget model caching — hook fires when panel opens for a widget ────
+    // This is the RELIABLE source. Elementor passes the view directly.
+    // We cache it here so getActiveWidgetContent() always has it at click time.
+
+    function cacheWidgetModel(view) {
+        if (view && view.model) {
+            _cachedModel = view.model;
+        }
+    }
+
+    // Hook into Elementor's panel open event (fires every time a widget is selected)
+    if (elementor.hooks) {
+        elementor.hooks.addAction('panel/open_editor/widget', function(panel, model, view) {
+            // Elementor passes (panel, model, view) — model is the widget model directly
+            if (model) { _cachedModel = model; return; }
+            cacheWidgetModel(view);
+        });
+    }
+
+    // Backup: also hook the editor channel event
+    if (elementor.channels && elementor.channels.editor) {
+        elementor.channels.editor.on('change', function() {
+            try {
+                var panel = elementor.getPanelView && elementor.getPanelView();
+                if (panel) {
+                    var view = panel.currentPageView || (panel.getCurrentPageView && panel.getCurrentPageView());
+                    if (view && view.model) _cachedModel = view.model;
+                }
+            } catch(e) {}
+        });
+    }
+
     // ── Active widget reader ──────────────────────────────────────────────
-    // Elementor 3.x broke the old getPanelView().getCurrentPageView() path.
-    // We use three fallback strategies so this works across Elementor versions.
+    // Priority: cached model from hook → live panel APIs → DOM fallback
 
     function getModelFromPanel() {
+        // 1. Use hook-cached model (most reliable — set when panel opened)
+        if (_cachedModel) return _cachedModel;
+
         try {
-            // Strategy 1: Elementor 3.x selection API (most reliable)
+            // 2. Elementor 3.x selection API
             if (elementor.selection && elementor.selection.getElements) {
                 var els = elementor.selection.getElements();
                 if (els && els.length) return els[0].model || els[0];
@@ -106,51 +162,78 @@
         } catch(e) {}
 
         try {
-            // Strategy 2: panel currentPageView (Elementor 2.x / early 3.x)
+            // 3. panel currentPageView (Elementor 2.x / early 3.x)
             var panel = elementor.getPanelView && elementor.getPanelView();
             if (panel) {
                 var view = panel.currentPageView || (panel.getCurrentPageView && panel.getCurrentPageView());
                 if (view && view.model) return view.model;
-                // Elementor 3.24+: currentView is nested inside currentPageView
                 if (view && view.currentView && view.currentView.model) return view.currentView.model;
-            }
-        } catch(e) {}
-
-        try {
-            // Strategy 3: channels editor (fallback for odd Elementor builds)
-            if (elementor.channels && elementor.channels.editor) {
-                var editedElement = elementor.channels.editor.request('panel/current-widgets-panel');
-                if (editedElement && editedElement.currentView && editedElement.currentView.model) {
-                    return editedElement.currentView.model;
-                }
             }
         } catch(e) {}
 
         return null;
     }
 
+    function readContentFromDOM() {
+        // Last-resort: read visible content from the Elementor panel DOM directly.
+        // Works regardless of JS API version.
+        var $panel    = $('#elementor-panel');
+        var widgetType = 'text-editor';
+        var content    = '';
+        var widgetId   = 'dom_' + Date.now();
+
+        // Try to detect widget type from panel heading
+        var panelTitle = $panel.find('.elementor-panel-navigation-tab.elementor-active, .elementor-editor-element-title').text().trim().toLowerCase();
+        if (panelTitle.indexOf('heading') >= 0)   widgetType = 'heading';
+        if (panelTitle.indexOf('icon')    >= 0)   widgetType = 'icon-box';
+        if (panelTitle.indexOf('image')   >= 0)   widgetType = 'image-box';
+
+        // Read from visible inputs — TinyMCE textarea, plain textarea, or input
+        var $editor = $panel.find('.wp-editor-area:visible, textarea.elementor-input:visible').first();
+        if ($editor.length)  content = $editor.val() || '';
+
+        if (!content) {
+            var $input = $panel.find('input[type="text"]:visible').first();
+            if ($input.length) content = $input.val() || '';
+        }
+
+        // For heading widgets: check the title input field name
+        if (!content) {
+            var $title = $panel.find('[data-setting="title"]:visible, [data-setting="heading"]:visible').first();
+            if ($title.length) content = $title.val() || '';
+        }
+
+        return { type: widgetType, content: content, widget_id: widgetId, raw_content: content };
+    }
+
     function getActiveWidgetContent() {
         var model = getModelFromPanel();
-        if (!model) return null;
 
-        var type     = model.get('widgetType') || model.get('elType');
-        var id       = model.get('id');
-        var settings = model.get('settings');
-        if (!settings || !type) return null;
+        if (model) {
+            var type     = model.get('widgetType') || model.get('elType');
+            var id       = model.get('id');
+            var settings = model.get('settings');
 
-        var content = '';
-        if (type === 'text-editor') content = settings.get('editor')        || '';
-        if (type === 'heading')     content = settings.get('title')         || '';
-        if (type === 'button')      content = settings.get('text')          || '';
-        if (type === 'icon-box')    content = (settings.get('title_text')   || '') + ' ' + (settings.get('description_text') || '');
-        if (type === 'image-box')   content = (settings.get('title_text')   || '') + ' ' + (settings.get('description_text') || '');
+            if (settings && type) {
+                var content = '';
+                if (type === 'text-editor') content = settings.get('editor')       || '';
+                if (type === 'heading')     content = settings.get('title')        || '';
+                if (type === 'button')      content = settings.get('text')         || '';
+                if (type === 'icon-box')    content = (settings.get('title_text')  || '') + ' ' + (settings.get('description_text') || '');
+                if (type === 'image-box')   content = (settings.get('title_text')  || '') + ' ' + (settings.get('description_text') || '');
 
-        return {
-            type:        type,
-            content:     $('<div>').html(content).text(),
-            widget_id:   id,
-            raw_content: content,
-        };
+                return {
+                    type:        type,
+                    content:     $('<div>').html(content).text(),
+                    widget_id:   id,
+                    raw_content: content,
+                };
+            }
+        }
+
+        // All model strategies failed — fall back to DOM reading
+        console.warn('[Siloq WI] Model read failed, falling back to DOM.');
+        return readContentFromDOM();
     }
 
     // ── Apply setting to widget ────────────────────────────────────────────
@@ -185,80 +268,9 @@
         }, 1000);
     });
 
-    // ── Move Siloq panel to top of widget controls ────────────────────────
-    // Elementor renders sections in registration order. Our section is added
-    // via after_section_end so it appears last. We use a MutationObserver to
-    // detect when the panel renders and physically move our accordion item
-    // to position 0 — making it the first thing the user sees.
-
-    function moveSiloqPanelToTop() {
-        var $accordion = $('.elementor-panel-navigation-wrapper').closest('.elementor-panel-content-wrapper')
-            .find('.elementor-accordion');
-
-        if (!$accordion.length) {
-            // Try simpler selector
-            $accordion = $('.elementor-panel-content-wrapper .elementor-accordion');
-        }
-        if (!$accordion.length) return;
-
-        var $siloqItem = $accordion.find('.siloq-wi-container').closest('.elementor-accordion-item');
-        if (!$siloqItem.length) return;
-
-        // Only move if not already first
-        if ($siloqItem.index() === 0) return;
-
-        $siloqItem.prependTo($accordion);
-
-        // Auto-expand the Siloq section so it's immediately visible
-        var $title = $siloqItem.find('.elementor-accordion-title').first();
-        if ($title.length && !$siloqItem.hasClass('elementor-open')) {
-            $title.trigger('click');
-        }
-    }
-
-    // Observe the panel container for DOM changes (widget switching re-renders controls)
-    var _panelObserver    = null;
-    var _panelDebounceTimer = null;   // module-scoped — not stored as property on observer
-
-    function startPanelObserver() {
-        var panelEl = document.querySelector('#elementor-panel-content-wrapper') ||
-                      document.querySelector('.elementor-panel-content-wrapper');
-        if (!panelEl || _panelObserver) return;
-
-        _panelObserver = new MutationObserver(function() {
-            // Debounce — panel can mutate many times per render cycle
-            clearTimeout(_panelDebounceTimer);
-            _panelDebounceTimer = setTimeout(moveSiloqPanelToTop, 120);
-        });
-
-        _panelObserver.observe(panelEl, { childList: true, subtree: true });
-    }
-
-    function stopPanelObserver() {
-        if (_panelObserver) {
-            _panelObserver.disconnect();
-            _panelObserver = null;
-        }
-        clearTimeout(_panelDebounceTimer);
-        _panelDebounceTimer = null;
-    }
-
-    // Start observing once Elementor editor is ready
-    elementor.on('panel:init', startPanelObserver);
-
-    // Clean up if the editor is destroyed (prevents memory leak on re-init)
-    elementor.on('destroy', stopPanelObserver);
-    if (elementor.hooks) {
-        elementor.hooks.addAction('panel/open_editor/widget', function() {
-            // Re-run move on every widget open as a safety net
-            setTimeout(moveSiloqPanelToTop, 200);
-        });
-    }
-
-    $(document).ready(function() {
-        // Fallback: start observer after short delay if panel:init already fired
-        setTimeout(startPanelObserver, 1500);
-    });
+    // ── Panel position handled by CSS sticky (see siloq-widget-intelligence.css)
+    // .elementor-control-section[data-section="siloq_intelligence"] { position: sticky; top: 0 }
+    // No DOM manipulation needed — CSS pins it to the top of the scrollable panel.
 
     // ── Analyze button (delegated — panel re-renders on widget switch) ────
 
@@ -277,13 +289,15 @@
         $results.hide();
 
         var activeWidget = getActiveWidgetContent();
+        // Never bail out — if we couldn't read content, still run analysis.
+        // The server-side local fallback returns layer/heading advice even with empty content.
         if (!activeWidget) {
-            $loading.hide();
-            $container.find('.siloq-wi-analyze-btn')
-                .prop('disabled', false)
-                .text('⚡ Analyze This Widget');
-            showWIStatus($container, 'Could not read widget content.', 'error');
-            return;
+            activeWidget = {
+                type:        $container.data('widget-type') || 'text-editor',
+                content:     '',
+                widget_id:   'unknown_' + Date.now(),
+                raw_content: '',
+            };
         }
 
         var containerCtx = getContainerContext(activeWidget.widget_id);
@@ -535,5 +549,7 @@
         }).text(msg).show();
         setTimeout(function() { $s.fadeOut(); }, 4000);
     }
+
+    } // end initSiloqWI
 
 })(jQuery);

@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.60
+* Version: 1.5.71
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.60');
+define('SILOQ_VERSION', '1.5.71');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -168,41 +168,6 @@ class Siloq_Connector {
             Siloq_Widget_Intelligence::init();
         }
 
-        // ── Widget Intelligence Core + per-builder intelligence ──────────
-        // Shared core must be loaded before any builder intelligence class.
-        // Each builder intelligence class enqueues its own JS/CSS on the
-        // appropriate hook so assets only load in the relevant editor.
-        if ( is_admin() ) {
-            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-widget-intelligence-core.php';
-
-            $intelligence_map = [
-                Siloq_Builder_Detector::BUILDER_GUTENBERG   => 'class-siloq-gutenberg-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_DIVI        => 'class-siloq-divi-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_BEAVER      => 'class-siloq-beaver-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_WPBAKERY    => 'class-siloq-wpbakery-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_BRICKS      => 'class-siloq-bricks-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_OXYGEN      => 'class-siloq-oxygen-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_CORNERSTONE => 'class-siloq-cornerstone-intelligence.php',
-                Siloq_Builder_Detector::BUILDER_CLASSIC     => 'class-siloq-classic-intelligence.php',
-            ];
-
-            $detected_builder = Siloq_Builder_Detector::detect();
-
-            if ( isset( $intelligence_map[ $detected_builder ] ) ) {
-                require_once SILOQ_PLUGIN_DIR . 'includes/' . $intelligence_map[ $detected_builder ];
-
-                // Derive class name from filename:
-                // e.g. class-siloq-gutenberg-intelligence.php → Siloq_Gutenberg_Intelligence
-                $file       = $intelligence_map[ $detected_builder ];
-                $class_name = str_replace( [ 'class-', '-', '.php' ], [ '', '_', '' ], $file );
-                $class_name = implode( '_', array_map( 'ucfirst', explode( '_', $class_name ) ) );
-
-                if ( class_exists( $class_name ) ) {
-                    call_user_func( [ $class_name, 'init' ] );
-                }
-            }
-        }
-
         // ------------------------------------------------------------------
         // Builder-specific panel integration — admin context only.
         // Siloq_Builder_Detector::detect() caches the result so subsequent
@@ -332,7 +297,15 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_business_profile', array($this, 'ajax_get_business_profile'));
         add_action('wp_ajax_siloq_save_business_profile', array($this, 'ajax_save_business_profile'));
         add_action('wp_ajax_siloq_analyze_widget', array('Siloq_Widget_Intelligence', 'ajax_analyze_widget'));
-        
+        add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
+        add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
+        add_action('wp_ajax_siloq_get_pages_list', array($this, 'ajax_get_pages_list'));
+        // GSC connection handlers
+        add_action('wp_ajax_siloq_gsc_init_oauth', array($this, 'ajax_gsc_init_oauth'));
+        add_action('wp_ajax_siloq_gsc_check_status', array($this, 'ajax_gsc_check_status'));
+        add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
+        add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
+
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -448,10 +421,30 @@ class Siloq_Connector {
             array(),
             SILOQ_VERSION
         );
-        
-        // Get current screen (might not be available in all contexts)
+
+        // Dashboard v2 CSS + JS on dashboard page
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        
+        if ($screen && $screen->id === 'siloq_page_siloq-dashboard') {
+            wp_enqueue_style(
+                'siloq-dashboard-v2',
+                SILOQ_PLUGIN_URL . 'assets/css/siloq-dashboard-v2.css',
+                array(),
+                SILOQ_VERSION
+            );
+            wp_enqueue_script(
+                'siloq-dashboard-v2',
+                SILOQ_PLUGIN_URL . 'assets/js/siloq-dashboard-v2.js',
+                array('jquery'),
+                SILOQ_VERSION,
+                true
+            );
+            wp_localize_script('siloq-dashboard-v2', 'siloqDash', array(
+                'ajaxUrl'   => admin_url('admin-ajax.php'),
+                'nonce'     => wp_create_nonce('siloq_nonce'),
+                'siteScore' => intval(get_option('siloq_site_score', 42)),
+            ));
+        }
+
         // Enqueue sync script on sync + settings pages
         if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq_page_siloq-dashboard')) {
             wp_enqueue_script(
@@ -538,6 +531,13 @@ class Siloq_Connector {
         $result = $sync_engine->sync_page($post_id);
         
         if ($result['success']) {
+            // Update sync time + bust dashboard cache on any successful page sync
+            update_option( 'siloq_last_sync_time', current_time( 'mysql' ) );
+            $api_key = get_option( 'siloq_api_key', '' );
+            $site_id = get_option( 'siloq_site_id', '' );
+            if ( $api_key && $site_id ) {
+                delete_transient( 'siloq_dash_stats_' . md5( $site_id . $api_key ) );
+            }
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
@@ -597,6 +597,16 @@ class Siloq_Connector {
         $result['purge'] = $purge_result;
 
         if ($result['success']) {
+            // Record sync time — dashboard reads this option for "Last synced" display
+            update_option( 'siloq_last_sync_time', current_time( 'mysql' ) );
+
+            // Bust dashboard stats cache so next load reflects fresh data
+            $api_key = get_option( 'siloq_api_key', '' );
+            $site_id = get_option( 'siloq_site_id', '' );
+            if ( $api_key && $site_id ) {
+                delete_transient( 'siloq_dash_stats_' . md5( $site_id . $api_key ) );
+            }
+
             wp_send_json_success($result);
         } else {
             wp_send_json_error($result);
@@ -864,37 +874,51 @@ class Siloq_Connector {
             return;
         }
         
-        $api_client = new Siloq_API_Client();
-        $result = $api_client->get_business_profile();
-        
-        if ($result['success']) {
-            // Merge locally stored fields into the API result
-            if (!isset($result['data']) || !is_array($result['data'])) {
-                $result['data'] = array();
+        // Build local profile from WP options — always available, API-independent
+        $local = [
+            'business_name'    => get_option( 'siloq_business_name', get_bloginfo( 'name' ) ),
+            'phone'            => get_option( 'siloq_phone', '' ),
+            'address'          => get_option( 'siloq_address', '' ),
+            'city'             => get_option( 'siloq_city', '' ),
+            'state'            => get_option( 'siloq_state', '' ),
+            'zip'              => get_option( 'siloq_zip', '' ),
+            'business_type'    => get_option( 'siloq_business_type', '' ),
+            'primary_services' => json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [],
+            'service_areas'    => json_decode( get_option( 'siloq_service_areas',    '[]' ), true ) ?: [],
+        ];
+
+        // Try to supplement with API data (fresher, includes service_cities etc.)
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+
+        if ( $site_id && $api_key ) {
+            $response = wp_remote_get(
+                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                [
+                    'timeout' => 8,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Accept'        => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                ]
+            );
+
+            if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 ) {
+                $api_data = json_decode( wp_remote_retrieve_body( $response ), true );
+                if ( is_array( $api_data ) ) {
+                    // Normalize API field names to form field names
+                    if ( isset( $api_data['street_address'] ) ) $api_data['address']       = $api_data['street_address'];
+                    if ( isset( $api_data['zip_code'] ) )       $api_data['zip']            = $api_data['zip_code'];
+                    if ( isset( $api_data['service_cities'] ) ) $api_data['service_areas']  = $api_data['service_cities'];
+                    // API wins over local for overlapping fields
+                    $local = array_merge( $local, array_filter( $api_data, fn( $v ) => $v !== null && $v !== '' ) );
+                }
             }
-            $result['data'] = array_merge(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-            ), $result['data']);
-            wp_send_json_success($result['data']);
-        } else {
-            // Even on API failure return locally stored fields so form is usable
-            wp_send_json_success(array(
-                'business_name' => get_option('siloq_business_name', get_bloginfo('name')),
-                'phone'         => get_option('siloq_phone', ''),
-                'address'       => get_option('siloq_address', ''),
-                'city'          => get_option('siloq_city', ''),
-                'state'         => get_option('siloq_state', ''),
-                'zip'           => get_option('siloq_zip', ''),
-                'business_type' => '',
-                'primary_services' => [],
-                'service_areas'    => [],
-            ));
         }
+
+        wp_send_json_success( $local );
     }
     
     /**
@@ -908,57 +932,398 @@ class Siloq_Connector {
             return;
         }
 
-        // Save new local fields to WP options
-        $business_name = sanitize_text_field($_POST['business_name'] ?? '');
-        $phone         = sanitize_text_field($_POST['phone'] ?? '');
-        $address       = sanitize_text_field($_POST['address'] ?? '');
-        $city          = sanitize_text_field($_POST['city'] ?? '');
-        $state         = sanitize_text_field(strtoupper($_POST['state'] ?? ''));
-        $zip           = sanitize_text_field($_POST['zip'] ?? '');
+        // Sanitize all fields
+        $business_name    = sanitize_text_field( $_POST['business_name']    ?? '' );
+        $phone            = sanitize_text_field( $_POST['phone']            ?? '' );
+        $address          = sanitize_text_field( $_POST['address']          ?? '' );
+        $city             = sanitize_text_field( $_POST['city']             ?? '' );
+        $state            = sanitize_text_field( strtoupper( $_POST['state'] ?? '' ) );
+        $zip              = sanitize_text_field( $_POST['zip']              ?? '' );
+        $business_type    = sanitize_text_field( $_POST['business_type']    ?? '' );
+        $primary_services = isset( $_POST['primary_services'] )
+            ? array_map( 'sanitize_text_field', (array) $_POST['primary_services'] )
+            : [];
+        $service_areas    = isset( $_POST['service_areas'] )
+            ? array_map( 'sanitize_text_field', (array) $_POST['service_areas'] )
+            : [];
 
-        update_option('siloq_business_name', $business_name);
-        update_option('siloq_phone',         $phone);
-        update_option('siloq_address',       $address);
-        update_option('siloq_city',          $city);
-        update_option('siloq_state',         $state);
-        update_option('siloq_zip',           $zip);
+        // ── Save to WP options (authoritative local store) ────────────────
+        $db_results = [
+            'business_name'    => update_option( 'siloq_business_name',    $business_name ),
+            'phone'            => update_option( 'siloq_phone',            $phone ),
+            'address'          => update_option( 'siloq_address',          $address ),
+            'city'             => update_option( 'siloq_city',             $city ),
+            'state'            => update_option( 'siloq_state',            $state ),
+            'zip'              => update_option( 'siloq_zip',              $zip ),
+            'business_type'    => update_option( 'siloq_business_type',    $business_type ),
+            'primary_services' => update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) ),
+            'service_areas'    => update_option( 'siloq_service_areas',    wp_json_encode( $service_areas ) ),
+        ];
 
-        $profile_data = isset($_POST['profile']) ? $_POST['profile'] : array();
+        // Verify the write — read back and confirm business_name at minimum
+        $verify_name = get_option( 'siloq_business_name', '__MISSING__' );
+        $db_success  = ( $verify_name !== '__MISSING__' );
 
-        // Build profile_data from POST fields if not sent as nested array
-        if (empty($profile_data)) {
-            $profile_data = array(
+        // Debug log entry
+        $log_entry = [
+            'ts'          => current_time( 'mysql' ),
+            'fields'      => array_keys( array_filter( compact( 'business_name', 'phone', 'address', 'city', 'state', 'zip', 'business_type' ) ) ),
+            'services'    => count( $primary_services ),
+            'areas'       => count( $service_areas ),
+            'db_verified' => $db_success,
+            'api_sync'    => null, // filled below
+        ];
+
+        if ( ! $db_success ) {
+            $log_entry['api_sync'] = 'skipped_db_fail';
+            self::append_debug_log( $log_entry );
+            wp_send_json_error( [
+                'message' => 'Database write failed — business profile was not saved. Check your WordPress database permissions and try again.',
+                'code'    => 'DB_WRITE_FAILED',
+            ] );
+            return;
+        }
+
+        // Sync to Siloq API — correct endpoint: PATCH /sites/{id}/entity-profile/
+        // Fields mapped to API schema (street_address/zip_code not address/zip).
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+
+        $api_sync_note = '';
+        if ( $site_id && $api_key ) {
+            $api_payload = array_filter( [
                 'business_name'    => $business_name,
                 'phone'            => $phone,
-                'address'          => $address,
+                'street_address'   => $address,    // API field name
                 'city'             => $city,
                 'state'            => $state,
-                'zip'              => $zip,
-                'business_type'    => sanitize_text_field($_POST['business_type'] ?? ''),
-                'primary_services' => isset($_POST['primary_services']) ? array_map('sanitize_text_field', (array) $_POST['primary_services']) : [],
-                'service_areas'    => isset($_POST['service_areas']) ? array_map('sanitize_text_field', (array) $_POST['service_areas']) : [],
+                'zip_code'         => $zip,        // API field name
+                'business_type'    => $business_type,
+                'primary_services' => $primary_services,
+                'service_cities'   => $service_areas,  // API field name
+            ], function( $v ) {
+                return $v !== '' && $v !== null && $v !== [];
+            } );
+
+            $response = wp_remote_request(
+                "$api_base/api/v1/sites/$site_id/entity-profile/",
+                [
+                    'method'  => 'PATCH',
+                    'timeout' => 10,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                        'Accept'        => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                    'body' => wp_json_encode( $api_payload ),
+                ]
+            );
+
+            $api_code = is_wp_error( $response ) ? 0 : wp_remote_retrieve_response_code( $response );
+            if ( is_wp_error( $response ) || $api_code >= 400 ) {
+                $api_sync_note              = 'Saved locally. API sync failed — your data is safe but may not appear in the Siloq app until the next sync.';
+                $log_entry['api_sync']      = 'failed';
+                $log_entry['api_code']      = $api_code;
+                $log_entry['api_error']     = is_wp_error( $response ) ? $response->get_error_message() : '';
+            } else {
+                $log_entry['api_sync'] = 'ok';
+            }
+        } else {
+            $log_entry['api_sync'] = 'skipped_no_credentials';
+        }
+
+        self::append_debug_log( $log_entry );
+
+        $profile_data = [
+            'business_name'    => $business_name,
+            'phone'            => $phone,
+            'address'          => $address,
+            'city'             => $city,
+            'state'            => $state,
+            'zip'              => $zip,
+            'business_type'    => $business_type,
+            'primary_services' => $primary_services,
+            'service_areas'    => $service_areas,
+        ];
+
+        wp_send_json_success( [
+            'message'    => 'Business profile saved successfully. Siloq will use this data for all recommendations on this site.',
+            'api_note'   => $api_sync_note,
+            'profile'    => $profile_data,
+        ] );
+    }
+    
+    /**
+     * Append a structured entry to the Siloq debug log (stored in WP options).
+     * Keeps the last 50 entries. Accessible from Settings > Debug.
+     */
+    public static function append_debug_log( $entry ) {
+        $log     = json_decode( get_option( 'siloq_debug_log', '[]' ), true ) ?: [];
+        $log[]   = $entry;
+        $log     = array_slice( $log, -50 ); // keep last 50
+        update_option( 'siloq_debug_log', wp_json_encode( $log ) );
+    }
+
+    /**
+     * AJAX: Get plan data — build architecture tree, priority actions, issues, roadmap
+     */
+    public function ajax_get_plan_data() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        // Check transient cache first
+        $cached = get_transient('siloq_plan_data');
+        if ($cached) {
+            wp_send_json_success($cached);
+            return;
+        }
+
+        // Gather all posts with analysis data
+        $posts = get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'posts_per_page' => -1,
+            'meta_key'       => '_siloq_analysis_data',
+            'fields'         => 'ids',
+        ));
+
+        $architecture = array();
+        $actions      = array();
+        $issues       = array('critical' => array(), 'important' => array(), 'opportunity' => array());
+        $supporting   = array();
+        $hubs         = array();
+        $orphans      = array();
+        $hub_count    = 0;
+        $orphan_count = 0;
+        $missing_count = 0;
+
+        foreach ($posts as $post_id) {
+            $raw = get_post_meta($post_id, '_siloq_analysis_data', true);
+            $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
+            if (empty($analysis)) continue;
+
+            $title     = get_the_title($post_id);
+            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'spoke';
+            $score     = isset($analysis['score']) ? intval($analysis['score']) : 0;
+
+            // Build architecture tree
+            $architecture[] = array('title' => $title, 'type' => $page_type, 'id' => $post_id, 'score' => $score);
+
+            if ($page_type === 'hub') {
+                $hub_count++;
+                $hubs[] = $post_id;
+            }
+
+            // Check for orphans (no silo relationship)
+            $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
+            if (empty($silo_data) && $page_type !== 'hub') {
+                $orphans[] = $post_id;
+                $orphan_count++;
+                $architecture[] = array('title' => $title . ' (orphan)', 'type' => 'orphan', 'id' => $post_id);
+            }
+
+            // Extract issues from analysis
+            if (isset($analysis['issues']) && is_array($analysis['issues'])) {
+                foreach ($analysis['issues'] as $issue) {
+                    $severity = isset($issue['severity']) ? strtolower($issue['severity']) : 'opportunity';
+                    if (!isset($issues[$severity])) $severity = 'opportunity';
+                    $issues[$severity][] = array(
+                        'title'   => $title,
+                        'issue'   => isset($issue['message']) ? $issue['message'] : (isset($issue['description']) ? $issue['description'] : 'Issue found'),
+                        'post_id' => $post_id,
+                    );
+                }
+            }
+
+            // Build actions from low scores or missing elements
+            if ($score < 50) {
+                $actions[] = array(
+                    'headline' => 'Improve content quality on "' . $title . '"',
+                    'priority' => 'high',
+                    'effort'   => 'Half Day',
+                    'post_id'  => $post_id,
+                );
+            } elseif ($score < 75) {
+                $actions[] = array(
+                    'headline' => 'Optimize "' . $title . '" for better rankings',
+                    'priority' => 'medium',
+                    'effort'   => 'Quick Win',
+                    'post_id'  => $post_id,
+                );
+            }
+
+            // Supporting content opportunities
+            if (isset($analysis['missing_supporting']) && is_array($analysis['missing_supporting'])) {
+                foreach ($analysis['missing_supporting'] as $ms) {
+                    $missing_count++;
+                    $supporting[] = array(
+                        'title' => isset($ms['title']) ? $ms['title'] : 'Supporting page for "' . $title . '"',
+                        'type'  => isset($ms['type']) ? $ms['type'] : 'sub-page',
+                    );
+                    $architecture[] = array(
+                        'title' => isset($ms['title']) ? $ms['title'] : 'Missing supporting page',
+                        'type'  => 'missing',
+                    );
+                }
+            }
+        }
+
+        // Sort architecture: hubs first, then spokes, then supporting, then orphans, then missing
+        $type_order = array('hub' => 0, 'spoke' => 1, 'supporting' => 2, 'orphan' => 3, 'missing' => 4);
+        usort($architecture, function($a, $b) use ($type_order) {
+            $oa = isset($type_order[$a['type']]) ? $type_order[$a['type']] : 5;
+            $ob = isset($type_order[$b['type']]) ? $type_order[$b['type']] : 5;
+            return $oa - $ob;
+        });
+
+        // Sort actions by priority
+        usort($actions, function($a, $b) {
+            $p = array('high' => 0, 'medium' => 1, 'low' => 2);
+            return ($p[$a['priority']] ?? 2) - ($p[$b['priority']] ?? 2);
+        });
+
+        // Default roadmap
+        $roadmap = array(
+            'month1' => array(
+                'Fix keyword conflicts on top pages',
+                'Add missing schema markup',
+                'Fix thin content issues',
+                'Connect Google Search Console',
+                'Complete entity profiles',
+            ),
+            'month2' => array(
+                'Create missing supporting content',
+                'Build internal linking between silos',
+                'Optimize page titles and meta descriptions',
+                'Fix orphan pages — assign to silos',
+                'Improve content depth on key pages',
+            ),
+            'month3' => array(
+                'Launch new hub pages for gaps',
+                'Create blog content supporting service pages',
+                'Monitor ranking improvements',
+                'Review and update underperforming content',
+                'Set up ongoing content calendar',
+            ),
+        );
+
+        $plan = array(
+            'architecture' => $architecture,
+            'actions'      => $actions,
+            'issues'       => $issues,
+            'supporting'   => $supporting,
+            'roadmap'      => $roadmap,
+            'hub_count'    => $hub_count,
+            'orphan_count' => $orphan_count,
+            'missing_count' => $missing_count,
+            'generated_at' => current_time('mysql'),
+        );
+
+        // Cache for 60 minutes
+        set_transient('siloq_plan_data', $plan, 3600);
+        update_option('siloq_plan_data_last', current_time('mysql'));
+
+        wp_send_json_success($plan);
+    }
+
+    /**
+     * AJAX: Save roadmap checkbox progress
+     */
+    public function ajax_save_roadmap_progress() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $key     = isset($_POST['key']) ? sanitize_text_field($_POST['key']) : '';
+        $checked = isset($_POST['checked']) ? intval($_POST['checked']) : 0;
+
+        if (empty($key)) {
+            wp_send_json_error(array('message' => 'Missing key'));
+            return;
+        }
+
+        $progress = json_decode(get_option('siloq_roadmap_progress', '{}'), true);
+        if (!is_array($progress)) $progress = array();
+
+        if ($checked) {
+            $progress[$key] = 1;
+        } else {
+            unset($progress[$key]);
+        }
+
+        update_option('siloq_roadmap_progress', wp_json_encode($progress));
+        wp_send_json_success(array('saved' => true));
+    }
+
+    /**
+     * AJAX handler: get paginated pages list for Pages tab
+     */
+    public function ajax_get_pages_list() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $offset = intval($_POST['offset'] ?? 0);
+        $filter = sanitize_text_field($_POST['filter'] ?? 'all');
+
+        $args = array(
+            'post_type'      => array('page', 'post'),
+            'posts_per_page' => 20,
+            'offset'         => $offset,
+            'meta_key'       => '_siloq_analysis_data',
+            'post_status'    => 'publish',
+            'orderby'        => 'modified',
+            'order'          => 'DESC',
+        );
+
+        $posts = get_posts($args);
+        $pages = array();
+        foreach ($posts as $post) {
+            $raw = get_post_meta($post->ID, '_siloq_analysis_data', true);
+            $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
+            if (!is_array($analysis)) $analysis = array();
+
+            $silo_data = get_post_meta($post->ID, '_siloq_silo_data', true);
+            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : (isset($analysis['page_type']) ? $analysis['page_type'] : 'supporting');
+            if (empty($silo_data) && $page_type !== 'hub') {
+                $page_type = 'orphan';
+            }
+
+            if ($filter !== 'all' && $page_type !== $filter) {
+                continue;
+            }
+
+            $issues = isset($analysis['issues']) ? $analysis['issues'] : array();
+            $score = isset($analysis['score']) ? intval($analysis['score']) : (isset($analysis['seo_score']['overall']) ? intval($analysis['seo_score']['overall']) : 0);
+            $primary_keyword = isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : (isset($analysis['seo_score']['primary_keyword']) ? $analysis['seo_score']['primary_keyword'] : '');
+
+            $pages[] = array(
+                'id'              => $post->ID,
+                'title'           => $post->post_title,
+                'edit_url'        => get_edit_post_link($post->ID, 'raw'),
+                'elementor_url'   => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
+                'page_type'       => $page_type,
+                'score'           => $score,
+                'primary_keyword' => $primary_keyword,
+                'issues'          => array_slice($issues, 0, 10),
+                'issue_count'     => count($issues),
             );
         }
 
-        // WP options already saved above — return success immediately.
-        // Attempt to sync to the Siloq API as a best-effort bonus (non-blocking).
-        $api_sync_note = '';
-        try {
-            $api_client = new Siloq_API_Client();
-            $result = $api_client->save_business_profile($profile_data);
-            if ( ! $result['success'] ) {
-                $api_sync_note = 'Saved locally. API sync pending.';
-            }
-        } catch ( Exception $e ) {
-            $api_sync_note = 'Saved locally. API sync pending.';
-        }
-
-        wp_send_json_success( array(
-            'message' => $api_sync_note ?: 'Business profile saved.',
-            'profile' => $profile_data,
-        ) );
+        wp_send_json_success(array(
+            'pages'  => $pages,
+            'offset' => $offset + 20,
+        ));
     }
-    
+
     /**
      * Add settings link to plugins page
      */
@@ -966,6 +1331,227 @@ class Siloq_Connector {
         $settings_link = '<a href="' . admin_url('admin.php?page=siloq-settings') . '">Settings</a>';
         array_unshift($links, $settings_link);
         return $links;
+    }
+
+    /* ────────────────────────────────────────────────
+     * GSC Connection Handlers
+     * ──────────────────────────────────────────────── */
+
+    public function ajax_gsc_init_oauth() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected. Configure your API key first.'));
+        }
+
+        $response = wp_remote_post(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/auth-url/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                ),
+                'timeout' => 30,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code >= 400 || empty($body['auth_url'])) {
+            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Failed to get OAuth URL'));
+        }
+
+        wp_send_json_success(array('auth_url' => $body['auth_url']));
+    }
+
+    public function ajax_gsc_check_status() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected.'));
+        }
+
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/status/',
+            array(
+                'headers' => array('Authorization' => 'Bearer ' . $api_key),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (!empty($body['connected'])) {
+            update_option('siloq_gsc_connected', 'yes');
+            update_option('siloq_gsc_property', sanitize_text_field($body['property']));
+            if (!empty($body['last_sync'])) {
+                update_option('siloq_gsc_last_sync', sanitize_text_field($body['last_sync']));
+            }
+        } else {
+            delete_option('siloq_gsc_connected');
+            delete_option('siloq_gsc_property');
+            delete_option('siloq_gsc_last_sync');
+        }
+
+        wp_send_json_success(array(
+            'connected' => !empty($body['connected']),
+            'property'  => isset($body['property']) ? $body['property'] : '',
+            'last_sync' => isset($body['last_sync']) ? $body['last_sync'] : '',
+        ));
+    }
+
+    public function ajax_gsc_sync() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected.'));
+        }
+
+        $response = wp_remote_post(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/sync/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                ),
+                'timeout' => 60,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 400) {
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Sync failed'));
+        }
+
+        $now = current_time('mysql');
+        update_option('siloq_gsc_last_sync', $now);
+
+        // Fetch per-page GSC data
+        $pages_response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/pages/',
+            array(
+                'headers' => array('Authorization' => 'Bearer ' . $api_key),
+                'timeout' => 30,
+            )
+        );
+
+        $total_impressions = 0;
+        $total_clicks = 0;
+        $total_position = 0;
+        $page_count = 0;
+
+        if (!is_wp_error($pages_response)) {
+            $pages_body = json_decode(wp_remote_retrieve_body($pages_response), true);
+            if (is_array($pages_body)) {
+                foreach ($pages_body as $page_data) {
+                    $url = isset($page_data['url']) ? $page_data['url'] : '';
+                    if (empty($url)) continue;
+
+                    $post_id = url_to_postid($url);
+                    if (!$post_id) continue;
+
+                    $impressions = intval($page_data['impressions'] ?? 0);
+                    $clicks      = intval($page_data['clicks'] ?? 0);
+                    $position    = floatval($page_data['position'] ?? 0);
+                    $queries     = isset($page_data['top_queries']) ? $page_data['top_queries'] : array();
+
+                    update_post_meta($post_id, '_siloq_gsc_impressions', $impressions);
+                    update_post_meta($post_id, '_siloq_gsc_clicks', $clicks);
+                    update_post_meta($post_id, '_siloq_gsc_position', $position);
+                    update_post_meta($post_id, '_siloq_gsc_queries', wp_json_encode($queries));
+
+                    $total_impressions += $impressions;
+                    $total_clicks      += $clicks;
+                    $total_position    += $position;
+                    $page_count++;
+                }
+            }
+        }
+
+        update_option('siloq_gsc_impressions', $total_impressions);
+        update_option('siloq_gsc_impressions_28d', $total_impressions);
+        update_option('siloq_gsc_clicks', $total_clicks);
+        update_option('siloq_gsc_clicks_28d', $total_clicks);
+        if ($page_count > 0) {
+            update_option('siloq_gsc_avg_position', round($total_position / $page_count, 1));
+        }
+
+        wp_send_json_success(array(
+            'last_sync'    => $now,
+            'pages_synced' => $page_count,
+            'impressions'  => $total_impressions,
+            'clicks'       => $total_clicks,
+        ));
+    }
+
+    public function ajax_gsc_disconnect() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (!empty($api_key) && !empty($site_id)) {
+            wp_remote_post(
+                trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/disconnect/',
+                array(
+                    'headers' => array(
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                    ),
+                    'timeout' => 15,
+                )
+            );
+        }
+
+        delete_option('siloq_gsc_connected');
+        delete_option('siloq_gsc_property');
+        delete_option('siloq_gsc_last_sync');
+        delete_option('siloq_gsc_impressions');
+        delete_option('siloq_gsc_impressions_28d');
+        delete_option('siloq_gsc_clicks');
+        delete_option('siloq_gsc_clicks_28d');
+        delete_option('siloq_gsc_avg_position');
+
+        wp_send_json_success(array('disconnected' => true));
     }
 }
 
