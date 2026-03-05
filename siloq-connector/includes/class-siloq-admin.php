@@ -200,14 +200,14 @@ class Siloq_Admin {
                         </div>
                         <p style="color:#555;margin-bottom:12px;"><?php _e('Connect Google Search Console to see which pages get traffic and need the most attention first.', 'siloq-connector'); ?></p>
                         <p style="margin:0;">
-                            <a href="<?php echo esc_url('https://app.siloq.ai/dashboard?tab=gsc'); ?>" target="_blank" class="button button-primary">
-                                <?php _e('Connect GSC in Siloq Dashboard →', 'siloq-connector'); ?>
-                            </a>
+                            <button type="button" id="siloq-gsc-connect-btn" class="button button-primary">
+                                <?php _e('⚡ Connect Google Search Console', 'siloq-connector'); ?>
+                            </button>
                             &nbsp;
                             <button type="button" id="siloq-gsc-check-btn" class="button"><?php _e('Check Connection', 'siloq-connector'); ?></button>
                             <span id="siloq-gsc-status-msg" style="margin-left:10px;font-size:13px;color:#666;"></span>
                         </p>
-                        <p style="margin-top:8px;color:#888;font-size:12px;"><?php _e('After connecting in the dashboard, click "Check Connection" to confirm.', 'siloq-connector'); ?></p>
+                        <p style="margin-top:8px;color:#888;font-size:12px;"><?php _e('A Google sign-in window will open. Complete authorization, then return here.', 'siloq-connector'); ?></p>
                     <?php endif; ?>
                 </div>
 
@@ -1113,6 +1113,67 @@ class Siloq_Admin {
             function gscMsg(text, color) {
                 $('#siloq-gsc-status-msg').text(text).css('color', color || '#555');
             }
+
+            // ── GSC Connect via popup (stays in WP admin — no redirect to app.siloq.ai) ──
+            window.siloqOpenGSCPopup = function() {
+                var $btn = $('#siloq-gsc-connect-btn, .siloq-gsc-connect-popup').prop('disabled', true).text('Opening...');
+                gscMsg('Opening Google authorization...', '#555');
+                $.post(ajaxUrl, {action: 'siloq_gsc_init_oauth', nonce: nonce}, function(r) {
+                    if (!r.success || !r.data || !r.data.auth_url) {
+                        $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
+                        gscMsg(r.data && r.data.message ? r.data.message : 'Could not get authorization URL.', '#dc2626');
+                        return;
+                    }
+                    // Open popup — 600×700 centered
+                    var w = 600, h = 700;
+                    var left = Math.max(0, (screen.width - w) / 2 + (screen.availLeft || 0));
+                    var top  = Math.max(0, (screen.height - h) / 2 + (screen.availTop || 0));
+                    var popup = window.open(r.data.auth_url, 'siloqGSCAuth',
+                        'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
+                        ',scrollbars=yes,resizable=yes');
+                    $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
+                    gscMsg('Waiting for Google authorization...', '#555');
+
+                    // Listen for postMessage from popup close page
+                    function onGSCMessage(e) {
+                        if (e.data === 'siloq_gsc_connected' || e.data === 'siloq_gsc_error') {
+                            window.removeEventListener('message', onGSCMessage);
+                            clearInterval(pollTimer);
+                            if (e.data === 'siloq_gsc_connected') {
+                                gscMsg('Connected! Refreshing...', '#16a34a');
+                                setTimeout(function(){ location.reload(); }, 800);
+                            } else {
+                                gscMsg('Authorization failed or was cancelled.', '#dc2626');
+                            }
+                        }
+                    }
+                    window.addEventListener('message', onGSCMessage);
+
+                    // Fallback poll every 3s in case popup can't postMessage (cross-origin edge case)
+                    var pollTimer = setInterval(function() {
+                        if (popup && popup.closed) {
+                            clearInterval(pollTimer);
+                            window.removeEventListener('message', onGSCMessage);
+                            // Check if OAuth completed after popup closed
+                            $.post(ajaxUrl, {action: 'siloq_gsc_check_status', nonce: nonce}, function(r2) {
+                                if (r2.success && r2.data && r2.data.connected) {
+                                    gscMsg('Connected! Refreshing...', '#16a34a');
+                                    setTimeout(function(){ location.reload(); }, 800);
+                                } else {
+                                    gscMsg('Window closed. If you completed authorization, click Check Connection.', '#555');
+                                }
+                            });
+                        }
+                    }, 1500);
+                }).fail(function(xhr){
+                    $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
+                    gscMsg('Request failed (HTTP ' + xhr.status + '). Check your API key in Settings.', '#dc2626');
+                });
+            }
+
+            $(document).on('click', '#siloq-gsc-connect-btn, .siloq-gsc-connect-popup', function() {
+                window.siloqOpenGSCPopup();
+            });
 
             // AUTO-CHECK: if Settings page shows GSC connected, verify against API on load
             // This catches stale data (e.g. previous client's GSC showing up)
@@ -2116,7 +2177,7 @@ if ($has_plan && isset($plan_data['issues'])) {
                             <h3>Connect Google Search Console</h3>
                             <p style="color:var(--siloq-muted);margin:8px 0 20px">Link your GSC property to unlock performance data and keyword insights.</p>
                             <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-                                <a href="https://app.siloq.ai/dashboard?tab=gsc" target="_blank" class="siloq-btn siloq-btn--primary">Connect GSC in Siloq Dashboard &rarr;</a>
+                                <button type="button" id="siloq-gsc-connect-btn-tab" class="siloq-btn siloq-btn--primary">⚡ Connect Google Search Console</button>
                                 <button type="button" id="siloq-gsc-check-btn-tab" class="siloq-btn siloq-btn--outline">Check Connection</button>
                             </div>
                             <p style="color:var(--siloq-muted);font-size:13px;margin-top:12px;">Connect in the Siloq dashboard, then click "Check Connection" to confirm.</p>
