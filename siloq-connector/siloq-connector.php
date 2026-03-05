@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.76
+* Version: 1.5.77
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.76');
+define('SILOQ_VERSION', '1.5.77');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1626,6 +1626,9 @@ class Siloq_Connector {
             }
         }
 
+        // Track wizard progress — step 1 done, resume at step 2 on refresh
+        update_option( 'siloq_wizard_step', 2 );
+
         wp_send_json_success( array(
             'message'      => 'Connected',
             'site_id_set'  => $site_id_saved,
@@ -1641,25 +1644,33 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Unauthorized'), 403);
         }
 
-        $fields = array(
-            'business_name'    => sanitize_text_field(wp_unslash($_POST['business_name'] ?? '')),
-            'phone'            => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
-            'address'          => sanitize_text_field(wp_unslash($_POST['address'] ?? '')),
-            'city'             => sanitize_text_field(wp_unslash($_POST['city'] ?? '')),
-            'state'            => sanitize_text_field(wp_unslash($_POST['state'] ?? '')),
-            'zip'              => sanitize_text_field(wp_unslash($_POST['zip'] ?? '')),
-            'business_type'    => sanitize_text_field(wp_unslash($_POST['business_type'] ?? '')),
-            'primary_services' => sanitize_textarea_field(wp_unslash($_POST['primary_services'] ?? '')),
-        );
+        // Save to the SAME option keys used by the business profile settings form.
+        // Previous version used siloq_biz_* keys which were never read anywhere else.
+        $business_name    = sanitize_text_field( wp_unslash( $_POST['business_name']    ?? '' ) );
+        $phone            = sanitize_text_field( wp_unslash( $_POST['phone']            ?? '' ) );
+        $address          = sanitize_text_field( wp_unslash( $_POST['address']          ?? '' ) );
+        $city             = sanitize_text_field( wp_unslash( $_POST['city']             ?? '' ) );
+        $state            = sanitize_text_field( strtoupper( wp_unslash( $_POST['state'] ?? '' ) ) );
+        $zip              = sanitize_text_field( wp_unslash( $_POST['zip']              ?? '' ) );
+        $business_type    = sanitize_text_field( wp_unslash( $_POST['business_type']    ?? '' ) );
+        $primary_services_raw = sanitize_textarea_field( wp_unslash( $_POST['primary_services'] ?? '' ) );
 
-        update_option('siloq_business_profile', wp_json_encode($fields));
+        // primary_services can come in as comma-separated string from wizard
+        $primary_services = array_filter( array_map( 'trim', explode( ',', $primary_services_raw ) ) );
 
-        // Also save individual options for compatibility with existing business profile feature
-        foreach ($fields as $key => $value) {
-            update_option('siloq_biz_' . $key, $value);
-        }
+        update_option( 'siloq_business_name',    $business_name );
+        update_option( 'siloq_phone',            $phone );
+        update_option( 'siloq_address',          $address );
+        update_option( 'siloq_city',             $city );
+        update_option( 'siloq_state',            $state );
+        update_option( 'siloq_zip',              $zip );
+        update_option( 'siloq_business_type',    $business_type );
+        update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) );
 
-        wp_send_json_success(array('message' => 'Profile saved'));
+        // Track wizard progress so page refresh resumes at correct step
+        update_option( 'siloq_wizard_step', 3 );
+
+        wp_send_json_success( array( 'message' => 'Profile saved' ) );
     }
 
     /**

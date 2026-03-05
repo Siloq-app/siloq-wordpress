@@ -2017,7 +2017,23 @@ class Siloq_Admin {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
         $api_url = get_option('siloq_api_url', self::DEFAULT_API_URL);
-        $nonce = wp_create_nonce('siloq_ajax_nonce');
+        $nonce   = wp_create_nonce('siloq_ajax_nonce');
+
+        // Resume at saved step so page refresh doesn't restart wizard
+        $saved_step = intval( get_option( 'siloq_wizard_step', 1 ) );
+        if ( $saved_step < 1 || $saved_step > 4 ) $saved_step = 1;
+
+        // Pre-populate business profile fields from existing WP options
+        $prefill = array(
+            'business_name' => esc_attr( get_option( 'siloq_business_name', get_bloginfo('name') ) ),
+            'phone'         => esc_attr( get_option( 'siloq_phone', '' ) ),
+            'address'       => esc_attr( get_option( 'siloq_address', '' ) ),
+            'city'          => esc_attr( get_option( 'siloq_city', '' ) ),
+            'state'         => esc_attr( get_option( 'siloq_state', '' ) ),
+            'zip'           => esc_attr( get_option( 'siloq_zip', '' ) ),
+            'business_type' => esc_attr( get_option( 'siloq_business_type', '' ) ),
+            'services'      => esc_attr( implode( ', ', json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [] ) ),
+        );
         ?>
         <style>
             .siloq-wizard-wrap {
@@ -2287,14 +2303,14 @@ class Siloq_Admin {
             <div class="siloq-wizard-card">
                 <!-- Step indicators -->
                 <div class="siloq-wizard-steps">
-                    <div class="siloq-wizard-step-dot active" data-step="1"></div>
-                    <div class="siloq-wizard-step-dot" data-step="2"></div>
-                    <div class="siloq-wizard-step-dot" data-step="3"></div>
-                    <div class="siloq-wizard-step-dot" data-step="4"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 1 ? 'active' : ''; ?>" data-step="1"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 2 ? 'active' : ''; ?>" data-step="2"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 3 ? 'active' : ''; ?>" data-step="3"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 4 ? 'active' : ''; ?>" data-step="4"></div>
                 </div>
 
                 <!-- STEP 1: Connect to Siloq -->
-                <div class="siloq-wizard-panel active" id="siloq-wizard-step-1">
+                <div class="siloq-wizard-panel <?php echo $saved_step === 1 ? 'active' : ''; ?>" id="siloq-wizard-step-1">
                     <div class="siloq-wizard-logo">
                         <img src="https://siloq.ai/wp-content/uploads/2026/01/logo-siloq.webp" alt="Siloq" style="height:48px;width:auto;" />
                     </div>
@@ -2322,7 +2338,7 @@ class Siloq_Admin {
                 </div>
 
                 <!-- STEP 2: Your Business -->
-                <div class="siloq-wizard-panel" id="siloq-wizard-step-2">
+                <div class="siloq-wizard-panel <?php echo $saved_step === 2 ? 'active' : ''; ?>" id="siloq-wizard-step-2">
                     <h2><?php _e('Your Business', 'siloq-connector'); ?></h2>
                     <p class="siloq-wizard-subtitle"><?php _e('Help us personalize your SEO recommendations.', 'siloq-connector'); ?></p>
 
@@ -2330,52 +2346,53 @@ class Siloq_Admin {
 
                     <div class="siloq-wizard-field">
                         <label for="siloq-wiz-biz-name"><?php _e('Business Name', 'siloq-connector'); ?></label>
-                        <input type="text" id="siloq-wiz-biz-name" />
+                        <input type="text" id="siloq-wiz-biz-name" value="<?php echo $prefill['business_name']; ?>" />
                     </div>
 
                     <div class="siloq-wizard-row">
                         <div class="siloq-wizard-field">
                             <label for="siloq-wiz-biz-phone"><?php _e('Phone', 'siloq-connector'); ?></label>
-                            <input type="tel" id="siloq-wiz-biz-phone" />
+                            <input type="tel" id="siloq-wiz-biz-phone" value="<?php echo $prefill['phone']; ?>" />
                         </div>
                         <div class="siloq-wizard-field">
                             <label for="siloq-wiz-biz-type"><?php _e('Business Type', 'siloq-connector'); ?></label>
                             <select id="siloq-wiz-biz-type">
                                 <option value=""><?php _e('Select...', 'siloq-connector'); ?></option>
-                                <option value="local_service"><?php _e('Local Service', 'siloq-connector'); ?></option>
-                                <option value="ecommerce"><?php _e('E-Commerce', 'siloq-connector'); ?></option>
-                                <option value="saas"><?php _e('SaaS', 'siloq-connector'); ?></option>
-                                <option value="blog"><?php _e('Blog / Publisher', 'siloq-connector'); ?></option>
-                                <option value="agency"><?php _e('Agency', 'siloq-connector'); ?></option>
-                                <option value="nonprofit"><?php _e('Non-Profit', 'siloq-connector'); ?></option>
-                                <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
+                                <option value="local_service" <?php selected($prefill['business_type'], 'local_service'); ?>><?php _e('Local Service', 'siloq-connector'); ?></option>
+                                <option value="Local Service" <?php selected($prefill['business_type'], 'Local Service'); ?>><?php _e('Local Service', 'siloq-connector'); ?></option>
+                                <option value="ecommerce" <?php selected($prefill['business_type'], 'ecommerce'); ?>><?php _e('E-Commerce', 'siloq-connector'); ?></option>
+                                <option value="saas" <?php selected($prefill['business_type'], 'saas'); ?>><?php _e('SaaS', 'siloq-connector'); ?></option>
+                                <option value="blog" <?php selected($prefill['business_type'], 'blog'); ?>><?php _e('Blog / Publisher', 'siloq-connector'); ?></option>
+                                <option value="agency" <?php selected($prefill['business_type'], 'agency'); ?>><?php _e('Agency', 'siloq-connector'); ?></option>
+                                <option value="nonprofit" <?php selected($prefill['business_type'], 'nonprofit'); ?>><?php _e('Non-Profit', 'siloq-connector'); ?></option>
+                                <option value="other" <?php selected($prefill['business_type'], 'other'); ?>><?php _e('Other', 'siloq-connector'); ?></option>
                             </select>
                         </div>
                     </div>
 
                     <div class="siloq-wizard-field">
                         <label for="siloq-wiz-biz-address"><?php _e('Address', 'siloq-connector'); ?></label>
-                        <input type="text" id="siloq-wiz-biz-address" />
+                        <input type="text" id="siloq-wiz-biz-address" value="<?php echo $prefill['address']; ?>" />
                     </div>
 
                     <div class="siloq-wizard-row">
                         <div class="siloq-wizard-field">
                             <label for="siloq-wiz-biz-city"><?php _e('City', 'siloq-connector'); ?></label>
-                            <input type="text" id="siloq-wiz-biz-city" />
+                            <input type="text" id="siloq-wiz-biz-city" value="<?php echo $prefill['city']; ?>" />
                         </div>
                         <div class="siloq-wizard-field" style="flex:0.5;">
                             <label for="siloq-wiz-biz-state"><?php _e('State', 'siloq-connector'); ?></label>
-                            <input type="text" id="siloq-wiz-biz-state" maxlength="2" />
+                            <input type="text" id="siloq-wiz-biz-state" maxlength="2" value="<?php echo $prefill['state']; ?>" />
                         </div>
                         <div class="siloq-wizard-field" style="flex:0.7;">
                             <label for="siloq-wiz-biz-zip"><?php _e('Zip', 'siloq-connector'); ?></label>
-                            <input type="text" id="siloq-wiz-biz-zip" maxlength="10" />
+                            <input type="text" id="siloq-wiz-biz-zip" maxlength="10" value="<?php echo $prefill['zip']; ?>" />
                         </div>
                     </div>
 
                     <div class="siloq-wizard-field">
                         <label for="siloq-wiz-biz-services"><?php _e('Primary Services', 'siloq-connector'); ?></label>
-                        <textarea id="siloq-wiz-biz-services" placeholder="<?php esc_attr_e('e.g. Web Design, SEO, Content Marketing', 'siloq-connector'); ?>"></textarea>
+                        <textarea id="siloq-wiz-biz-services" placeholder="<?php esc_attr_e('e.g. Electrician, Panel Upgrade, EV Charging', 'siloq-connector'); ?>"><?php echo $prefill['services']; ?></textarea>
                     </div>
 
                     <button type="button" class="siloq-wizard-btn" id="siloq-wizard-profile-btn" onclick="siloqWizardSaveProfile()">
@@ -2389,7 +2406,7 @@ class Siloq_Admin {
                 </div>
 
                 <!-- STEP 3: Sync Your Pages -->
-                <div class="siloq-wizard-panel" id="siloq-wizard-step-3">
+                <div class="siloq-wizard-panel <?php echo $saved_step === 3 ? 'active' : ''; ?>" id="siloq-wizard-step-3">
                     <h2><?php _e('Sync Your Pages', 'siloq-connector'); ?></h2>
                     <p class="siloq-wizard-subtitle"><?php _e('We\'re importing your pages into Siloq for analysis.', 'siloq-connector'); ?></p>
 
