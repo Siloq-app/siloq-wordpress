@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.72
+* Version: 1.5.73
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.72');
+define('SILOQ_VERSION', '1.5.73');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -305,6 +305,10 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_gsc_check_status', array($this, 'ajax_gsc_check_status'));
         add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
         add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
+        // Onboarding wizard handlers
+        add_action('wp_ajax_siloq_wizard_connect', array($this, 'ajax_wizard_connect'));
+        add_action('wp_ajax_siloq_wizard_save_profile', array($this, 'ajax_wizard_save_profile'));
+        add_action('wp_ajax_siloq_wizard_complete', array($this, 'ajax_wizard_complete'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -1552,6 +1556,97 @@ class Siloq_Connector {
         delete_option('siloq_gsc_avg_position');
 
         wp_send_json_success(array('disconnected' => true));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — connect (save API key, verify with /auth/me)
+     */
+    public function ajax_wizard_connect() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_key = sanitize_text_field(wp_unslash($_POST['api_key'] ?? ''));
+        if (empty($api_key)) {
+            wp_send_json_error(array('message' => 'API key is required.'));
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+
+        // Test connection against /auth/me
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'auth/me/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                ),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => 'Could not reach the Siloq API: ' . $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            wp_send_json_error(array('message' => 'Invalid API key (HTTP ' . $code . '). Please check and try again.'));
+        }
+
+        // Save settings
+        update_option('siloq_api_key', $api_key);
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (!empty($body['site_id'])) {
+            update_option('siloq_site_id', sanitize_text_field($body['site_id']));
+        }
+
+        wp_send_json_success(array('message' => 'Connected'));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — save business profile
+     */
+    public function ajax_wizard_save_profile() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $fields = array(
+            'business_name'    => sanitize_text_field(wp_unslash($_POST['business_name'] ?? '')),
+            'phone'            => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'address'          => sanitize_text_field(wp_unslash($_POST['address'] ?? '')),
+            'city'             => sanitize_text_field(wp_unslash($_POST['city'] ?? '')),
+            'state'            => sanitize_text_field(wp_unslash($_POST['state'] ?? '')),
+            'zip'              => sanitize_text_field(wp_unslash($_POST['zip'] ?? '')),
+            'business_type'    => sanitize_text_field(wp_unslash($_POST['business_type'] ?? '')),
+            'primary_services' => sanitize_textarea_field(wp_unslash($_POST['primary_services'] ?? '')),
+        );
+
+        update_option('siloq_business_profile', wp_json_encode($fields));
+
+        // Also save individual options for compatibility with existing business profile feature
+        foreach ($fields as $key => $value) {
+            update_option('siloq_biz_' . $key, $value);
+        }
+
+        wp_send_json_success(array('message' => 'Profile saved'));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — mark complete
+     */
+    public function ajax_wizard_complete() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        update_option('siloq_onboarding_complete', 'yes');
+        wp_send_json_success(array('message' => 'Onboarding complete'));
     }
 }
 
