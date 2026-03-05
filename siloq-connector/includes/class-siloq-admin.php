@@ -131,16 +131,27 @@ class Siloq_Admin {
                 </div>
             <?php else: ?>
                 <!-- Connection Status Banner -->
-                <div class="siloq-connection-banner <?php echo $connection_verified ? 'connected' : 'warning'; ?>">
-                    <?php if ($connection_verified): ?>
+                <?php
+                $site_id_val   = get_option('siloq_site_id', '');
+                $site_name_val = get_option('siloq_site_name', '');
+                ?>
+                <div class="siloq-connection-banner <?php echo $connection_verified ? 'connected' : ($site_id_val ? 'connected' : 'warning'); ?>">
+                    <?php if ($connection_verified || $site_id_val): ?>
                         <span class="dashicons dashicons-yes-alt"></span>
-                        <?php _e('Connected to Siloq', 'siloq-connector'); ?>
+                        <?php if ($site_name_val): ?>
+                            <?php echo esc_html($site_name_val); ?>
+                        <?php else: ?>
+                            <?php _e('Connected to Siloq', 'siloq-connector'); ?>
+                        <?php endif; ?>
+                        <?php if ($site_id_val): ?>
+                            <span style="opacity:.7;font-size:12px;">&nbsp;· Site ID: <?php echo esc_html($site_id_val); ?></span>
+                        <?php endif; ?>
                         <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard'); ?>" target="_blank" class="siloq-dashboard-link">
                             <?php _e('Open Dashboard →', 'siloq-connector'); ?>
                         </a>
                     <?php else: ?>
                         <span class="dashicons dashicons-warning"></span>
-                        <?php _e('API key configured — click "Test Connection" to verify', 'siloq-connector'); ?>
+                        <?php _e('API key saved — save settings to verify connection', 'siloq-connector'); ?>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
@@ -515,19 +526,31 @@ class Siloq_Admin {
                                     <td>
                                         <fieldset>
                                             <?php
-                                            $post_types = get_post_types(['public' => true], 'objects');
-                                            $enabled_types = get_option('siloq_content_types', ['page']);
-                                            foreach ($post_types as $post_type) {
-                                                if ($post_type->name === 'attachment') continue;
+                                            // Exclude internal/non-content post types from the checkbox list
+                                            $internal_types = array(
+                                                'attachment', 'revision', 'nav_menu_item', 'custom_css',
+                                                'customize_changeset', 'wp_block', 'wp_template', 'wp_template_part',
+                                                'wp_global_styles', 'wp_navigation', 'elementor_library',
+                                                'e-floating-buttons', 'elementor-hf', 'slider', 'slides', 'slide',
+                                                'home_slider', 'home-slider', 'smart-slider', 'rev_slider',
+                                                'ml-slider', 'soliloquy', 'wpcf7_contact_form', 'popup', 'popups',
+                                                'product_variation', 'shop_order', 'shop_coupon', 'shop_order_refund',
+                                            );
+                                            $all_post_types = get_post_types(array(), 'objects');
+                                            $enabled_types = get_option('siloq_content_types', array('page', 'post'));
+                                            foreach ($all_post_types as $post_type) {
+                                                if (in_array($post_type->name, $internal_types)) continue;
+                                                if (empty($post_type->label)) continue;
                                                 ?>
-                                                <label style="margin-right: 15px;">
+                                                <label style="margin-right: 15px; display:inline-block; margin-bottom:6px;">
                                                     <input
                                                         type="checkbox"
                                                         name="siloq_content_types[]"
                                                         value="<?php echo esc_attr($post_type->name); ?>"
-                                                        <?php checked(in_array($post_type->name, $enabled_types)); ?>
+                                                        <?php checked(in_array($post_type->name, (array)$enabled_types)); ?>
                                                     />
-                                                    <?php echo esc_html($post_type->labels->name); ?>
+                                                    <?php echo esc_html($post_type->labels->singular_name ?: $post_type->label); ?>
+                                                    <span style="color:#999;font-size:11px;">(<?php echo esc_html($post_type->name); ?>)</span>
                                                 </label>
                                                 <?php
                                             }
@@ -1170,6 +1193,34 @@ class Siloq_Admin {
         if ($old_api_url !== $api_url || $old_api_key !== $api_key) {
             delete_transient('siloq_connection_verified');
             delete_transient('siloq_plan_data');
+        }
+
+        // Auto-detect site ID if missing or API key changed
+        $site_id = get_option('siloq_site_id', '');
+        if (empty($site_id) || $old_api_key !== $api_key) {
+            $sites_resp = wp_remote_get(
+                trailingslashit($api_url) . 'sites/',
+                array(
+                    'headers' => array(
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Accept'        => 'application/json',
+                    ),
+                    'timeout' => 15,
+                )
+            );
+            if (!is_wp_error($sites_resp) && wp_remote_retrieve_response_code($sites_resp) < 400) {
+                $sites_data = json_decode(wp_remote_retrieve_body($sites_resp), true);
+                $sites_list = isset($sites_data['results']) ? $sites_data['results'] : (is_array($sites_data) ? $sites_data : array());
+                if (!empty($sites_list[0]['id'])) {
+                    update_option('siloq_site_id', $sites_list[0]['id']);
+                    update_option('siloq_site_name', isset($sites_list[0]['name']) ? $sites_list[0]['name'] : $sites_list[0]['url']);
+                    add_settings_error('siloq_settings', 'siloq_site_detected',
+                        sprintf(__('Connected to site: <strong>%s</strong> (ID: %s)', 'siloq-connector'),
+                            esc_html(isset($sites_list[0]['name']) ? $sites_list[0]['name'] : $sites_list[0]['url']),
+                            esc_html($sites_list[0]['id'])),
+                        'success');
+                }
+            }
         }
         
         add_settings_error(
