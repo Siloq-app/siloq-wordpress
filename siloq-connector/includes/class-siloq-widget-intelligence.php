@@ -211,35 +211,78 @@ class Siloq_Widget_Intelligence {
             $payload = is_array( $raw_payload ) ? $raw_payload : [];
         }
 
-        // Attempt live Siloq API call
-        $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
-        $response = wp_remote_post(
-            "{$api_base}/api/v1/sites/{$site_id}/pages/{$post_id}/widget-analysis/",
-            [
-                'timeout' => 30,
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $api_key,
-                    'Content-Type'  => 'application/json',
-                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
-                ],
-                'body' => wp_json_encode( $payload ),
-            ]
-        );
+        // Use correct API base from WP option (not hardcoded wrong domain)
+        $api_base_raw = get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' );
+        $api_base     = rtrim( $api_base_raw, '/' );
 
-        if ( is_wp_error( $response ) ) {
-            wp_send_json_success( $this->generate_local_suggestion( $payload ) );
-            return;
+        // Get widget content from payload
+        $widget_content = $payload['active_widget']['content'] ?? '';
+        $widget_type    = $payload['active_widget']['type'] ?? 'text-editor';
+        $post_title     = get_the_title( $post_id );
+        $layer          = $this->detect_page_layer( $payload );
+        $business       = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+        $city_name      = get_option( 'siloq_city', '' );
+        $services_arr   = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        $service_str    = is_array( $services_arr ) ? implode( ', ', array_slice( $services_arr, 0, 3 ) ) : '';
+
+        // Build a specific, actionable edit instruction
+        $edit_instruction = "Rewrite this {$widget_type} to be significantly better for local SEO and conversions. "
+            . "Page: "{$post_title}". Business: {$business}"
+            . ( $city_name ? " in {$city_name}." : '.' )
+            . ( $service_str ? " Services offered: {$service_str}." : '' )
+            . " Page type: {$layer}."
+            . " Include location modifier naturally, use active voice, be specific about services and outcomes."
+            . " The rewrite must be noticeably different and clearly better — not a light paraphrase.";
+
+        // Find the API page ID by matching WP post URL
+        $post_url   = get_permalink( $post_id );
+        $post_host  = parse_url( $post_url, PHP_URL_HOST );
+        $api_page_id = null;
+        $pages_resp = wp_remote_get( "{$api_base}/sites/{$site_id}/pages/?limit=100",
+            [ 'headers' => [ 'Authorization' => 'Bearer ' . $api_key ], 'timeout' => 10 ] );
+        if ( ! is_wp_error( $pages_resp ) && wp_remote_retrieve_response_code( $pages_resp ) === 200 ) {
+            $pages_data = json_decode( wp_remote_retrieve_body( $pages_resp ), true );
+            $pages_list = $pages_data['results'] ?? ( is_array( $pages_data ) ? $pages_data : [] );
+            foreach ( $pages_list as $p ) {
+                $p_host = parse_url( $p['url'] ?? '', PHP_URL_HOST );
+                $p_path = parse_url( $p['url'] ?? '', PHP_URL_PATH );
+                $wp_path = parse_url( $post_url, PHP_URL_PATH );
+                if ( $p_path === $wp_path ) { $api_page_id = $p['id']; break; }
+            }
         }
 
-        $code = wp_remote_retrieve_response_code( $response );
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( $api_page_id && ! empty( $widget_content ) ) {
+            $api_response = wp_remote_post(
+                "{$api_base}/sites/{$site_id}/pages/{$api_page_id}/suggest-widget-edit/",
+                [
+                    'timeout' => 45,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                    'body' => wp_json_encode( [
+                        'widget_content'   => $widget_content,
+                        'edit_instruction' => $edit_instruction,
+                        'related_pages'    => [],
+                    ] ),
+                ]
+            );
 
-        if ( $code >= 400 || ! $body ) {
-            wp_send_json_success( $this->generate_local_suggestion( $payload ) );
-            return;
+            if ( ! is_wp_error( $api_response ) && wp_remote_retrieve_response_code( $api_response ) === 200 ) {
+                $api_body = json_decode( wp_remote_retrieve_body( $api_response ), true );
+                if ( ! empty( $api_body['suggestion'] ) ) {
+                    $result = $this->generate_local_suggestion( $payload );
+                    $result['suggested_content'] = $api_body['suggestion'];
+                    $result['source'] = 'api';
+                    wp_send_json_success( $result );
+                    return;
+                }
+            }
         }
 
-        wp_send_json_success( $body );
+        // Fallback: local suggestion with layer/heading analysis
+        wp_send_json_success( $this->generate_local_suggestion( $payload ) );
     }
 
     // ── Local fallback ───────────────────────────────────────────────────
@@ -258,7 +301,8 @@ class Siloq_Widget_Intelligence {
         $layer       = $this->detect_page_layer( $payload );
 
         $violations  = $this->validate_heading_hierarchy( $heading_map );
-        $suggestion  = $content; // Default: return current content unchanged
+        // Return content with inline improvement tips (not a copy of the original)
+        $suggestion = $content;
 
         // Layer-specific advisory notes
         $layer_notes = [];
