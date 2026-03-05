@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.74
+* Version: 1.5.75
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.74');
+define('SILOQ_VERSION', '1.5.75');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1599,15 +1599,37 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Invalid API key (HTTP ' . $code . '). Please check and try again.'));
         }
 
-        // Save settings
+        // Save API key
         update_option('siloq_api_key', $api_key);
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        if (!empty($body['site_id'])) {
-            update_option('siloq_site_id', sanitize_text_field($body['site_id']));
+        // /auth/me confirms the key is valid but doesn't return site_id.
+        // Fetch the first site from /sites/ to auto-populate site_id.
+        $sites_response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                ),
+                'timeout' => 15,
+            )
+        );
+
+        $site_id_saved = false;
+        if ( ! is_wp_error( $sites_response ) && wp_remote_retrieve_response_code( $sites_response ) === 200 ) {
+            $sites_body = json_decode( wp_remote_retrieve_body( $sites_response ), true );
+            // Response may be an array of sites or {results: [...]}
+            $sites = isset( $sites_body['results'] ) ? $sites_body['results'] : ( is_array( $sites_body ) ? $sites_body : [] );
+            if ( ! empty( $sites[0]['id'] ) ) {
+                update_option( 'siloq_site_id', sanitize_text_field( $sites[0]['id'] ) );
+                $site_id_saved = true;
+            }
         }
 
-        wp_send_json_success(array('message' => 'Connected'));
+        wp_send_json_success( array(
+            'message'      => 'Connected',
+            'site_id_set'  => $site_id_saved,
+        ) );
     }
 
     /**
