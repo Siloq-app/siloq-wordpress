@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.91
+* Version: 1.5.92
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.91');
+define('SILOQ_VERSION', '1.5.92');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1624,24 +1624,28 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => $response->get_error_message()));
         }
 
+        $status_code = wp_remote_retrieve_response_code($response);
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
-        if (!empty($body['connected'])) {
+        $is_connected = ($status_code === 200) && !empty($body['connected']);
+
+        if ($is_connected) {
             update_option('siloq_gsc_connected', 'yes');
-            update_option('siloq_gsc_property', sanitize_text_field($body['property']));
+            update_option('siloq_gsc_property', sanitize_text_field($body['property'] ?? ''));
             if (!empty($body['last_sync'])) {
                 update_option('siloq_gsc_last_sync', sanitize_text_field($body['last_sync']));
             }
         } else {
+            // Any non-200 or non-connected response clears stale data
             delete_option('siloq_gsc_connected');
             delete_option('siloq_gsc_property');
             delete_option('siloq_gsc_last_sync');
         }
 
         wp_send_json_success(array(
-            'connected' => !empty($body['connected']),
-            'property'  => isset($body['property']) ? $body['property'] : '',
-            'last_sync' => isset($body['last_sync']) ? $body['last_sync'] : '',
+            'connected' => $is_connected,
+            'property'  => $is_connected ? ($body['property'] ?? '') : '',
+            'last_sync' => $is_connected ? ($body['last_sync'] ?? '') : '',
         ));
     }
 

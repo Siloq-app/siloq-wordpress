@@ -1114,6 +1114,17 @@ class Siloq_Admin {
                 $('#siloq-gsc-status-msg').text(text).css('color', color || '#555');
             }
 
+            // AUTO-CHECK: if Settings page shows GSC connected, verify against API on load
+            // This catches stale data (e.g. previous client's GSC showing up)
+            <?php if (get_option('siloq_gsc_connected') === 'yes'): ?>
+            $.post(ajaxUrl, {action: 'siloq_gsc_check_status', nonce: nonce}, function(r) {
+                if (r.success && r.data && !r.data.connected) {
+                    // API says not connected — stale data. Reload to show correct state.
+                    location.reload();
+                }
+            });
+            <?php endif; ?>
+
             // "Check Connection" after user connects in app.siloq.ai
             $(document).on('click', '#siloq-gsc-check-btn', function() {
                 var $btn = $(this).prop('disabled', true).text('Checking...');
