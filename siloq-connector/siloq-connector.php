@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.79
+* Version: 1.5.80
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.79');
+define('SILOQ_VERSION', '1.5.80');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1383,12 +1383,14 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Plugin not connected. Configure your API key first.'));
         }
 
-        $response = wp_remote_post(
-            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/auth-url/',
+        // The auth-url endpoint is at /gsc/auth-url/?site_id={id}
+        // NOT at /sites/{id}/gsc/auth-url/ which returns 404
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'gsc/auth-url/?site_id=' . $site_id,
             array(
                 'headers' => array(
                     'Authorization' => 'Bearer ' . $api_key,
-                    'Content-Type'  => 'application/json',
+                    'Accept'        => 'application/json',
                 ),
                 'timeout' => 30,
             )
