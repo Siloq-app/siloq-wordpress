@@ -112,7 +112,10 @@
   }
 
   function renderPlanData(data) {
+    console.log('Plan data:', data);
+
     // Architecture tree
+    var $archContent = $('#siloq-architecture-content');
     if (data.architecture && data.architecture.length) {
       var html = '<ul class="siloq-tree">';
       data.architecture.forEach(function (node) {
@@ -124,7 +127,9 @@
         html += '</li>';
       });
       html += '</ul>';
-      $('#siloq-architecture-content').html(html);
+      $archContent.html(html);
+    } else {
+      $archContent.html('<p class="siloq-empty-hint">All pages are orphans &mdash; assign page types to build your structure.</p>');
     }
 
     // Priority actions
@@ -146,6 +151,8 @@
           + '</div></div></div>';
       });
       $('#siloq-actions-content').html(actHtml);
+    } else {
+      $('#siloq-actions-content').html('<p class="siloq-empty-hint">Run Widget Intelligence on your pages to get priority actions.</p>');
     }
 
     // Content issues
@@ -187,8 +194,9 @@
       renderRoadmap(data.roadmap);
     }
 
-    // Open the plan accordion sections
-    $('.siloq-plan-section .siloq-accordion').addClass('is-open');
+    // Open the plan accordion sections and set aria
+    $('.siloq-plan-section .siloq-accordion').addClass('is-open')
+      .find('.siloq-accordion__trigger').attr('aria-expanded', 'true');
   }
 
   /* ─── Roadmap Checkbox Persistence ───────────── */
@@ -353,7 +361,14 @@
       });
 
       var total = $grid.find('.siloq-page-card').length;
+      var orphanCount = $grid.find('.siloq-page-card[data-type="orphan"]').length;
       $('#siloq-pages-count').text(total + ' page' + (total !== 1 ? 's' : '') + ' synced');
+
+      // Show orphan hint banner
+      $('#siloq-orphan-banner').remove();
+      if (orphanCount > 0) {
+        $grid.before('<div id="siloq-orphan-banner" class="siloq-orphan-banner">' + orphanCount + ' page' + (orphanCount !== 1 ? 's need' : ' needs') + ' content structure assignment. Open each page in Elementor and run <strong>Analyze</strong> to get started.</div>');
+      }
 
       $loadMore.toggle(pages.length >= 20);
     }).fail(function () {
@@ -419,7 +434,7 @@
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '">' + escHtml(page.page_type.toUpperCase()) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="Page not yet assigned to a content structure"' : '') + '>' + escHtml(page.page_type.toUpperCase()) + '</span>'
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'
       + (pillsHtml ? '<div class="siloq-page-card__issues-pills">' + pillsHtml + '</div>' : '')

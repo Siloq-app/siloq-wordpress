@@ -447,7 +447,7 @@ class Siloq_Connector {
             );
             wp_localize_script('siloq-dashboard-v2', 'siloqDash', array(
                 'ajaxUrl'   => admin_url('admin-ajax.php'),
-                'nonce'     => wp_create_nonce('siloq_nonce'),
+                'nonce'     => wp_create_nonce('siloq_ajax_nonce'),
                 'siteScore' => intval(get_option('siloq_site_score', 42)),
                 'siteId'    => get_option('siloq_site_id', ''),
             ));
@@ -1261,7 +1261,7 @@ class Siloq_Connector {
      * AJAX: Save roadmap checkbox progress
      */
     public function ajax_save_roadmap_progress() {
-        check_ajax_referer('siloq_nonce', 'nonce');
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
@@ -1907,10 +1907,14 @@ function siloq_get_dashboard_stats() {
     $synced_pages = get_posts(array(
         'post_type'      => array('page', 'post'),
         'post_status'    => 'publish',
-        'meta_key'       => '_siloq_synced',
-        'meta_value'     => '1',
         'posts_per_page' => -1,
         'fields'         => 'ids',
+        'meta_query'     => array(
+            array(
+                'key'     => '_siloq_synced',
+                'compare' => 'EXISTS',
+            ),
+        ),
     ));
     
     $pages_synced = count($synced_pages);

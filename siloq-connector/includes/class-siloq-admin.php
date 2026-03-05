@@ -1044,7 +1044,7 @@ class Siloq_Admin {
         });
 
         /* ── GSC Connection Handlers (Settings page) ── */
-        (function(){
+        (function($){
             var nonce = typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : '';
             var ajaxUrl = typeof ajaxurl !== 'undefined' ? ajaxurl : '';
 
@@ -1065,9 +1065,11 @@ class Siloq_Admin {
                             }
                         }, 1000);
                     } else {
-                        gscMsg(r.data && r.data.message ? r.data.message : 'Failed to start OAuth', 'error');
+                        var msg = (r.data && r.data.message) ? r.data.message : 'Failed to start OAuth';
+                        console.error('GSC OAuth error:', msg);
+                        gscMsg('GSC connection requires an API update. Your Siloq account team will enable this shortly.', 'error');
                     }
-                }).fail(function(){ gscMsg('Network error', 'error'); });
+                }).fail(function(xhr){ console.error('GSC OAuth request failed:', xhr.status); gscMsg('GSC connection requires an API update. Your Siloq account team will enable this shortly.', 'error'); });
             }
 
             function gscCheckStatus() {
@@ -1103,7 +1105,7 @@ class Siloq_Admin {
                     else gscMsg('Disconnect failed', 'error');
                 });
             });
-        })();
+        })(jQuery);
         </script>
         <?php
     }
@@ -1625,10 +1627,11 @@ class Siloq_Admin {
                                     }
                                 }, 1000);
                             } else {
-                                tabMsg(r.data && r.data.message ? r.data.message : 'Failed', 'error');
+                                console.error('GSC OAuth error:', r.data && r.data.message);
+                                tabMsg('GSC connection requires an API update. Your Siloq account team will enable this shortly.', 'error');
                                 $btn.prop('disabled',false).text('Connect Google Search Console →');
                             }
-                        }).fail(function(){ $btn.prop('disabled',false).text('Connect Google Search Console →'); tabMsg('Network error','error'); });
+                        }).fail(function(xhr){ console.error('GSC OAuth failed:', xhr.status); $btn.prop('disabled',false).text('Connect Google Search Console →'); tabMsg('GSC connection requires an API update. Your Siloq account team will enable this shortly.','error'); });
                     });
 
                     // Sync (GSC tab)

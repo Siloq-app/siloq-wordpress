@@ -1178,7 +1178,24 @@
 .siloq-badge--hub { background: #faf5ff; color: #7c3aed; }
 .siloq-badge--spoke { background: #eff6ff; color: #3b82f6; }
 .siloq-badge--supporting { background: #f0fdfa; color: #0d9488; }
-.siloq-badge--orphan { background: #fef2f2; color: var(--siloq-danger); }
+.siloq-badge--orphan { background: #fffbeb; color: #92400e; }
+
+.siloq-orphan-banner {
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.siloq-empty-hint {
+  color: #6b7280;
+  font-size: 14px;
+  padding: 12px 0;
+}
 
 /* ─── Responsive ────────────────────────────────── */
 @media (max-width: 782px) {

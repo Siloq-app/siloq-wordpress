@@ -135,26 +135,20 @@
         }
     }
 
+    function showNotification(message, type) {
+        type = type || 'info';
+        var cls = type === 'success' ? 'notice-success' : (type === 'error' ? 'notice-error' : 'notice-info');
+        var $n = $('<div class="notice ' + cls + ' is-dismissible siloq-ai-notification siloq-ai-notification-' + type + '"><p>' + message + '</p></div>');
+        if ($('.wrap h1').length) {
+            $('.wrap h1').first().after($n);
+        } else {
+            $('body').append($n);
+        }
+        setTimeout(function() { $n.fadeOut(200, function() { $n.remove(); }); }, 5000);
+    }
+    window.showNotification = showNotification;
+
     function initUserFeedback() {
-        // Enhanced notification system
-        window.showNotification = function(message, type = 'info') {
-            const $notification = $('<div class="siloq-ai-notification siloq-ai-notification-' + type + '">' + message + '</div>');
-            
-            // Add to page
-            $('body').append($notification);
-            
-            // Show notification
-            setTimeout(function() {
-                $notification.fadeIn(200);
-            }, 100);
-            
-            // Auto hide after 5 seconds
-            setTimeout(function() {
-                $notification.fadeOut(200, function() {
-                    $notification.remove();
-                });
-            }, 5000);
-        };
 
         // Form field feedback
         $('input, select, textarea').on('focus', function() {
