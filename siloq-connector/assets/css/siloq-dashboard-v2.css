@@ -1,0 +1,739 @@
+/**
+ * Siloq Dashboard v2 — Redesigned Admin Styles
+ * Version: 1.5.70
+ */
+
+:root {
+  --siloq-primary: #4f46e5;
+  --siloq-primary-light: #eef2ff;
+  --siloq-success: #22c55e;
+  --siloq-warning: #f59e0b;
+  --siloq-danger: #ef4444;
+  --siloq-teal: #14b8a6;
+  --siloq-bg: #f8fafc;
+  --siloq-card: #ffffff;
+  --siloq-border: #e2e8f0;
+  --siloq-text: #1e293b;
+  --siloq-muted: #64748b;
+  --siloq-radius: 12px;
+  --siloq-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --siloq-shadow-lg: 0 4px 12px rgba(0,0,0,.1);
+}
+
+/* ─── Reset & Base ──────────────────────────────── */
+.siloq-dash-wrap {
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 0 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  color: var(--siloq-text);
+}
+
+.siloq-dash-wrap *,
+.siloq-dash-wrap *::before,
+.siloq-dash-wrap *::after {
+  box-sizing: border-box;
+}
+
+/* ─── Tab Navigation ────────────────────────────── */
+.siloq-tab-nav {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--siloq-border);
+  margin-bottom: 28px;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.siloq-tab-nav li {
+  margin: 0;
+}
+
+.siloq-tab-btn {
+  display: inline-block;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--siloq-muted);
+  text-decoration: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+
+.siloq-tab-btn:hover,
+.siloq-tab-btn:focus {
+  color: var(--siloq-primary);
+  outline: none;
+}
+
+.siloq-tab-btn[aria-selected="true"] {
+  color: var(--siloq-primary);
+  border-bottom-color: var(--siloq-primary);
+}
+
+.siloq-tab-panel {
+  display: none;
+}
+
+.siloq-tab-panel[aria-hidden="false"],
+.siloq-tab-panel.active {
+  display: block;
+}
+
+/* ─── Cards ─────────────────────────────────────── */
+.siloq-card {
+  background: var(--siloq-card);
+  border: 1px solid var(--siloq-border);
+  border-radius: var(--siloq-radius);
+  padding: 24px;
+  box-shadow: var(--siloq-shadow);
+  margin-bottom: 20px;
+}
+
+.siloq-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.siloq-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--siloq-text);
+  margin: 0;
+}
+
+.siloq-card-subtitle {
+  font-size: 13px;
+  color: var(--siloq-muted);
+  margin: 4px 0 0;
+}
+
+/* ─── Score Ring (SVG) ──────────────────────────── */
+.siloq-hero {
+  text-align: center;
+  padding: 40px 24px 32px;
+}
+
+.siloq-score-ring-wrap {
+  display: inline-block;
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+
+.siloq-score-ring {
+  width: 180px;
+  height: 180px;
+  transform: rotate(-90deg);
+}
+
+.siloq-score-ring__bg {
+  fill: none;
+  stroke: var(--siloq-border);
+  stroke-width: 10;
+}
+
+.siloq-score-ring__fg {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dasharray 1.2s ease-out, stroke .3s;
+}
+
+.siloq-score-ring__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.siloq-score-ring__value {
+  display: block;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--siloq-text);
+}
+
+.siloq-score-ring__caption {
+  font-size: 12px;
+  color: var(--siloq-muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.siloq-hero__sentence {
+  font-size: 15px;
+  color: var(--siloq-muted);
+  margin: 16px 0 24px;
+  max-width: 500px;
+  display: inline-block;
+}
+
+/* ─── Buttons ───────────────────────────────────── */
+.siloq-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s, box-shadow .15s;
+  line-height: 1.4;
+}
+
+.siloq-btn--primary {
+  background: var(--siloq-primary);
+  color: #fff;
+}
+
+.siloq-btn--primary:hover {
+  background: #4338ca;
+  box-shadow: var(--siloq-shadow-lg);
+  color: #fff;
+}
+
+.siloq-btn--outline {
+  background: transparent;
+  color: var(--siloq-primary);
+  border: 1px solid var(--siloq-primary);
+}
+
+.siloq-btn--outline:hover {
+  background: var(--siloq-primary-light);
+}
+
+.siloq-btn--sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.siloq-btn--danger {
+  background: var(--siloq-danger);
+  color: #fff;
+}
+
+.siloq-btn--danger:hover {
+  background: #dc2626;
+}
+
+.siloq-btn--success {
+  background: var(--siloq-success);
+  color: #fff;
+}
+
+/* ─── Grid Layouts ──────────────────────────────── */
+.siloq-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.siloq-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+/* ─── Plan Progress Bar ─────────────────────────── */
+.siloq-progress-wrap {
+  margin: 12px 0;
+}
+
+.siloq-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--siloq-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.siloq-progress-bar__fill {
+  height: 100%;
+  background: var(--siloq-primary);
+  border-radius: 4px;
+  transition: width .6s ease-out;
+}
+
+.siloq-progress-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--siloq-muted);
+  margin-top: 6px;
+}
+
+/* ─── Insight Cards ─────────────────────────────── */
+.siloq-insight-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--siloq-text);
+  margin: 8px 0 4px;
+}
+
+.siloq-insight-label {
+  font-size: 13px;
+  color: var(--siloq-muted);
+}
+
+.siloq-insight-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.siloq-insight-icon--schema { background: #eef2ff; color: var(--siloq-primary); }
+.siloq-insight-icon--gsc    { background: #fef3c7; color: var(--siloq-warning); }
+.siloq-insight-icon--arch   { background: #d1fae5; color: var(--siloq-success); }
+
+/* ─── Activity Log ──────────────────────────────── */
+.siloq-activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.siloq-activity-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--siloq-border);
+  font-size: 13px;
+}
+
+.siloq-activity-list li:last-child {
+  border-bottom: none;
+}
+
+.siloq-activity-time {
+  color: var(--siloq-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+/* ─── Badges / Pills ────────────────────────────── */
+.siloq-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 99px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.siloq-badge--red    { background: #fef2f2; color: var(--siloq-danger); }
+.siloq-badge--amber  { background: #fffbeb; color: #b45309; }
+.siloq-badge--blue   { background: #eef2ff; color: var(--siloq-primary); }
+.siloq-badge--green  { background: #f0fdf4; color: #16a34a; }
+.siloq-badge--purple { background: #faf5ff; color: #9333ea; }
+.siloq-badge--teal   { background: #f0fdfa; color: #0d9488; }
+.siloq-badge--gray   { background: #f1f5f9; color: var(--siloq-muted); }
+
+/* Page type badges */
+.siloq-page-type { font-size: 11px; font-weight: 600; }
+.siloq-page-type--hub        { color: var(--siloq-primary); }
+.siloq-page-type--spoke      { color: var(--siloq-teal); }
+.siloq-page-type--supporting { color: var(--siloq-muted); }
+.siloq-page-type--orphan     { color: var(--siloq-danger); }
+
+/* ─── Accordion ─────────────────────────────────── */
+.siloq-accordion {
+  border: 1px solid var(--siloq-border);
+  border-radius: var(--siloq-radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.siloq-accordion__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--siloq-text);
+  background: var(--siloq-card);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s;
+}
+
+.siloq-accordion__trigger:hover {
+  background: var(--siloq-bg);
+}
+
+.siloq-accordion__arrow {
+  transition: transform .2s;
+  font-size: 12px;
+  color: var(--siloq-muted);
+}
+
+.siloq-accordion[open] .siloq-accordion__arrow,
+.siloq-accordion.is-open .siloq-accordion__arrow {
+  transform: rotate(180deg);
+}
+
+.siloq-accordion__content {
+  padding: 0 20px 20px;
+  background: var(--siloq-card);
+  display: none;
+}
+
+.siloq-accordion.is-open .siloq-accordion__content {
+  display: block;
+}
+
+/* ─── Site Architecture Tree ────────────────────── */
+.siloq-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.siloq-tree li {
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.siloq-tree--hub {
+  font-weight: 700;
+  color: var(--siloq-primary);
+}
+
+.siloq-tree--spoke {
+  padding-left: 24px;
+  color: var(--siloq-text);
+}
+
+.siloq-tree--supporting {
+  padding-left: 48px;
+  color: var(--siloq-muted);
+}
+
+.siloq-tree--missing {
+  padding-left: 24px;
+  color: var(--siloq-warning);
+  border-left: 2px dashed var(--siloq-warning);
+  margin-left: 10px;
+}
+
+.siloq-tree--orphan {
+  color: var(--siloq-danger);
+  font-style: italic;
+}
+
+/* ─── Action Cards (Priority Actions) ───────────── */
+.siloq-action-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--siloq-border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--siloq-card);
+  transition: box-shadow .15s;
+}
+
+.siloq-action-card:hover {
+  box-shadow: var(--siloq-shadow);
+}
+
+.siloq-action-card__number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--siloq-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.siloq-action-card__body {
+  flex: 1;
+}
+
+.siloq-action-card__headline {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--siloq-text);
+  margin: 0 0 6px;
+}
+
+.siloq-action-card__meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.siloq-action-card__actions {
+  margin-top: 8px;
+}
+
+/* ─── Roadmap Columns ───────────────────────────── */
+.siloq-roadmap {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.siloq-roadmap__col {
+  background: var(--siloq-bg);
+  border: 1px solid var(--siloq-border);
+  border-radius: var(--siloq-radius);
+  padding: 20px;
+}
+
+.siloq-roadmap__col-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--siloq-text);
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--siloq-primary);
+}
+
+.siloq-roadmap__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--siloq-text);
+}
+
+.siloq-roadmap__item input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--siloq-primary);
+}
+
+.siloq-roadmap__item.is-done {
+  text-decoration: line-through;
+  color: var(--siloq-muted);
+}
+
+/* ─── Pages Table ───────────────────────────────── */
+.siloq-pages-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.siloq-pages-table th {
+  text-align: left;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--siloq-border);
+  color: var(--siloq-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.siloq-pages-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--siloq-border);
+  vertical-align: middle;
+}
+
+.siloq-pages-table tbody tr:hover {
+  background: var(--siloq-bg);
+}
+
+/* ─── Content Issues ────────────────────────────── */
+.siloq-issues-group {
+  margin-bottom: 20px;
+}
+
+.siloq-issues-group__title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--siloq-border);
+}
+
+.siloq-issues-group__title--critical  { color: var(--siloq-danger); }
+.siloq-issues-group__title--important { color: var(--siloq-warning); }
+.siloq-issues-group__title--opportunity { color: var(--siloq-primary); }
+
+.siloq-issue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--siloq-border);
+  font-size: 13px;
+}
+
+.siloq-issue-row:last-child {
+  border-bottom: none;
+}
+
+/* ─── GSC Connection Card ───────────────────────── */
+.siloq-gsc-status {
+  text-align: center;
+  padding: 32px;
+}
+
+.siloq-gsc-status__icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.siloq-gsc-status__details {
+  text-align: left;
+  margin: 16px 0;
+}
+
+.siloq-gsc-status__details dt {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--siloq-muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.siloq-gsc-status__details dd {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+/* ─── Schema Tab ────────────────────────────────── */
+.siloq-entity-meter {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.siloq-entity-meter__bar {
+  flex: 1;
+  height: 10px;
+  background: var(--siloq-border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.siloq-entity-meter__fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width .6s ease-out;
+}
+
+.siloq-entity-meter__value {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 50px;
+}
+
+/* ─── Empty / Placeholder States ────────────────── */
+.siloq-empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--siloq-muted);
+  font-size: 14px;
+}
+
+.siloq-empty__icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+  opacity: .5;
+}
+
+/* ─── Settings Tab (reframed) ───────────────────── */
+.siloq-settings-section {
+  margin-bottom: 24px;
+}
+
+.siloq-settings-section__title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  color: var(--siloq-text);
+}
+
+/* ─── Loading spinner ───────────────────────────── */
+.siloq-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--siloq-border);
+  border-top-color: var(--siloq-primary);
+  border-radius: 50%;
+  animation: siloq-spin .6s linear infinite;
+}
+
+@keyframes siloq-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Responsive ────────────────────────────────── */
+@media (max-width: 782px) {
+  .siloq-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .siloq-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .siloq-roadmap {
+    grid-template-columns: 1fr;
+  }
+  .siloq-tab-nav {
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .siloq-tab-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .siloq-hero {
+    padding: 24px 16px;
+  }
+  .siloq-score-ring-wrap {
+    width: 140px;
+    height: 140px;
+  }
+  .siloq-score-ring {
+    width: 140px;
+    height: 140px;
+  }
+  .siloq-score-ring__value {
+    font-size: 32px;
+  }
+  .siloq-action-card {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

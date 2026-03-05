@@ -31,22 +31,59 @@ class Siloq_Widget_Intelligence {
 
     private function __construct() {}
 
+    /**
+     * Widget types that get the Siloq Intelligence panel.
+     * Adding a type here is all that's needed to enable it.
+     */
+    private static $supported_widgets = [
+        'text-editor', 'heading', 'icon-box', 'image-box',
+        'accordion', 'toggle', 'button',
+    ];
+
+    /**
+     * Tracks which widget types have already received the injected section
+     * this request (prevents double-injection on multi-section widgets).
+     */
+    private $sections_injected = [];
+
     // ── Hook registration ────────────────────────────────────────────────
 
     private function register_hooks() {
-        // Widget section injections
-        add_action( 'elementor/element/text-editor/section_editor/after_section_end',   [ $this, 'add_siloq_section' ], 10, 2 );
-        add_action( 'elementor/element/heading/section_title/after_section_end',        [ $this, 'add_siloq_section' ], 10, 2 );
-        add_action( 'elementor/element/icon-box/section_icon_box/after_section_end',    [ $this, 'add_siloq_section' ], 10, 2 );
-        add_action( 'elementor/element/image-box/section_image_box/after_section_end',  [ $this, 'add_siloq_section' ], 10, 2 );
-        add_action( 'elementor/element/accordion/section_title/after_section_end',      [ $this, 'add_siloq_section' ], 10, 2 );
-        add_action( 'elementor/element/toggle/section_toggle/after_section_end',        [ $this, 'add_siloq_section' ], 10, 2 );
+        // Single generic hook — fires after every section end on every element.
+        // We filter to supported widget types and inject after their FIRST section.
+        // This is version-proof: it doesn't depend on knowing Elementor section IDs.
+        add_action( 'elementor/element/after_section_end', [ $this, 'maybe_add_siloq_section' ], 10, 3 );
 
         // Editor assets
         add_action( 'elementor/editor/before_enqueue_scripts', [ $this, 'enqueue_editor_assets' ] );
 
         // AJAX
         add_action( 'wp_ajax_siloq_analyze_widget', [ $this, 'ajax_analyze_widget' ] );
+    }
+
+    /**
+     * Called after every section end — injects Siloq Intelligence after
+     * the first Content-tab section of each supported widget type.
+     *
+     * @param \Elementor\Widget_Base $element
+     * @param string                 $section_id
+     * @param array                  $args
+     */
+    public function maybe_add_siloq_section( $element, $section_id, $args ) {
+        $widget_name = $element->get_name();
+
+        // Only supported widget types
+        if ( ! in_array( $widget_name, self::$supported_widgets, true ) ) {
+            return;
+        }
+
+        // Only inject once per widget type (after first content section)
+        if ( isset( $this->sections_injected[ $widget_name ] ) ) {
+            return;
+        }
+        $this->sections_injected[ $widget_name ] = true;
+
+        $this->add_siloq_section( $element, $args );
     }
 
     // ── Panel section ────────────────────────────────────────────────────
@@ -131,7 +168,7 @@ class Siloq_Widget_Intelligence {
         wp_enqueue_script(
             'siloq-wi',
             SILOQ_PLUGIN_URL . 'assets/js/siloq-widget-intelligence.js',
-            [ 'jquery' ],
+            [ 'jquery', 'elementor-editor' ],  // must load AFTER Elementor's editor JS
             SILOQ_VERSION,
             true
         );

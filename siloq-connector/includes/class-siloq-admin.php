@@ -403,6 +403,40 @@ class Siloq_Admin {
                                 </tr>
 
                                 <tr>
+                                    <th scope="row"><?php _e('Save History', 'siloq-connector'); ?></th>
+                                    <td>
+                                        <?php
+                                        $debug_log = json_decode( get_option( 'siloq_debug_log', '[]' ), true ) ?: [];
+                                        if ( empty( $debug_log ) ) {
+                                            echo '<p class="description">No save attempts recorded yet.</p>';
+                                        } else {
+                                            $recent = array_reverse( array_slice( $debug_log, -10 ) );
+                                            echo '<div style="background:#f6f7f7;border:1px solid #ddd;border-radius:4px;padding:10px;font-family:monospace;font-size:11px;max-height:200px;overflow-y:auto;">';
+                                            foreach ( $recent as $entry ) {
+                                                $api   = $entry['api_sync'] ?? '?';
+                                                $db    = $entry['db_verified'] ? '✅' : '❌';
+                                                $color = ( $entry['db_verified'] && $api === 'ok' ) ? '#065f46' : '#7c2d12';
+                                                printf(
+                                                    '<div style="color:%s;margin-bottom:4px;">[%s] DB:%s API:%s fields:%s</div>',
+                                                    esc_attr( $color ),
+                                                    esc_html( $entry['ts'] ?? '' ),
+                                                    $db,
+                                                    esc_html( $api ),
+                                                    esc_html( implode( ',', $entry['fields'] ?? [] ) )
+                                                );
+                                            }
+                                            echo '</div>';
+                                            echo '<p><a href="' . esc_url( add_query_arg( 'siloq_clear_debug_log', '1' ) ) . '" class="button button-small" style="margin-top:6px;">Clear Log</a></p>';
+                                        }
+                                        // Handle clear action
+                                        if ( isset( $_GET['siloq_clear_debug_log'] ) && current_user_can( 'manage_options' ) ) {
+                                            delete_option( 'siloq_debug_log' );
+                                        }
+                                        ?>
+                                    </td>
+                                </tr>
+
+                                <tr>
                                     <th scope="row">
                                         <label for="siloq_sync_frequency">
                                             <?php _e('Auto-Sync Frequency', 'siloq-connector'); ?>
@@ -937,14 +971,30 @@ class Siloq_Admin {
                     success: function(response) {
                         $btn.prop('disabled', false).text('Save Business Profile');
                         if (response.success) {
-                            $status.addClass('success').html('<span class="dashicons dashicons-yes"></span> ' + response.data.message);
+                            // Success notice — green, dismissible
+                            var msg = response.data.message || 'Business profile saved successfully.';
+                            var note = response.data.api_note ? '<br><small style="opacity:.8">' + response.data.api_note + '</small>' : '';
+                            $status.removeClass('error').addClass('success')
+                                .html('<span class="dashicons dashicons-yes-alt"></span> ' + msg + note)
+                                .show();
+                            // Auto-dismiss after 6 seconds
+                            setTimeout(function() { $status.fadeOut(); }, 6000);
                         } else {
-                            $status.addClass('error').text(response.data ? response.data.message : 'Failed to save');
+                            // Error notice — red, stays visible until dismissed
+                            var errMsg = (response.data && response.data.message)
+                                ? response.data.message
+                                : 'Save failed. Please try again or contact support.';
+                            $status.removeClass('success').addClass('error')
+                                .html('<strong>Save failed:</strong> ' + errMsg +
+                                      '<br><small>Check Settings → Debug for details.</small>')
+                                .show();
                         }
                     },
-                    error: function() {
+                    error: function(xhr) {
                         $btn.prop('disabled', false).text('Save Business Profile');
-                        $status.addClass('error').text('Connection error. Please try again.');
+                        $status.removeClass('success').addClass('error')
+                            .html('<strong>Connection error.</strong> Could not reach the server. Check your internet connection and try again.')
+                            .show();
                     }
                 });
             });
@@ -1017,62 +1067,363 @@ class Siloq_Admin {
      * Render dashboard page
      */
     public static function render_dashboard_page() {
-        // Ensure plugin URL constant is defined
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
-        
+
+        $site_score      = intval(get_option('siloq_site_score', 0));
+        $plan_data       = get_transient('siloq_plan_data');
+        $has_plan        = !empty($plan_data);
+        $activity_log    = json_decode(get_option('siloq_activity_log', '[]'), true);
+        if (!is_array($activity_log)) $activity_log = [];
+        $activity_log    = array_slice($activity_log, 0, 5);
+        $entity_pct      = intval(get_option('siloq_entity_completeness', 0));
+        $gsc_connected   = !empty(get_option('siloq_gsc_property', ''));
+        $gsc_property    = get_option('siloq_gsc_property', '');
+        $gsc_last_sync   = get_option('siloq_gsc_last_sync', '');
+        $roadmap_progress = json_decode(get_option('siloq_roadmap_progress', '{}'), true);
+        if (!is_array($roadmap_progress)) $roadmap_progress = [];
+
+        // Plan progress
+        $plan_total = 0; $plan_done = 0; $plan_started = '';
+        if ($has_plan && isset($plan_data['actions'])) {
+            $plan_total = count($plan_data['actions']);
+            $plan_started = isset($plan_data['generated_at']) ? $plan_data['generated_at'] : '';
+        }
+
+        // Insight data
+        $synced_pages = get_posts(array('post_type' => array('page', 'post'), 'meta_key' => '_siloq_last_sync', 'posts_per_page' => -1, 'fields' => 'ids'));
+        $hub_count = 0; $orphan_count = 0; $missing_count = 0;
+        if ($has_plan) {
+            $hub_count = isset($plan_data['hub_count']) ? intval($plan_data['hub_count']) : 0;
+            $orphan_count = isset($plan_data['orphan_count']) ? intval($plan_data['orphan_count']) : 0;
+            $missing_count = isset($plan_data['missing_count']) ? intval($plan_data['missing_count']) : 0;
+        }
+        $gsc_impressions = get_option('siloq_gsc_impressions', 0);
+        $gsc_clicks      = get_option('siloq_gsc_clicks', 0);
+
+        // Score color
+        if ($site_score >= 90) $score_color = 'var(--siloq-teal)';
+        elseif ($site_score >= 75) $score_color = 'var(--siloq-success)';
+        elseif ($site_score >= 50) $score_color = 'var(--siloq-warning)';
+        else $score_color = 'var(--siloq-danger)';
+
+        // Score sentence
+        if ($site_score >= 90) $score_sentence = 'Excellent! Your site architecture is well-optimized.';
+        elseif ($site_score >= 75) $score_sentence = 'Good foundation. A few improvements will push you higher.';
+        elseif ($site_score >= 50) $score_sentence = 'There are clear opportunities to improve your SEO structure.';
+        else $score_sentence = 'Your site needs attention. Generate a plan to get started.';
+
         ?>
-        <div class="wrap siloq-admin-wrap">
-            <div class="siloq-header">
-                <h1>
-                    <?php _e('Siloq Dashboard', 'siloq-connector'); ?>
-                </h1>
-                <p class="siloq-tagline"><?php _e('SEO Content Management Dashboard — Monitor and manage your content optimization.', 'siloq-connector'); ?></p>
-            </div>
-            
-            <div class="siloq-dashboard-container">
-                <div class="siloq-card">
-                    <h2><?php _e('Overview', 'siloq-connector'); ?></h2>
-                    <p><?php _e('Welcome to the Siloq Dashboard. Here you can monitor your SEO performance and manage content optimization.', 'siloq-connector'); ?></p>
-                    
-                    <div class="siloq-stats-grid">
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('Pages Synced', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-pages-synced">0</div>
-                        </div>
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('Content Generated', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-content-generated">0</div>
-                        </div>
-                        <div class="siloq-stat-card">
-                            <h3><?php _e('SEO Score', 'siloq-connector'); ?></h3>
-                            <div class="siloq-stat-number" id="siloq-seo-score">--</div>
+        <div class="siloq-dash-wrap">
+            <h1 style="margin-bottom:4px;">Siloq</h1>
+
+            <!-- Tab Navigation -->
+            <ul class="siloq-tab-nav" role="tablist">
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="true" aria-controls="siloq-tab-dashboard">Dashboard</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-plan">SEO/GEO Plan</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Schema</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
+            </ul>
+
+            <!-- ═══════ DASHBOARD TAB ═══════ -->
+            <div id="siloq-tab-dashboard" class="siloq-tab-panel active" role="tabpanel" aria-hidden="false">
+
+                <!-- Zone 1: Hero Score Ring -->
+                <div class="siloq-card siloq-hero">
+                    <div class="siloq-score-ring-wrap">
+                        <svg class="siloq-score-ring" viewBox="0 0 180 180">
+                            <circle class="siloq-score-ring__bg" cx="90" cy="90" r="72"/>
+                            <circle class="siloq-score-ring__fg" cx="90" cy="90" r="72" stroke="<?php echo esc_attr($score_color); ?>"/>
+                        </svg>
+                        <div class="siloq-score-ring__label">
+                            <span class="siloq-score-ring__value">0</span>
+                            <span class="siloq-score-ring__caption">Site Score</span>
                         </div>
                     </div>
+                    <p class="siloq-hero__sentence"><?php echo esc_html($score_sentence); ?></p>
+                    <br>
+                    <?php if (!$has_plan): ?>
+                        <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
+                    <?php else: ?>
+                        <button class="siloq-btn siloq-btn--primary siloq-tab-btn" aria-controls="siloq-tab-plan">View Priority Actions &rarr;</button>
+                    <?php endif; ?>
                 </div>
-                
+
+                <!-- Zone 2: Plan Progress -->
                 <div class="siloq-card">
-                    <h2><?php _e('Quick Actions', 'siloq-connector'); ?></h2>
-                    <div class="siloq-actions-grid">
-                        <a href="<?php echo admin_url('admin.php?page=siloq-sync'); ?>" class="siloq-action-card">
-                            <span class="dashicons dashicons-update"></span>
-                            <h3><?php _e('Sync Pages', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Sync your WordPress pages with Siloq platform', 'siloq-connector'); ?></p>
-                        </a>
-                        <a href="<?php echo admin_url('admin.php?page=siloq-content-import'); ?>" class="siloq-action-card">
-                            <span class="dashicons dashicons-download"></span>
-                            <h3><?php _e('Import Content', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Import AI-generated content from Siloq', 'siloq-connector'); ?></p>
-                        </a>
-                        <a href="<?php echo admin_url('admin.php?page=siloq-tali'); ?>" class="siloq-action-card">
-                            <span class="dashicons dashicons-admin-appearance"></span>
-                            <h3><?php _e('Theme Intelligence', 'siloq-connector'); ?></h3>
-                            <p><?php _e('Configure theme-aware layout intelligence', 'siloq-connector'); ?></p>
-                        </a>
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Plan Progress</h3>
+                    </div>
+                    <?php if ($has_plan && $plan_total > 0): ?>
+                        <p><?php echo intval($plan_done); ?> of <?php echo intval($plan_total); ?> actions complete</p>
+                        <div class="siloq-progress-wrap">
+                            <div class="siloq-progress-bar">
+                                <div class="siloq-progress-bar__fill" style="width:<?php echo $plan_total > 0 ? round(($plan_done / $plan_total) * 100) : 0; ?>%"></div>
+                            </div>
+                            <div class="siloq-progress-stats">
+                                <span><?php echo round(($plan_done / $plan_total) * 100); ?>% complete</span>
+                                <?php if ($plan_started): ?>
+                                    <span><?php echo intval((time() - strtotime($plan_started)) / 86400); ?> days into plan</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="siloq-empty">
+                            <p>No plan generated yet.</p>
+                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Zone 3: Insight Cards -->
+                <div class="siloq-grid-3">
+                    <div class="siloq-card">
+                        <div class="siloq-insight-icon siloq-insight-icon--schema">&#9881;</div>
+                        <div class="siloq-insight-value"><?php echo intval($entity_pct); ?>%</div>
+                        <div class="siloq-insight-label">Entity &amp; Schema Completeness</div>
+                    </div>
+                    <div class="siloq-card">
+                        <div class="siloq-insight-icon siloq-insight-icon--gsc">&#9829;</div>
+                        <?php if ($gsc_connected): ?>
+                            <div class="siloq-insight-value"><?php echo number_format(intval($gsc_impressions)); ?></div>
+                            <div class="siloq-insight-label">Impressions &middot; <?php echo number_format(intval($gsc_clicks)); ?> clicks</div>
+                        <?php else: ?>
+                            <div class="siloq-insight-value">&mdash;</div>
+                            <div class="siloq-insight-label"><a href="#siloq-tab-gsc" class="siloq-tab-btn" aria-controls="siloq-tab-gsc">Connect GSC</a></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="siloq-card">
+                        <div class="siloq-insight-icon siloq-insight-icon--arch">&#9776;</div>
+                        <div class="siloq-insight-value"><?php echo intval($hub_count); ?> hubs</div>
+                        <div class="siloq-insight-label"><?php echo intval($orphan_count); ?> orphans &middot; <?php echo intval($missing_count); ?> missing supporting</div>
                     </div>
                 </div>
-            </div>
+
+                <!-- Zone 4: Recent Activity -->
+                <div class="siloq-card">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Recent Activity</h3>
+                    </div>
+                    <?php if (!empty($activity_log)): ?>
+                        <ul class="siloq-activity-list">
+                            <?php foreach ($activity_log as $entry): ?>
+                                <li>
+                                    <span><?php echo esc_html(isset($entry['message']) ? $entry['message'] : ''); ?></span>
+                                    <span class="siloq-activity-time"><?php echo esc_html(isset($entry['time']) ? $entry['time'] : ''); ?></span>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p class="siloq-empty">No activity yet.</p>
+                    <?php endif; ?>
+                </div>
+            </div><!-- /dashboard tab -->
+
+            <!-- ═══════ SEO/GEO PLAN TAB ═══════ -->
+            <div id="siloq-tab-plan" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <div class="siloq-plan-section">
+
+                    <?php if (!$has_plan): ?>
+                        <div class="siloq-card siloq-empty" style="padding:48px">
+                            <div class="siloq-empty__icon">&#128640;</div>
+                            <h3>Generate your personalized SEO/GEO plan</h3>
+                            <p>We'll analyze your pages, find gaps, and create a priority action plan.</p>
+                            <br>
+                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Section 1: Site Architecture Map -->
+                    <div class="siloq-accordion">
+                        <button class="siloq-accordion__trigger" aria-expanded="false">
+                            <span>Site Architecture Map</span>
+                            <span class="siloq-accordion__arrow">&#9660;</span>
+                        </button>
+                        <div class="siloq-accordion__content" id="siloq-architecture-content">
+                            <p class="siloq-empty">Generate a plan to see your site architecture.</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Priority Action Plan -->
+                    <div class="siloq-accordion">
+                        <button class="siloq-accordion__trigger" aria-expanded="false">
+                            <span>Priority Action Plan</span>
+                            <span class="siloq-accordion__arrow">&#9660;</span>
+                        </button>
+                        <div class="siloq-accordion__content" id="siloq-actions-content">
+                            <p class="siloq-empty">Generate a plan to see priority actions.</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Supporting Content Opportunities -->
+                    <div class="siloq-accordion">
+                        <button class="siloq-accordion__trigger" aria-expanded="false">
+                            <span>Supporting Content Opportunities</span>
+                            <span class="siloq-accordion__arrow">&#9660;</span>
+                        </button>
+                        <div class="siloq-accordion__content" id="siloq-supporting-content">
+                            <p class="siloq-empty">Generate a plan to see content opportunities.</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 4: Content Issues -->
+                    <div class="siloq-accordion">
+                        <button class="siloq-accordion__trigger" aria-expanded="false">
+                            <span>Content Issues</span>
+                            <span class="siloq-accordion__arrow">&#9660;</span>
+                        </button>
+                        <div class="siloq-accordion__content" id="siloq-issues-content">
+                            <p class="siloq-empty">Generate a plan to see content issues.</p>
+                        </div>
+                    </div>
+
+                    <!-- Section 5: 90-Day Roadmap -->
+                    <div class="siloq-accordion">
+                        <button class="siloq-accordion__trigger" aria-expanded="false">
+                            <span>90-Day Roadmap</span>
+                            <span class="siloq-accordion__arrow">&#9660;</span>
+                        </button>
+                        <div class="siloq-accordion__content" id="siloq-roadmap-content">
+                            <p class="siloq-empty">Generate a plan to see your roadmap.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div><!-- /plan tab -->
+
+            <!-- ═══════ PAGES TAB ═══════ -->
+            <div id="siloq-tab-pages" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <div class="siloq-card">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Synced Pages</h3>
+                    </div>
+                    <?php
+                    $pages = get_posts(array(
+                        'post_type'      => array('page', 'post'),
+                        'meta_key'       => '_siloq_last_sync',
+                        'posts_per_page' => 100,
+                        'orderby'        => 'modified',
+                        'order'          => 'DESC',
+                    ));
+                    if (!empty($pages)): ?>
+                        <table class="siloq-pages-table">
+                            <thead>
+                                <tr>
+                                    <th>Page</th>
+                                    <th>Score</th>
+                                    <th>Type</th>
+                                    <th>Last Analyzed</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pages as $p):
+                                    $analysis = get_post_meta($p->ID, '_siloq_analysis_data', true);
+                                    $analysis = is_array($analysis) ? $analysis : (is_string($analysis) ? json_decode($analysis, true) : array());
+                                    $page_score = isset($analysis['score']) ? intval($analysis['score']) : 0;
+                                    $page_type  = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'unknown';
+                                    $last_sync  = get_post_meta($p->ID, '_siloq_last_sync', true);
+                                    $type_class = 'gray';
+                                    if ($page_type === 'hub') $type_class = 'purple';
+                                    elseif ($page_type === 'spoke') $type_class = 'teal';
+                                    elseif ($page_type === 'supporting') $type_class = 'blue';
+                                ?>
+                                <tr>
+                                    <td><a href="<?php echo get_edit_post_link($p->ID); ?>"><?php echo esc_html($p->post_title); ?></a></td>
+                                    <td><span class="siloq-badge siloq-badge--<?php echo $page_score >= 75 ? 'green' : ($page_score >= 50 ? 'amber' : 'red'); ?>"><?php echo $page_score; ?></span></td>
+                                    <td><span class="siloq-badge siloq-badge--<?php echo $type_class; ?>"><?php echo esc_html(ucfirst($page_type)); ?></span></td>
+                                    <td><?php echo $last_sync ? esc_html(human_time_diff(strtotime($last_sync), time()) . ' ago') : '&mdash;'; ?></td>
+                                    <td><a href="<?php echo admin_url('admin.php?page=siloq-sync&sync_page=' . $p->ID); ?>" class="siloq-btn siloq-btn--sm siloq-btn--outline">Quick Fix</a></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else: ?>
+                        <p class="siloq-empty">No synced pages yet. <a href="<?php echo admin_url('admin.php?page=siloq-sync'); ?>">Sync your pages</a> to get started.</p>
+                    <?php endif; ?>
+                </div>
+            </div><!-- /pages tab -->
+
+            <!-- ═══════ SCHEMA TAB ═══════ -->
+            <div id="siloq-tab-schema" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <div class="siloq-card">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Entity &amp; Schema Health</h3>
+                    </div>
+                    <div class="siloq-entity-meter">
+                        <div class="siloq-entity-meter__bar">
+                            <div class="siloq-entity-meter__fill" style="width:<?php echo intval($entity_pct); ?>%;background:<?php echo $entity_pct >= 75 ? 'var(--siloq-success)' : ($entity_pct >= 50 ? 'var(--siloq-warning)' : 'var(--siloq-danger)'); ?>"></div>
+                        </div>
+                        <span class="siloq-entity-meter__value"><?php echo intval($entity_pct); ?>%</span>
+                    </div>
+                    <p>Entity completeness across your site pages.</p>
+                    <br>
+                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/schema'); ?>" target="_blank" class="siloq-btn siloq-btn--outline">Manage Schema in Siloq App &rarr;</a>
+                </div>
+            </div><!-- /schema tab -->
+
+            <!-- ═══════ GSC TAB ═══════ -->
+            <div id="siloq-tab-gsc" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <div class="siloq-card">
+                    <div class="siloq-gsc-status">
+                        <?php if ($gsc_connected): ?>
+                            <div class="siloq-gsc-status__icon">&#9989;</div>
+                            <h3>Google Search Console Connected</h3>
+                            <dl class="siloq-gsc-status__details">
+                                <dt>Property</dt>
+                                <dd><?php echo esc_html($gsc_property); ?></dd>
+                                <dt>Last Sync</dt>
+                                <dd><?php echo $gsc_last_sync ? esc_html($gsc_last_sync) : 'Never'; ?></dd>
+                            </dl>
+                            <div style="display:flex;gap:8px;justify-content:center">
+                                <button class="siloq-btn siloq-btn--primary" id="siloq-gsc-sync-btn">Sync Now</button>
+                                <button class="siloq-btn siloq-btn--outline siloq-btn--danger" id="siloq-gsc-disconnect-btn">Disconnect</button>
+                            </div>
+                        <?php else: ?>
+                            <div class="siloq-gsc-status__icon">&#128270;</div>
+                            <h3>Connect Google Search Console</h3>
+                            <p style="color:var(--siloq-muted);margin:8px 0 20px">Link your GSC property to unlock performance data and keyword insights.</p>
+                            <a href="<?php echo esc_url(self::DASHBOARD_URL . '/gsc/connect'); ?>" class="siloq-btn siloq-btn--primary">Connect Google Search Console &rarr;</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div><!-- /gsc tab -->
+
+            <!-- ═══════ SETTINGS TAB ═══════ -->
+            <div id="siloq-tab-settings" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <div class="siloq-card">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Plugin Settings</h3>
+                    </div>
+                    <p>Full settings are available on the <a href="<?php echo admin_url('admin.php?page=siloq-settings'); ?>">Settings page</a>.</p>
+                    <?php
+                    $api_key = get_option('siloq_api_key', '');
+                    $auto_sync = get_option('siloq_auto_sync', 'yes');
+                    ?>
+                    <div class="siloq-settings-section" style="margin-top:16px">
+                        <div class="siloq-settings-section__title">Connection Status</div>
+                        <?php if (!empty($api_key)): ?>
+                            <p><span class="siloq-badge siloq-badge--green">Connected</span> API key configured</p>
+                        <?php else: ?>
+                            <p><span class="siloq-badge siloq-badge--red">Not Connected</span> <a href="<?php echo admin_url('admin.php?page=siloq-settings'); ?>">Add your API key</a></p>
+                        <?php endif; ?>
+                    </div>
+                    <div class="siloq-settings-section">
+                        <div class="siloq-settings-section__title">Auto-Sync</div>
+                        <p><?php echo $auto_sync === 'yes' ? '<span class="siloq-badge siloq-badge--green">On</span>' : '<span class="siloq-badge siloq-badge--gray">Off</span>'; ?> Pages sync automatically on publish/update</p>
+                    </div>
+                    <br>
+                    <a href="<?php echo admin_url('admin.php?page=siloq-settings'); ?>" class="siloq-btn siloq-btn--outline">Go to Full Settings &rarr;</a>
+                </div>
+            </div><!-- /settings tab -->
+
+            <script>
+                // Pass roadmap progress to JS
+                window.siloqRoadmapProgress = <?php echo wp_json_encode($roadmap_progress); ?>;
+            </script>
         </div>
         <?php
     }

@@ -138,6 +138,7 @@ class Siloq_Elementor_Panel {
                 <div class="siloq-ep-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin:-0px;padding:0 12px;">
                     <button class="siloq-ep-tab siloq-ep-tab--active" data-siloq-tab="schema" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #4f46e5;color:#4f46e5;">⚡ Schema</button>
                     <button class="siloq-ep-tab" data-siloq-tab="edit-content" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">✏️ Edit Content</button>
+                    <button class="siloq-ep-tab" data-siloq-tab="links" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">🔗 Links</button>
                 </div>
                 <button type="button"
                         id="siloq-schema-el-close"
@@ -215,6 +216,25 @@ class Siloq_Elementor_Panel {
                 <div id="siloq-widget-list"></div>
 
                 <div id="siloq-ec-status" style="display:none;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;"></div>
+            </div>
+
+            <!-- Internal Links Tab -->
+            <div id="siloq-links-tab" class="siloq-ep-tab-panel" style="display:none;padding:12px;">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">View your site's internal linking structure. See which pages should link to and from this page.</p>
+
+                <button type="button" id="siloq-load-links-btn"
+                        style="width:100%;padding:8px;background:#4f46e5;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+                    🔗 Load Link Map
+                </button>
+
+                <div id="siloq-links-loading" style="display:none;text-align:center;padding:20px;color:#6b7280;font-size:12px;">
+                    <span class="spinner is-active" style="float:none;margin:0 auto 8px;display:block;"></span>
+                    Loading link data...
+                </div>
+
+                <div id="siloq-links-content"></div>
+
+                <div id="siloq-links-status" style="display:none;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;"></div>
             </div>
 
         </div><!-- /#siloq-schema-el-panel -->
