@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.70
+* Version: 1.5.71
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.70');
+define('SILOQ_VERSION', '1.5.71');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -299,6 +299,12 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_analyze_widget', array('Siloq_Widget_Intelligence', 'ajax_analyze_widget'));
         add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
         add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
+        add_action('wp_ajax_siloq_get_pages_list', array($this, 'ajax_get_pages_list'));
+        // GSC connection handlers
+        add_action('wp_ajax_siloq_gsc_init_oauth', array($this, 'ajax_gsc_init_oauth'));
+        add_action('wp_ajax_siloq_gsc_check_status', array($this, 'ajax_gsc_check_status'));
+        add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
+        add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -1256,12 +1262,296 @@ class Siloq_Connector {
     }
 
     /**
+     * AJAX handler: get paginated pages list for Pages tab
+     */
+    public function ajax_get_pages_list() {
+        check_ajax_referer('siloq_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $offset = intval($_POST['offset'] ?? 0);
+        $filter = sanitize_text_field($_POST['filter'] ?? 'all');
+
+        $args = array(
+            'post_type'      => array('page', 'post'),
+            'posts_per_page' => 20,
+            'offset'         => $offset,
+            'meta_key'       => '_siloq_analysis_data',
+            'post_status'    => 'publish',
+            'orderby'        => 'modified',
+            'order'          => 'DESC',
+        );
+
+        $posts = get_posts($args);
+        $pages = array();
+        foreach ($posts as $post) {
+            $raw = get_post_meta($post->ID, '_siloq_analysis_data', true);
+            $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
+            if (!is_array($analysis)) $analysis = array();
+
+            $silo_data = get_post_meta($post->ID, '_siloq_silo_data', true);
+            $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : (isset($analysis['page_type']) ? $analysis['page_type'] : 'supporting');
+            if (empty($silo_data) && $page_type !== 'hub') {
+                $page_type = 'orphan';
+            }
+
+            if ($filter !== 'all' && $page_type !== $filter) {
+                continue;
+            }
+
+            $issues = isset($analysis['issues']) ? $analysis['issues'] : array();
+            $score = isset($analysis['score']) ? intval($analysis['score']) : (isset($analysis['seo_score']['overall']) ? intval($analysis['seo_score']['overall']) : 0);
+            $primary_keyword = isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : (isset($analysis['seo_score']['primary_keyword']) ? $analysis['seo_score']['primary_keyword'] : '');
+
+            $pages[] = array(
+                'id'              => $post->ID,
+                'title'           => $post->post_title,
+                'edit_url'        => get_edit_post_link($post->ID, 'raw'),
+                'elementor_url'   => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
+                'page_type'       => $page_type,
+                'score'           => $score,
+                'primary_keyword' => $primary_keyword,
+                'issues'          => array_slice($issues, 0, 10),
+                'issue_count'     => count($issues),
+            );
+        }
+
+        wp_send_json_success(array(
+            'pages'  => $pages,
+            'offset' => $offset + 20,
+        ));
+    }
+
+    /**
      * Add settings link to plugins page
      */
     public function add_settings_link($links) {
         $settings_link = '<a href="' . admin_url('admin.php?page=siloq-settings') . '">Settings</a>';
         array_unshift($links, $settings_link);
         return $links;
+    }
+
+    /* ────────────────────────────────────────────────
+     * GSC Connection Handlers
+     * ──────────────────────────────────────────────── */
+
+    public function ajax_gsc_init_oauth() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected. Configure your API key first.'));
+        }
+
+        $response = wp_remote_post(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/auth-url/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                ),
+                'timeout' => 30,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code >= 400 || empty($body['auth_url'])) {
+            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Failed to get OAuth URL'));
+        }
+
+        wp_send_json_success(array('auth_url' => $body['auth_url']));
+    }
+
+    public function ajax_gsc_check_status() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected.'));
+        }
+
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/status/',
+            array(
+                'headers' => array('Authorization' => 'Bearer ' . $api_key),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (!empty($body['connected'])) {
+            update_option('siloq_gsc_connected', 'yes');
+            update_option('siloq_gsc_property', sanitize_text_field($body['property']));
+            if (!empty($body['last_sync'])) {
+                update_option('siloq_gsc_last_sync', sanitize_text_field($body['last_sync']));
+            }
+        } else {
+            delete_option('siloq_gsc_connected');
+            delete_option('siloq_gsc_property');
+            delete_option('siloq_gsc_last_sync');
+        }
+
+        wp_send_json_success(array(
+            'connected' => !empty($body['connected']),
+            'property'  => isset($body['property']) ? $body['property'] : '',
+            'last_sync' => isset($body['last_sync']) ? $body['last_sync'] : '',
+        ));
+    }
+
+    public function ajax_gsc_sync() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected.'));
+        }
+
+        $response = wp_remote_post(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/sync/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                ),
+                'timeout' => 60,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code >= 400) {
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Sync failed'));
+        }
+
+        $now = current_time('mysql');
+        update_option('siloq_gsc_last_sync', $now);
+
+        // Fetch per-page GSC data
+        $pages_response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/pages/',
+            array(
+                'headers' => array('Authorization' => 'Bearer ' . $api_key),
+                'timeout' => 30,
+            )
+        );
+
+        $total_impressions = 0;
+        $total_clicks = 0;
+        $total_position = 0;
+        $page_count = 0;
+
+        if (!is_wp_error($pages_response)) {
+            $pages_body = json_decode(wp_remote_retrieve_body($pages_response), true);
+            if (is_array($pages_body)) {
+                foreach ($pages_body as $page_data) {
+                    $url = isset($page_data['url']) ? $page_data['url'] : '';
+                    if (empty($url)) continue;
+
+                    $post_id = url_to_postid($url);
+                    if (!$post_id) continue;
+
+                    $impressions = intval($page_data['impressions'] ?? 0);
+                    $clicks      = intval($page_data['clicks'] ?? 0);
+                    $position    = floatval($page_data['position'] ?? 0);
+                    $queries     = isset($page_data['top_queries']) ? $page_data['top_queries'] : array();
+
+                    update_post_meta($post_id, '_siloq_gsc_impressions', $impressions);
+                    update_post_meta($post_id, '_siloq_gsc_clicks', $clicks);
+                    update_post_meta($post_id, '_siloq_gsc_position', $position);
+                    update_post_meta($post_id, '_siloq_gsc_queries', wp_json_encode($queries));
+
+                    $total_impressions += $impressions;
+                    $total_clicks      += $clicks;
+                    $total_position    += $position;
+                    $page_count++;
+                }
+            }
+        }
+
+        update_option('siloq_gsc_impressions', $total_impressions);
+        update_option('siloq_gsc_impressions_28d', $total_impressions);
+        update_option('siloq_gsc_clicks', $total_clicks);
+        update_option('siloq_gsc_clicks_28d', $total_clicks);
+        if ($page_count > 0) {
+            update_option('siloq_gsc_avg_position', round($total_position / $page_count, 1));
+        }
+
+        wp_send_json_success(array(
+            'last_sync'    => $now,
+            'pages_synced' => $page_count,
+            'impressions'  => $total_impressions,
+            'clicks'       => $total_clicks,
+        ));
+    }
+
+    public function ajax_gsc_disconnect() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (!empty($api_key) && !empty($site_id)) {
+            wp_remote_post(
+                trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/disconnect/',
+                array(
+                    'headers' => array(
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                    ),
+                    'timeout' => 15,
+                )
+            );
+        }
+
+        delete_option('siloq_gsc_connected');
+        delete_option('siloq_gsc_property');
+        delete_option('siloq_gsc_last_sync');
+        delete_option('siloq_gsc_impressions');
+        delete_option('siloq_gsc_impressions_28d');
+        delete_option('siloq_gsc_clicks');
+        delete_option('siloq_gsc_clicks_28d');
+        delete_option('siloq_gsc_avg_position');
+
+        wp_send_json_success(array('disconnected' => true));
     }
 }
 

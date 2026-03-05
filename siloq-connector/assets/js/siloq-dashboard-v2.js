@@ -1,6 +1,6 @@
 /**
  * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence
- * Version: 1.5.70
+ * Version: 1.5.71
  */
 (function ($) {
   'use strict';
