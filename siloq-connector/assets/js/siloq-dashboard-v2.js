@@ -1,6 +1,6 @@
 /**
- * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence
- * Version: 1.5.71
+ * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence, pages tab
+ * Version: 1.5.72
  */
 (function ($) {
   'use strict';
@@ -233,12 +233,217 @@
     $('#siloq-roadmap-content').html(html);
   }
 
+  /* ─── Pages Tab ─────────────────────────────────── */
+  var pagesLoaded = false;
+  var pagesOffset = 0;
+  var pagesFilter = 'all';
+
+  function initPagesTab() {
+    // Auto-load pages when tab is clicked
+    $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-pages"]', function () {
+      if (!pagesLoaded) {
+        loadPages(false);
+      }
+    });
+
+    // If pages tab is active on load (via hash), load immediately
+    if ($('#siloq-tab-pages').hasClass('active') || window.location.hash === '#siloq-tab-pages') {
+      loadPages(false);
+    }
+
+    // Filter pills
+    $(document).on('click', '.siloq-filter-pill', function () {
+      $('.siloq-filter-pill').removeClass('is-active');
+      $(this).addClass('is-active');
+      pagesFilter = $(this).data('filter');
+      pagesOffset = 0;
+      pagesLoaded = false;
+      loadPages(false);
+    });
+
+    // Search (client-side filter)
+    var searchTimer;
+    $(document).on('keyup', '#siloq-pages-search', function () {
+      var query = $(this).val().toLowerCase();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        $('.siloq-page-card').each(function () {
+          var title = $(this).data('title') || '';
+          $(this).toggle(title.toLowerCase().indexOf(query) !== -1);
+        });
+      }, 200);
+    });
+
+    // Load More
+    $(document).on('click', '#siloq-pages-load-more button', function () {
+      loadPages(true);
+    });
+
+    // Sync All (reuse existing AJAX action)
+    $(document).on('click', '#siloq-pages-sync-all', function () {
+      var $btn = $(this);
+      $btn.prop('disabled', true).html('<span class="siloq-spinner"></span> Syncing...');
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_sync_all_pages',
+        nonce: cfg.nonce
+      }, function (resp) {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+        if (resp.success) {
+          pagesOffset = 0;
+          pagesLoaded = false;
+          loadPages(false);
+        }
+      }).fail(function () {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+      });
+    });
+
+    // View Issues toggle
+    $(document).on('click', '.siloq-view-issues-btn', function () {
+      var $list = $(this).closest('.siloq-page-card').find('.siloq-page-card__issue-list');
+      $list.toggleClass('is-open');
+      $(this).text($list.hasClass('is-open') ? 'Hide Issues' : 'View Issues');
+    });
+  }
+
+  function loadPages(append) {
+    var $grid = $('#siloq-pages-grid');
+    var $loadMore = $('#siloq-pages-load-more');
+
+    if (!append) {
+      pagesOffset = 0;
+      $grid.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading pages...</span></div>');
+      $loadMore.hide();
+    }
+
+    $.post(cfg.ajaxUrl, {
+      action: 'siloq_get_pages_list',
+      nonce: cfg.nonce,
+      offset: pagesOffset,
+      filter: pagesFilter
+    }, function (resp) {
+      if (!resp.success) {
+        if (!append) {
+          $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+        }
+        return;
+      }
+
+      var pages = resp.data.pages;
+      pagesOffset = resp.data.offset;
+      pagesLoaded = true;
+
+      if (!append) $grid.empty();
+
+      if (pages.length === 0 && !append) {
+        $grid.html(
+          '<div class="siloq-pages-empty">'
+          + '<div class="siloq-pages-empty__icon">&#128196;</div>'
+          + '<p class="siloq-pages-empty__title">No pages synced yet</p>'
+          + '<p class="siloq-pages-empty__desc">Click <strong>Sync All</strong> to get started.</p>'
+          + '</div>'
+        );
+        $('#siloq-pages-count').text('0 pages synced');
+        $loadMore.hide();
+        return;
+      }
+
+      pages.forEach(function (page) {
+        $grid.append(renderPageCard(page));
+      });
+
+      var total = $grid.find('.siloq-page-card').length;
+      $('#siloq-pages-count').text(total + ' page' + (total !== 1 ? 's' : '') + ' synced');
+
+      $loadMore.toggle(pages.length >= 20);
+    }).fail(function () {
+      if (!append) {
+        $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+      }
+    });
+  }
+
+  function renderPageCard(page) {
+    var scoreColor;
+    if (page.score >= 90) scoreColor = '#14b8a6';
+    else if (page.score >= 75) scoreColor = '#22c55e';
+    else if (page.score >= 50) scoreColor = '#f59e0b';
+    else scoreColor = '#ef4444';
+
+    var r = 18;
+    var circ = 2 * Math.PI * r;
+    var filled = (page.score / 100) * circ;
+
+    var typeBadgeClass = 'gray';
+    if (page.page_type === 'hub') typeBadgeClass = 'hub';
+    else if (page.page_type === 'spoke') typeBadgeClass = 'spoke';
+    else if (page.page_type === 'supporting') typeBadgeClass = 'supporting';
+    else if (page.page_type === 'orphan') typeBadgeClass = 'orphan';
+
+    // Top 3 issues as pills
+    var pillsHtml = '';
+    var issues = page.issues || [];
+    var topIssues = issues.slice(0, 3);
+    topIssues.forEach(function (iss) {
+      var sev = (iss.severity || iss.level || 'opportunity').toLowerCase();
+      if (sev === 'high' || sev === 'error') sev = 'critical';
+      else if (sev === 'medium' || sev === 'warning') sev = 'important';
+      else sev = 'opportunity';
+      var label = iss.title || iss.description || iss.message || '';
+      if (label.length > 30) label = label.substring(0, 28) + '...';
+      pillsHtml += '<span class="siloq-issue-pill siloq-issue-pill--' + sev + '">' + escHtml(label) + '</span>';
+    });
+
+    // Full issue list (expanded view)
+    var issueListHtml = '';
+    issues.forEach(function (iss) {
+      var sev = (iss.severity || iss.level || 'opportunity').toLowerCase();
+      var icon = '&#128309;'; // blue
+      if (sev === 'high' || sev === 'error' || sev === 'critical') icon = '&#128308;';
+      else if (sev === 'medium' || sev === 'warning' || sev === 'important') icon = '&#128993;';
+      var desc = iss.description || iss.message || iss.title || '';
+      issueListHtml += '<div class="siloq-issue-item">'
+        + '<span class="siloq-issue-icon">' + icon + '</span>'
+        + '<span>' + escHtml(desc) + '</span>'
+        + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-issue-item__fix">Fix in Editor</a>'
+        + '</div>';
+    });
+
+    return '<div class="siloq-page-card" data-title="' + escAttr(page.title) + '" data-type="' + escAttr(page.page_type) + '">'
+      + '<div class="siloq-page-card__top">'
+      + '<div class="siloq-page-card__score-ring">'
+      + '<svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="' + r + '"/>'
+      + '<circle class="ring-fg" cx="22" cy="22" r="' + r + '" stroke="' + scoreColor + '" stroke-dasharray="' + filled + ' ' + circ + '"/></svg>'
+      + '<span class="siloq-page-card__score-num">' + page.score + '</span>'
+      + '</div>'
+      + '<div class="siloq-page-card__info">'
+      + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
+      + '<div class="siloq-page-card__meta">'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '">' + escHtml(page.page_type.toUpperCase()) + '</span>'
+      + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
+      + '</div>'
+      + (pillsHtml ? '<div class="siloq-page-card__issues-pills">' + pillsHtml + '</div>' : '')
+      + '</div>'
+      + '</div>'
+      + '<div class="siloq-page-card__actions">'
+      + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Analyze</a>'
+      + (issues.length > 0 ? '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-view-issues-btn">View Issues</button>' : '')
+      + '</div>'
+      + (issues.length > 0 ? '<div class="siloq-page-card__issue-list">' + issueListHtml + '</div>' : '')
+      + '</div>';
+  }
+
   /* ─── Utility ────────────────────────────────── */
   function escHtml(str) {
     if (!str) return '';
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
+  }
+
+  function escAttr(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   /* ─── Init ───────────────────────────────────── */
@@ -249,6 +454,7 @@
     initAccordions();
     initPlanGeneration();
     initRoadmap();
+    initPagesTab();
   });
 
 })(jQuery);

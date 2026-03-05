@@ -42,11 +42,19 @@ class Siloq_Admin {
      * Render settings page
      */
     public static function render_settings_page() {
+        // Onboarding wizard gate
+        $api_key = get_option('siloq_api_key', '');
+        $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+        if ($onboarding_done !== 'yes' || empty($api_key)) {
+            self::render_onboarding_wizard();
+            return;
+        }
+
         // Ensure plugin URL constant is defined
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
-        
+
         // Handle form submission
         if (isset($_POST['siloq_save_settings']) && check_admin_referer('siloq_settings_nonce')) {
             self::save_settings();
@@ -1164,6 +1172,14 @@ class Siloq_Admin {
      * Render dashboard page
      */
     public static function render_dashboard_page() {
+        // Onboarding wizard gate
+        $api_key = get_option('siloq_api_key', '');
+        $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+        if ($onboarding_done !== 'yes' || empty($api_key)) {
+            self::render_onboarding_wizard();
+            return;
+        }
+
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
