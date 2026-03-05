@@ -1356,96 +1356,510 @@ class Siloq_Admin {
 
             <!-- ═══════ DASHBOARD TAB ═══════ -->
             <div id="siloq-tab-dashboard" class="siloq-tab-panel active" role="tabpanel" aria-hidden="false">
+<div class="siloq-dash-v2">
 
-                <!-- Zone 1: Hero Score Ring -->
-                <div class="siloq-card siloq-hero">
-                    <div class="siloq-score-ring-wrap">
-                        <svg class="siloq-score-ring" viewBox="0 0 180 180">
-                            <circle class="siloq-score-ring__bg" cx="90" cy="90" r="72"/>
-                            <circle class="siloq-score-ring__fg" cx="90" cy="90" r="72" stroke="<?php echo esc_attr($score_color); ?>"/>
-                        </svg>
-                        <div class="siloq-score-ring__label">
-                            <span class="siloq-score-ring__value">0</span>
-                            <span class="siloq-score-ring__caption">Site Score</span>
-                        </div>
-                    </div>
-                    <p class="siloq-hero__sentence"><?php echo esc_html($score_sentence); ?></p>
-                    <br>
-                    <?php if (!$has_plan): ?>
-                        <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
-                    <?php else: ?>
-                        <button class="siloq-btn siloq-btn--primary siloq-tab-btn" aria-controls="siloq-tab-plan">View Priority Actions &rarr;</button>
-                    <?php endif; ?>
-                </div>
+<?php
+// Build profile completeness fields for display
+$profile_fields = self::get_entity_field_status();
+$missing_fields = array_filter($profile_fields, fn($f) => !$f['complete']);
+$missing_count_profile = count($missing_fields);
 
-                <!-- Zone 2: Plan Progress -->
-                <div class="siloq-card">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Plan Progress</h3>
-                    </div>
-                    <?php if ($has_plan && $plan_total > 0): ?>
-                        <p><?php echo intval($plan_done); ?> of <?php echo intval($plan_total); ?> actions complete</p>
-                        <div class="siloq-progress-wrap">
-                            <div class="siloq-progress-bar">
-                                <div class="siloq-progress-bar__fill" style="width:<?php echo $plan_total > 0 ? round(($plan_done / $plan_total) * 100) : 0; ?>%"></div>
-                            </div>
-                            <div class="siloq-progress-stats">
-                                <span><?php echo round(($plan_done / $plan_total) * 100); ?>% complete</span>
-                                <?php if ($plan_started): ?>
-                                    <span><?php echo intval((time() - strtotime($plan_started)) / 86400); ?> days into plan</span>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php else: ?>
-                        <div class="siloq-empty">
-                            <p>No plan generated yet.</p>
-                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">Generate Your SEO Plan &rarr;</button>
-                        </div>
-                    <?php endif; ?>
-                </div>
+// Build hub data from page hierarchy + analysis
+$hub_pages_raw = get_posts(array(
+    'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
+    'post_status'    => 'publish',
+    'post_parent'    => 0,
+    'posts_per_page' => 10,
+    'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+));
+$hub_data = array();
+foreach ($hub_pages_raw as $hp) {
+    $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
+    $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
+    $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
+    $children = get_posts(array('post_type' => 'any', 'post_parent' => $hp->ID, 'post_status' => 'publish', 'posts_per_page' => -1));
+    $missing_supporting = isset($analysis['missing_supporting']) ? (array)$analysis['missing_supporting'] : array();
+    $hub_data[] = array(
+        'id'           => $hp->ID,
+        'title'        => get_the_title($hp->ID),
+        'url'          => get_permalink($hp->ID),
+        'edit_url'     => get_edit_post_link($hp->ID, 'raw'),
+        'elementor_url'=> admin_url('post.php?post=' . $hp->ID . '&action=elementor'),
+        'score'        => $score,
+        'children'     => $children,
+        'missing'      => $missing_supporting,
+        'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
+    );
+}
 
-                <!-- Zone 3: Insight Cards -->
-                <div class="siloq-grid-3">
-                    <div class="siloq-card" data-entity-score="<?php echo intval($entity_pct); ?>">
-                        <div class="siloq-insight-icon siloq-insight-icon--schema">&#9881;</div>
-                        <div class="siloq-insight-value"><?php echo intval($entity_pct); ?>%</div>
-                        <div class="siloq-insight-label">Entity &amp; Schema Completeness</div>
-                    </div>
-                    <div class="siloq-card">
-                        <div class="siloq-insight-icon siloq-insight-icon--gsc">&#9829;</div>
-                        <?php if ($gsc_connected): ?>
-                            <div class="siloq-insight-value"><?php echo number_format(intval($gsc_impressions)); ?></div>
-                            <div class="siloq-insight-label">Impressions &middot; <?php echo number_format(intval($gsc_clicks)); ?> clicks</div>
-                        <?php else: ?>
-                            <div class="siloq-insight-value">&mdash;</div>
-                            <div class="siloq-insight-label"><a href="#siloq-tab-gsc" class="siloq-tab-btn" aria-controls="siloq-tab-gsc">Connect GSC</a></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="siloq-card">
-                        <div class="siloq-insight-icon siloq-insight-icon--arch">&#9776;</div>
-                        <div class="siloq-insight-value"><?php echo intval($hub_count); ?> hubs</div>
-                        <div class="siloq-insight-label"><?php echo intval($orphan_count); ?> orphans &middot; <?php echo intval($missing_count); ?> missing supporting</div>
-                    </div>
-                </div>
+// Get orphan pages
+$all_synced = get_posts(array(
+    'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
+    'post_status' => 'publish',
+    'posts_per_page' => -1,
+    'fields'      => 'ids',
+    'meta_query'  => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+));
+$hub_child_ids = array();
+foreach ($hub_data as $h) {
+    $hub_child_ids[] = $h['id'];
+    foreach ($h['children'] as $c) $hub_child_ids[] = $c->ID;
+}
+$true_orphan_posts = array_filter($all_synced, function($id) use ($hub_child_ids) {
+    if (in_array($id, $hub_child_ids)) return false;
+    $menus = wp_get_nav_menus();
+    foreach ($menus as $m) {
+        $items = wp_get_nav_menu_items($m->term_id) ?: array();
+        foreach ($items as $item) { if (intval($item->object_id) === $id) return false; }
+    }
+    return true;
+});
+$true_orphan_posts = array_values($true_orphan_posts);
 
-                <!-- Zone 4: Recent Activity -->
-                <div class="siloq-card">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Recent Activity</h3>
-                    </div>
-                    <?php if (!empty($activity_log)): ?>
-                        <ul class="siloq-activity-list">
-                            <?php foreach ($activity_log as $entry): ?>
-                                <li>
-                                    <span><?php echo esc_html(isset($entry['message']) ? $entry['message'] : ''); ?></span>
-                                    <span class="siloq-activity-time"><?php echo esc_html(isset($entry['time']) ? $entry['time'] : ''); ?></span>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php else: ?>
-                        <p class="siloq-empty">No activity yet.</p>
-                    <?php endif; ?>
-                </div>
+// Score label
+if ($site_score >= 90) { $score_grade = 'Excellent!'; $score_color_cls = 'teal'; }
+elseif ($site_score >= 75) { $score_grade = 'Good · Room to Grow'; $score_color_cls = 'teal'; }
+elseif ($site_score >= 50) { $score_grade = 'Needs Improvement'; $score_color_cls = 'amber'; }
+else { $score_grade = 'Needs Attention'; $score_color_cls = 'red'; }
+
+$score_dashoffset = round(314 * (1 - ($site_score / 100)));
+
+// GSC data
+$gsc_impr_28d = intval(get_option('siloq_gsc_impressions_28d', get_option('siloq_gsc_impressions', 0)));
+$gsc_clicks_28d = intval(get_option('siloq_gsc_clicks_28d', get_option('siloq_gsc_clicks', 0)));
+$gsc_avg_pos = floatval(get_option('siloq_gsc_avg_position', 0));
+$gsc_keywords = json_decode(get_option('siloq_gsc_top_keywords', '[]'), true) ?: array();
+
+// Pages needing attention — top 7 from plan issues
+$attention_pages = array();
+if ($has_plan && isset($plan_data['issues'])) {
+    foreach (array('critical','important','opportunity') as $sev) {
+        if (!isset($plan_data['issues'][$sev])) continue;
+        foreach ($plan_data['issues'][$sev] as $iss) {
+            if (!isset($attention_pages[$iss['post_id']])) {
+                $pid = $iss['post_id'];
+                $an_raw = get_post_meta($pid, '_siloq_analysis_data', true);
+                $an = is_array($an_raw) ? $an_raw : (is_string($an_raw) ? json_decode($an_raw, true) : array());
+                $sc = isset($an['score']) ? intval($an['score']) : 0;
+                $attention_pages[$pid] = array(
+                    'title'        => get_the_title($pid),
+                    'issue'        => $iss['issue'],
+                    'score'        => $sc,
+                    'severity'     => $sev,
+                    'elementor_url'=> isset($iss['elementor_url']) ? $iss['elementor_url'] : admin_url('post.php?post=' . $pid . '&action=elementor'),
+                );
+            }
+        }
+        if (count($attention_pages) >= 7) break;
+    }
+}
+?>
+
+<?php if ($missing_count_profile > 0): ?>
+<div class="siloq-alert-profile">
+  <span style="font-size:16px;flex-shrink:0">&#9888;&#65039;</span>
+  <div class="siloq-alert-profile-t">Business profile missing <?php echo $missing_count_profile; ?> field<?php echo $missing_count_profile > 1 ? 's' : ''; ?> — reduces AI citation readiness and schema accuracy across all pages.</div>
+  <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-alert-profile-cta">Complete Profile &rarr;</a>
+</div>
+<?php endif; ?>
+
+<!-- Hero: Score + Plan -->
+<div class="siloq-hero-grid">
+  <div class="siloq-score-card">
+    <div class="siloq-score-label">Overall SEO/GEO Health</div>
+    <div class="siloq-score-ring-wrap">
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle fill="none" stroke="#e5e7eb" stroke-width="10" cx="55" cy="55" r="45"/>
+        <circle fill="none" stroke="#0d9488" stroke-width="10" stroke-linecap="round"
+          cx="55" cy="55" r="45"
+          stroke-dasharray="283"
+          stroke-dashoffset="<?php echo esc_attr(round(283 * (1 - $site_score / 100))); ?>"
+          style="filter:drop-shadow(0 0 5px rgba(13,148,136,.35));transition:stroke-dashoffset 1.5s ease"/>
+      </svg>
+      <div class="siloq-score-num"><?php echo $site_score ?: '--'; ?></div>
+    </div>
+    <div class="siloq-score-grade"><?php echo esc_html($score_grade); ?></div>
+    <div class="siloq-score-desc"><?php echo esc_html($score_sentence); ?></div>
+    <?php if ($has_plan && !empty($plan_data['actions'])): $top_action = $plan_data['actions'][0]; ?>
+    <button class="siloq-score-cta" onclick="document.querySelector('[aria-controls=\'siloq-tab-plan\']').click()">
+      <div class="siloq-score-cta-s">&#128293; Highest impact action right now</div>
+      <div class="siloq-score-cta-m"><?php echo esc_html(isset($top_action['headline']) ? $top_action['headline'] : 'View your action plan'); ?> &rarr;</div>
+    </button>
+    <?php else: ?>
+    <button class="siloq-score-cta" onclick="document.querySelector('[aria-controls=\'siloq-tab-plan\']').click()">
+      <div class="siloq-score-cta-s">&#128203; Get started</div>
+      <div class="siloq-score-cta-m">Generate your SEO/GEO Plan &rarr;</div>
+    </button>
+    <?php endif; ?>
+  </div>
+
+  <div class="siloq-plan-card">
+    <div class="siloq-plan-card-hdr">
+      <div>
+        <div class="siloq-plan-card-title">&#128203; Your 90-Day SEO/GEO Plan</div>
+        <div class="siloq-plan-card-sub">Personalized to <?php echo esc_html(get_option('siloq_business_name', get_bloginfo('name'))); ?></div>
+      </div>
+      <button class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:5px 10px" onclick="document.querySelector('[aria-controls=\'siloq-tab-plan\']').click()">View Full Plan</button>
+    </div>
+    <?php
+    $completed_count = 0; $urgent_count = 0; $inprog_count = 0;
+    if ($has_plan && isset($plan_data['actions'])) {
+        foreach ($plan_data['actions'] as $a) {
+            if ($a['priority'] === 'high') $urgent_count++;
+            else $inprog_count++;
+        }
+    }
+    if (isset($plan_data['issues']['critical'])) $urgent_count += count($plan_data['issues']['critical']);
+    ?>
+    <div class="siloq-plan-stats3">
+      <div class="siloq-plan-stat"><div class="siloq-plan-stat-n teal"><?php echo intval(count($roadmap_progress)); ?></div><div class="siloq-plan-stat-l">Completed</div></div>
+      <div class="siloq-plan-stat"><div class="siloq-plan-stat-n amber"><?php echo $inprog_count; ?></div><div class="siloq-plan-stat-l">In Progress</div></div>
+      <div class="siloq-plan-stat"><div class="siloq-plan-stat-n red"><?php echo $urgent_count; ?></div><div class="siloq-plan-stat-l">Urgent</div></div>
+    </div>
+    <div class="siloq-prog-row">
+      <div class="siloq-prog-labels"><span class="siloq-prog-label">Month 1 — Quick Wins</span><span class="siloq-prog-pct"><?php echo min(100, intval(count($roadmap_progress) * 10)); ?>%</span></div>
+      <div class="siloq-prog-bar"><div class="siloq-prog-fill" style="width:<?php echo min(100, intval(count($roadmap_progress) * 10)); ?>%"></div></div>
+    </div>
+    <div class="siloq-prog-row">
+      <div class="siloq-prog-labels"><span class="siloq-prog-label">Month 2 — Content Build</span><span class="siloq-prog-pct" style="color:#d97706">0%</span></div>
+      <div class="siloq-prog-bar"><div class="siloq-prog-fill" style="width:0%;background:linear-gradient(90deg,#d97706,#f59e0b)"></div></div>
+    </div>
+    <div class="siloq-prog-row" style="margin-bottom:10px">
+      <div class="siloq-prog-labels"><span class="siloq-prog-label">Month 3 — Authority Growth</span><span class="siloq-prog-pct" style="color:#9ca3af">0%</span></div>
+      <div class="siloq-prog-bar"><div class="siloq-prog-fill" style="width:0%"></div></div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#f0fdf4;color:#16a34a">&#10003; Setup Complete</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">&#9679; Month 1 — Active</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#f0f2f7;color:#6b7280">Month 2</span>
+    </div>
+  </div>
+</div>
+
+<!-- 3 Insight Cards -->
+<div class="siloq-cards3">
+
+  <!-- Business Profile -->
+  <div class="siloq-insight-card">
+    <div class="siloq-ic-hdr">
+      <div class="siloq-ic-title-group"><div class="siloq-ic-icon teal">&#127970;</div><div class="siloq-ic-title">Business Profile</div></div>
+      <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-ic-link">Edit &rarr;</a>
+    </div>
+    <div class="siloq-entity-ring-row">
+      <div class="siloq-entity-ring-wrap">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="20" fill="none" stroke="#e5e7eb" stroke-width="7"/>
+          <circle cx="26" cy="26" r="20" fill="none" stroke="#0d9488" stroke-width="7" stroke-linecap="round"
+            stroke-dasharray="125.7"
+            stroke-dashoffset="<?php echo round(125.7 * (1 - $entity_pct / 100)); ?>"
+            transform="rotate(-90 26 26)"/>
+        </svg>
+        <div class="siloq-entity-ring-num"><?php echo $entity_pct; ?>%</div>
+      </div>
+      <div>
+        <div class="siloq-entity-ring-label">AI Citation Readiness</div>
+        <div class="siloq-entity-ring-sub">Complete your profile so AI tools can find and cite your business</div>
+      </div>
+    </div>
+    <div class="siloq-entity-fields">
+      <?php foreach (array_slice($profile_fields, 0, 4) as $field): ?>
+      <div class="siloq-entity-field">
+        <div class="siloq-field-dot <?php echo $field['complete'] ? 'good' : 'bad'; ?>"></div>
+        <div class="siloq-field-name"><?php echo esc_html($field['label']); ?></div>
+        <?php if (!$field['complete']): ?>
+        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-settings')); ?>" class="siloq-field-action">Add &rarr;</a>
+        <?php else: ?>
+        <span style="font-size:10px;color:#16a34a">&#10003;</span>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <!-- Search Performance -->
+  <div class="siloq-insight-card">
+    <div class="siloq-ic-hdr">
+      <div class="siloq-ic-title-group"><div class="siloq-ic-icon indigo">&#128202;</div><div class="siloq-ic-title">Search Performance</div></div>
+      <a href="#siloq-tab-gsc" class="siloq-ic-link siloq-tab-btn" aria-controls="siloq-tab-gsc">Full Report &rarr;</a>
+    </div>
+    <?php if ($gsc_impr_28d > 0): ?>
+    <div class="siloq-gsc-grid">
+      <div class="siloq-gsc-metric"><div class="siloq-gsc-val"><?php echo number_format($gsc_impr_28d); ?></div><div class="siloq-gsc-lbl">Impressions</div></div>
+      <div class="siloq-gsc-metric"><div class="siloq-gsc-val"><?php echo number_format($gsc_clicks_28d); ?></div><div class="siloq-gsc-lbl">Clicks (28d)</div></div>
+      <div class="siloq-gsc-metric"><div class="siloq-gsc-val"><?php echo $gsc_impr_28d > 0 ? round($gsc_clicks_28d/$gsc_impr_28d*100,1) . '%' : '--'; ?></div><div class="siloq-gsc-lbl">Avg CTR</div></div>
+      <div class="siloq-gsc-metric"><div class="siloq-gsc-val"><?php echo $gsc_avg_pos > 0 ? number_format($gsc_avg_pos,1) : '--'; ?></div><div class="siloq-gsc-lbl">Avg Position</div></div>
+    </div>
+    <div class="siloq-spark">
+      <?php for ($i = 0; $i < 14; $i++): $h = rand(30,100); ?>
+      <div class="siloq-spark-bar" style="height:<?php echo $h; ?>%"></div>
+      <?php endfor; ?>
+    </div>
+    <?php if (!empty($gsc_keywords)): ?>
+      <?php foreach (array_slice($gsc_keywords, 0, 3) as $kw): ?>
+      <div class="siloq-kw-row">
+        <span class="siloq-kw-t"><?php echo esc_html($kw['keyword'] ?? $kw['query'] ?? ''); ?></span>
+        <span class="siloq-kw-pos">#<?php echo intval($kw['position'] ?? $kw['rank'] ?? 0); ?></span>
+      </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+    <?php else: ?>
+    <div style="text-align:center;padding:20px 0;color:#6b7280">
+      <div style="font-size:28px;margin-bottom:8px">&#128202;</div>
+      <div style="font-size:12px;margin-bottom:10px">Connect Google Search Console to see your ranking data</div>
+      <a href="https://app.siloq.ai/dashboard?tab=gsc" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px">Connect GSC &rarr;</a>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Silo Architecture Summary -->
+  <div class="siloq-insight-card">
+    <div class="siloq-ic-hdr">
+      <div class="siloq-ic-title-group"><div class="siloq-ic-icon amber">&#128450;</div><div class="siloq-ic-title">Silo Architecture</div></div>
+      <span class="siloq-ic-link" style="cursor:pointer" onclick="document.getElementById('siloq-arch-map-section').scrollIntoView({behavior:'smooth'})">Full Map &#8595;</span>
+    </div>
+    <div class="siloq-arch-stats3">
+      <div class="siloq-arch-stat"><div class="siloq-arch-stat-n green"><?php echo count($hub_data); ?></div><div class="siloq-arch-stat-l">Hubs</div></div>
+      <div class="siloq-arch-stat"><div class="siloq-arch-stat-n amber"><?php echo $missing_count; ?></div><div class="siloq-arch-stat-l">Missing</div></div>
+      <div class="siloq-arch-stat"><div class="siloq-arch-stat-n red"><?php echo count($true_orphan_posts); ?></div><div class="siloq-arch-stat-l">Orphans</div></div>
+    </div>
+    <?php foreach (array_slice($hub_data, 0, 4) as $h):
+      $total_pages = count($h['children']) + count($h['missing']);
+      $live_pages = count($h['children']);
+      $pct = $total_pages > 0 ? round($live_pages / $total_pages * 100) : 0;
+      $prog_color = $pct >= 80 ? '#16a34a' : ($pct >= 40 ? '#d97706' : '#dc2626');
+      $prog_cls = $pct >= 80 ? 'green' : ($pct >= 40 ? 'amber' : 'red');
+    ?>
+    <div class="siloq-hub-mini">
+      <div class="siloq-hub-mini-row">
+        <div class="siloq-hub-mini-name"><?php echo esc_html($h['title']); ?></div>
+        <div class="siloq-hub-mini-pct <?php echo $prog_cls; ?>"><?php echo $live_pages; ?>/<?php echo max(1,$total_pages); ?></div>
+      </div>
+      <div class="siloq-hub-mini-bar"><div class="siloq-hub-mini-fill" style="width:<?php echo $pct; ?>%;background:<?php echo $prog_color; ?>"></div></div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<!-- Priority Actions (from plan) -->
+<?php if ($has_plan && !empty($plan_data['actions'])): ?>
+<div class="siloq-card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px">&#127919; Priority Actions</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">Ranked by traffic impact — fix these first</div>
+    </div>
+    <button class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:5px 10px" onclick="document.querySelector('[aria-controls=\'siloq-tab-plan\']').click()">View All &rarr;</button>
+  </div>
+  <?php foreach (array_slice($plan_data['actions'], 0, 4) as $i => $act):
+    $prio_cls = $act['priority'] === 'high' ? 'p1' : ($act['priority'] === 'medium' ? 'p2' : 'p3');
+    $fix_url = isset($act['elementor_url']) ? $act['elementor_url'] : (isset($act['edit_url']) ? $act['edit_url'] : '');
+  ?>
+  <div class="siloq-action-card" style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:#f8fafc;border-radius:11px;border:1px solid #e5e7eb;margin-bottom:7px">
+    <div style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;background:<?php echo $act['priority']==='high'?'#fef2f2':'#fffbeb'; ?>;color:<?php echo $act['priority']==='high'?'#dc2626':'#d97706'; ?>">
+      <?php echo ($i + 1); ?>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12px;font-weight:600;margin-bottom:2px;line-height:1.3"><?php echo esc_html($act['headline']); ?></div>
+      <?php if (!empty($act['detail'])): ?>
+      <div style="font-size:11px;color:#6b7280;line-height:1.4"><?php echo esc_html($act['detail']); ?></div>
+      <?php endif; ?>
+      <div style="display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:<?php echo $act['priority']==='high'?'#fef2f2':'#fffbeb'; ?>;color:<?php echo $act['priority']==='high'?'#dc2626':'#d97706'; ?>"><?php echo ucfirst(esc_html($act['priority'])); ?> priority</span>
+      </div>
+    </div>
+    <?php if ($fix_url): ?>
+    <a href="<?php echo esc_url($fix_url); ?>" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Fix It &rarr;</a>
+    <?php endif; ?>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<!-- Site Architecture Map -->
+<div class="siloq-arch-map" id="siloq-arch-map-section">
+  <div class="siloq-arch-map-hdr">
+    <div>
+      <div class="siloq-arch-map-title">&#128450; Site Architecture Map</div>
+      <div class="siloq-arch-map-sub">Your hub pages and all supporting content — live pages and what still needs to be created.</div>
+    </div>
+    <div class="siloq-arch-legend">
+      <div class="siloq-legend-item"><div class="siloq-legend-dot hub"></div>Hub</div>
+      <div class="siloq-legend-item"><div class="siloq-legend-dot live"></div>Live Page</div>
+      <div class="siloq-legend-item"><div class="siloq-legend-dot missing"></div>Missing — Create</div>
+      <div class="siloq-legend-item"><div class="siloq-legend-dot orphan"></div>Orphan</div>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <?php $live_spoke_count = array_sum(array_map(fn($h) => count($h['children']), $hub_data));
+        $missing_spoke_count = array_sum(array_map(fn($h) => count($h['missing']), $hub_data)); ?>
+  <div class="siloq-arch-summary">
+    <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n indigo"><?php echo count($hub_data); ?></div><div class="siloq-arch-sum-l">Hub Pages</div></div>
+    <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n green"><?php echo $live_spoke_count; ?></div><div class="siloq-arch-sum-l">Live Supporting</div></div>
+    <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n amber"><?php echo $missing_spoke_count; ?></div><div class="siloq-arch-sum-l">Pages to Create</div></div>
+    <div class="siloq-arch-sum-item"><div class="siloq-arch-sum-n red"><?php echo count($true_orphan_posts); ?></div><div class="siloq-arch-sum-l">True Orphans</div></div>
+  </div>
+
+  <!-- Orphan strip -->
+  <?php if (count($true_orphan_posts) > 0): ?>
+  <div class="siloq-orphan-strip">
+    <span style="font-size:16px;flex-shrink:0">&#9888;&#65039;</span>
+    <div>
+      <div class="siloq-orphan-strip-title"><?php echo count($true_orphan_posts); ?> page<?php echo count($true_orphan_posts) > 1 ? 's' : ''; ?> have no internal links — Google may not be crawling these</div>
+      <div class="siloq-orphan-strip-sub">Nothing on your site links to these pages. They exist but are invisible to search engines.</div>
+      <div class="siloq-orphan-chips">
+        <?php foreach (array_slice($true_orphan_posts, 0, 5) as $oid): ?>
+        <span class="siloq-orphan-chip"><?php echo esc_html(get_the_title($oid)); ?></span>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
+  <!-- Hub blocks -->
+  <div class="siloq-hub-blocks">
+    <?php if (empty($hub_data)): ?>
+    <div style="text-align:center;padding:32px 16px;color:#6b7280">
+      <div style="font-size:28px;margin-bottom:8px">&#128450;</div>
+      <div style="font-size:13px;margin-bottom:4px;font-weight:600">No hub pages detected yet</div>
+      <div style="font-size:12px">Sync your pages and run Widget Intelligence to build your architecture map.</div>
+    </div>
+    <?php else: ?>
+    <?php $hub_icons = array('&#9889;','&#127968;','&#127970;','&#128267;','&#128295;','&#128203;','&#128161;','&#127760;');
+    foreach ($hub_data as $hi => $h):
+      $sc = $h['score'];
+      $sc_cls = $sc >= 75 ? 'green' : ($sc >= 50 ? 'amber' : 'red');
+      $total_pages = count($h['children']) + count($h['missing']);
+      $live_pages = count($h['children']);
+      $pct = $total_pages > 0 ? round($live_pages / $total_pages * 100) : 0;
+      $prog_cls = $pct >= 80 ? 'green' : 'amber';
+    ?>
+    <div class="siloq-hub-block">
+      <div class="siloq-hub-header" onclick="siloqToggleHub(this)">
+        <div class="siloq-hub-icon"><?php echo $hub_icons[$hi % count($hub_icons)]; ?></div>
+        <div class="siloq-hub-info">
+          <div class="siloq-hub-name"><?php echo esc_html($h['title']); ?></div>
+          <div class="siloq-hub-kw"><?php echo $h['keyword'] ? esc_html('"' . $h['keyword'] . '"') : 'Run Widget Intelligence to get keyword data'; ?></div>
+        </div>
+        <div class="siloq-hub-meta">
+          <?php if ($sc > 0): ?>
+          <div class="siloq-hub-score <?php echo $sc_cls; ?>">Score <?php echo $sc; ?></div>
+          <?php endif; ?>
+          <a href="<?php echo esc_url($h['elementor_url']); ?>" class="siloq-hub-edit-btn" onclick="event.stopPropagation()">Edit Page</a>
+          <div class="siloq-hub-chev open">&#9660;</div>
+        </div>
+      </div>
+      <div class="siloq-hub-progress">
+        <div class="siloq-hub-prog-row">
+          <div class="siloq-hub-prog-lbl">Supporting pages</div>
+          <div class="siloq-hub-prog-bar"><div class="siloq-hub-prog-fill" style="width:<?php echo $pct; ?>%;<?php echo $pct < 50 ? 'background:linear-gradient(90deg,#d97706,#f59e0b)' : ''; ?>"></div></div>
+          <div class="siloq-hub-prog-count <?php echo $prog_cls; ?>"><?php echo $live_pages; ?> of <?php echo max(1,$total_pages); ?> live<?php echo $pct >= 100 ? ' &#10003;' : ''; ?></div>
+        </div>
+      </div>
+      <div class="siloq-hub-spokes-wrap" style="max-height:400px">
+        <div class="siloq-hub-spokes">
+          <?php foreach ($h['children'] as $child):
+            $c_raw = get_post_meta($child->ID, '_siloq_analysis_data', true);
+            $c_an = is_array($c_raw) ? $c_raw : (is_string($c_raw) ? json_decode($c_raw, true) : array());
+            $c_sc = isset($c_an['score']) ? intval($c_an['score']) : 0;
+            $c_sc_cls = $c_sc >= 75 ? 'good' : ($c_sc >= 50 ? 'ok' : 'bad');
+            $c_edit = admin_url('post.php?post=' . $child->ID . '&action=elementor');
+          ?>
+          <div class="siloq-spoke-card">
+            <div class="siloq-spoke-top">
+              <div class="siloq-spoke-title"><?php echo esc_html(get_the_title($child->ID)); ?></div>
+              <span class="siloq-spoke-tag sub">Sub-Page</span>
+            </div>
+            <div class="siloq-spoke-kw"><?php echo $c_sc > 0 ? 'Score ' . $c_sc : 'Not analyzed yet'; ?></div>
+            <div class="siloq-spoke-bot">
+              <?php if ($c_sc > 0): ?>
+              <div class="siloq-spoke-score <?php echo $c_sc_cls; ?>">Score <?php echo $c_sc; ?></div>
+              <?php else: ?>
+              <div class="siloq-spoke-score ok">Pending</div>
+              <?php endif; ?>
+              <a href="<?php echo esc_url($c_edit); ?>" class="siloq-spoke-btn edit">Edit</a>
+            </div>
+          </div>
+          <?php endforeach; ?>
+          <?php foreach ($h['missing'] as $ms): ?>
+          <div class="siloq-spoke-card missing">
+            <div class="siloq-spoke-top">
+              <div class="siloq-spoke-title missing"><?php echo esc_html(is_array($ms) && isset($ms['title']) ? $ms['title'] : 'Supporting page needed'); ?></div>
+              <span class="siloq-spoke-tag missing">Missing</span>
+            </div>
+            <div class="siloq-spoke-kw"><?php echo is_array($ms) && isset($ms['keyword']) ? esc_html('"' . $ms['keyword'] . '"') : 'Create to build topical authority'; ?></div>
+            <div class="siloq-spoke-bot">
+              <div class="siloq-spoke-missing-hint">Create this page</div>
+              <button class="siloq-spoke-btn create" onclick="siloqCreateDraft(this,'<?php echo esc_js(is_array($ms) && isset($ms['title']) ? $ms['title'] : 'New Supporting Page'); ?>')">+ Draft</button>
+            </div>
+          </div>
+          <?php endforeach; ?>
+          <div class="siloq-add-spoke" onclick="siloqAddSpoke(<?php echo $h['id']; ?>)">&#65291; Add Supporting Page</div>
+        </div>
+      </div>
+    </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</div>
+
+<!-- Bottom: Pages + Activity -->
+<div class="siloq-bottom-grid">
+  <div class="siloq-pages-attention siloq-card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:14px;font-weight:700">&#128196; Pages Needing Attention</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">Red = critical &middot; Amber = important &middot; Green = healthy</div>
+      </div>
+      <button class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:4px 9px" onclick="document.querySelector('[aria-controls=\'siloq-tab-pages\']').click()">All Pages &rarr;</button>
+    </div>
+    <?php if (empty($attention_pages)): ?>
+    <div style="text-align:center;padding:20px;color:#6b7280;font-size:12px">No issues found — run Widget Intelligence on your pages to get detailed analysis.</div>
+    <?php else: ?>
+    <?php foreach ($attention_pages as $ap):
+      $ap_sev_cls = $ap['severity'] === 'critical' ? 'red' : ($ap['severity'] === 'important' ? 'amber' : 'green');
+      $ap_sc_cls = $ap['score'] >= 75 ? 'green' : ($ap['score'] >= 50 ? 'amber' : 'red');
+    ?>
+    <div class="siloq-page-row">
+      <div class="siloq-page-dot <?php echo $ap_sev_cls; ?>"></div>
+      <div class="siloq-page-name"><?php echo esc_html($ap['title']); ?></div>
+      <div class="siloq-page-issue"><?php echo esc_html($ap['issue']); ?></div>
+      <?php if ($ap['score'] > 0): ?>
+      <div class="siloq-page-score-badge <?php echo $ap_sc_cls; ?>"><?php echo $ap['score']; ?></div>
+      <?php endif; ?>
+      <a href="<?php echo esc_url($ap['elementor_url']); ?>" class="siloq-page-fix-link">Fix &rarr;</a>
+    </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+
+  <div class="siloq-activity-card siloq-card">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px">&#9889; Recent Activity</div>
+    <?php if (empty($activity_log)): ?>
+    <div style="text-align:center;padding:20px;color:#6b7280;font-size:12px">No activity yet. Start by syncing your pages.</div>
+    <?php else: ?>
+    <?php foreach ($activity_log as $act_item):
+      $act_icons = array('schema_applied' => '&#10003;', 'title_updated' => '&#8599;', 'analysis_run' => '&#9889;', 'meta_applied' => '&#10003;', 'gsc_connected' => '&#128279;', 'sync' => '&#8635;');
+      $act_type = $act_item['type'] ?? 'sync';
+      $act_icon = $act_icons[$act_type] ?? '&#9889;';
+      $act_icon_cls = in_array($act_type, array('schema_applied','meta_applied')) ? 'green' : (in_array($act_type, array('title_updated','gsc_connected')) ? 'teal' : 'indigo');
+    ?>
+    <div class="siloq-activity-item">
+      <div class="siloq-activity-icon <?php echo $act_icon_cls; ?>"><?php echo $act_icon; ?></div>
+      <div>
+        <div class="siloq-activity-title"><?php echo esc_html($act_item['message'] ?? $act_item['text'] ?? 'Activity'); ?></div>
+        <div class="siloq-activity-time"><?php echo esc_html($act_item['time'] ?? $act_item['date'] ?? ''); ?></div>
+        <?php if (!empty($act_item['detail'])): ?>
+        <div class="siloq-activity-tag"><?php echo esc_html($act_item['detail']); ?></div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</div>
+
+</div><!-- /.siloq-dash-v2 -->
             </div><!-- /dashboard tab -->
 
             <!-- ═══════ SEO/GEO PLAN TAB ═══════ -->
@@ -1706,6 +2120,47 @@ class Siloq_Admin {
             <script>
                 // Pass roadmap progress to JS
                 window.siloqRoadmapProgress = <?php echo wp_json_encode($roadmap_progress); ?>;
+
+                // Hub expand/collapse
+                function siloqToggleHub(hdr) {
+                    var wrap = hdr.closest('.siloq-hub-block').querySelector('.siloq-hub-spokes-wrap');
+                    var chev = hdr.querySelector('.siloq-hub-chev');
+                    var isOpen = wrap.style.maxHeight !== '0px' && wrap.style.maxHeight !== '0';
+                    wrap.style.maxHeight = isOpen ? '0' : '500px';
+                    chev.classList.toggle('open', !isOpen);
+                }
+
+                // Create draft post from missing spoke card
+                function siloqCreateDraft(btn, title) {
+                    btn.textContent = 'Creating...';
+                    btn.disabled = true;
+                    jQuery.post(ajaxurl, {
+                        action: 'siloq_create_draft_page',
+                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                        title: title
+                    }, function(r) {
+                        if (r.success && r.data.edit_url) {
+                            btn.textContent = '✓ Created';
+                            btn.style.background = '#f0fdf4';
+                            btn.style.color = '#16a34a';
+                            btn.style.boxShadow = 'none';
+                            var spoke = btn.closest('.siloq-spoke-card');
+                            if (spoke) { spoke.style.borderColor = '#22c55e'; spoke.style.borderStyle = 'solid'; }
+                            setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
+                        } else {
+                            btn.textContent = 'Error — retry';
+                            btn.disabled = false;
+                        }
+                    });
+                }
+
+                function siloqAddSpoke(hubId) {
+                    var title = prompt('Enter the title for the new supporting page:');
+                    if (title && title.trim()) {
+                        var btn = document.createElement('button');
+                        siloqCreateDraft(btn, title.trim());
+                    }
+                }
 
                 // GSC tab handlers (Dashboard page)
                 jQuery(document).ready(function($){

@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.89
+* Version: 1.5.90
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.89');
+define('SILOQ_VERSION', '1.5.90');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -299,6 +299,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_analyze_widget', array('Siloq_Widget_Intelligence', 'ajax_analyze_widget'));
         add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
         add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
+        add_action('wp_ajax_siloq_create_draft_page', array($this, 'ajax_create_draft_page'));
         add_action('wp_ajax_siloq_get_pages_list', array($this, 'ajax_get_pages_list'));
         // GSC connection handlers
         add_action('wp_ajax_siloq_gsc_init_oauth', array($this, 'ajax_gsc_init_oauth'));
@@ -1388,6 +1389,32 @@ class Siloq_Connector {
     /**
      * AJAX: Save roadmap checkbox progress
      */
+    public function ajax_create_draft_page() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        $title = sanitize_text_field($_POST['title'] ?? '');
+        if (empty($title)) {
+            wp_send_json_error(array('message' => 'Title required'));
+            return;
+        }
+        $post_id = wp_insert_post(array(
+            'post_title'  => $title,
+            'post_status' => 'draft',
+            'post_type'   => 'page',
+        ));
+        if (is_wp_error($post_id)) {
+            wp_send_json_error(array('message' => $post_id->get_error_message()));
+            return;
+        }
+        wp_send_json_success(array(
+            'post_id'  => $post_id,
+            'edit_url' => admin_url('post.php?post=' . $post_id . '&action=elementor'),
+        ));
+    }
+
     public function ajax_save_roadmap_progress() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
