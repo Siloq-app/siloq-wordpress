@@ -1,6 +1,6 @@
 /**
- * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence
- * Version: 1.5.71
+ * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence, pages tab
+ * Version: 1.5.72
  */
 (function ($) {
   'use strict';
@@ -233,12 +233,416 @@
     $('#siloq-roadmap-content').html(html);
   }
 
+  /* ─── Pages Tab ─────────────────────────────────── */
+  var pagesLoaded = false;
+  var pagesOffset = 0;
+  var pagesFilter = 'all';
+
+  function initPagesTab() {
+    // Auto-load pages when tab is clicked
+    $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-pages"]', function () {
+      if (!pagesLoaded) {
+        loadPages(false);
+      }
+    });
+
+    // If pages tab is active on load (via hash), load immediately
+    if ($('#siloq-tab-pages').hasClass('active') || window.location.hash === '#siloq-tab-pages') {
+      loadPages(false);
+    }
+
+    // Filter pills
+    $(document).on('click', '.siloq-filter-pill', function () {
+      $('.siloq-filter-pill').removeClass('is-active');
+      $(this).addClass('is-active');
+      pagesFilter = $(this).data('filter');
+      pagesOffset = 0;
+      pagesLoaded = false;
+      loadPages(false);
+    });
+
+    // Search (client-side filter)
+    var searchTimer;
+    $(document).on('keyup', '#siloq-pages-search', function () {
+      var query = $(this).val().toLowerCase();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        $('.siloq-page-card').each(function () {
+          var title = $(this).data('title') || '';
+          $(this).toggle(title.toLowerCase().indexOf(query) !== -1);
+        });
+      }, 200);
+    });
+
+    // Load More
+    $(document).on('click', '#siloq-pages-load-more button', function () {
+      loadPages(true);
+    });
+
+    // Sync All (reuse existing AJAX action)
+    $(document).on('click', '#siloq-pages-sync-all', function () {
+      var $btn = $(this);
+      $btn.prop('disabled', true).html('<span class="siloq-spinner"></span> Syncing...');
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_sync_all_pages',
+        nonce: cfg.nonce
+      }, function (resp) {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+        if (resp.success) {
+          pagesOffset = 0;
+          pagesLoaded = false;
+          loadPages(false);
+        }
+      }).fail(function () {
+        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+      });
+    });
+
+    // View Issues toggle
+    $(document).on('click', '.siloq-view-issues-btn', function () {
+      var $list = $(this).closest('.siloq-page-card').find('.siloq-page-card__issue-list');
+      $list.toggleClass('is-open');
+      $(this).text($list.hasClass('is-open') ? 'Hide Issues' : 'View Issues');
+    });
+  }
+
+  function loadPages(append) {
+    var $grid = $('#siloq-pages-grid');
+    var $loadMore = $('#siloq-pages-load-more');
+
+    if (!append) {
+      pagesOffset = 0;
+      $grid.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading pages...</span></div>');
+      $loadMore.hide();
+    }
+
+    $.post(cfg.ajaxUrl, {
+      action: 'siloq_get_pages_list',
+      nonce: cfg.nonce,
+      offset: pagesOffset,
+      filter: pagesFilter
+    }, function (resp) {
+      if (!resp.success) {
+        if (!append) {
+          $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+        }
+        return;
+      }
+
+      var pages = resp.data.pages;
+      pagesOffset = resp.data.offset;
+      pagesLoaded = true;
+
+      if (!append) $grid.empty();
+
+      if (pages.length === 0 && !append) {
+        $grid.html(
+          '<div class="siloq-pages-empty">'
+          + '<div class="siloq-pages-empty__icon">&#128196;</div>'
+          + '<p class="siloq-pages-empty__title">No pages synced yet</p>'
+          + '<p class="siloq-pages-empty__desc">Click <strong>Sync All</strong> to get started.</p>'
+          + '</div>'
+        );
+        $('#siloq-pages-count').text('0 pages synced');
+        $loadMore.hide();
+        return;
+      }
+
+      pages.forEach(function (page) {
+        $grid.append(renderPageCard(page));
+      });
+
+      var total = $grid.find('.siloq-page-card').length;
+      $('#siloq-pages-count').text(total + ' page' + (total !== 1 ? 's' : '') + ' synced');
+
+      $loadMore.toggle(pages.length >= 20);
+    }).fail(function () {
+      if (!append) {
+        $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+      }
+    });
+  }
+
+  function renderPageCard(page) {
+    var scoreColor;
+    if (page.score >= 90) scoreColor = '#14b8a6';
+    else if (page.score >= 75) scoreColor = '#22c55e';
+    else if (page.score >= 50) scoreColor = '#f59e0b';
+    else scoreColor = '#ef4444';
+
+    var r = 18;
+    var circ = 2 * Math.PI * r;
+    var filled = (page.score / 100) * circ;
+
+    var typeBadgeClass = 'gray';
+    if (page.page_type === 'hub') typeBadgeClass = 'hub';
+    else if (page.page_type === 'spoke') typeBadgeClass = 'spoke';
+    else if (page.page_type === 'supporting') typeBadgeClass = 'supporting';
+    else if (page.page_type === 'orphan') typeBadgeClass = 'orphan';
+
+    // Top 3 issues as pills
+    var pillsHtml = '';
+    var issues = page.issues || [];
+    var topIssues = issues.slice(0, 3);
+    topIssues.forEach(function (iss) {
+      var sev = (iss.severity || iss.level || 'opportunity').toLowerCase();
+      if (sev === 'high' || sev === 'error') sev = 'critical';
+      else if (sev === 'medium' || sev === 'warning') sev = 'important';
+      else sev = 'opportunity';
+      var label = iss.title || iss.description || iss.message || '';
+      if (label.length > 30) label = label.substring(0, 28) + '...';
+      pillsHtml += '<span class="siloq-issue-pill siloq-issue-pill--' + sev + '">' + escHtml(label) + '</span>';
+    });
+
+    // Full issue list (expanded view)
+    var issueListHtml = '';
+    issues.forEach(function (iss) {
+      var sev = (iss.severity || iss.level || 'opportunity').toLowerCase();
+      var icon = '&#128309;'; // blue
+      if (sev === 'high' || sev === 'error' || sev === 'critical') icon = '&#128308;';
+      else if (sev === 'medium' || sev === 'warning' || sev === 'important') icon = '&#128993;';
+      var desc = iss.description || iss.message || iss.title || '';
+      issueListHtml += '<div class="siloq-issue-item">'
+        + '<span class="siloq-issue-icon">' + icon + '</span>'
+        + '<span>' + escHtml(desc) + '</span>'
+        + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-issue-item__fix">Fix in Editor</a>'
+        + '</div>';
+    });
+
+    return '<div class="siloq-page-card" data-title="' + escAttr(page.title) + '" data-type="' + escAttr(page.page_type) + '">'
+      + '<div class="siloq-page-card__top">'
+      + '<div class="siloq-page-card__score-ring">'
+      + '<svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="' + r + '"/>'
+      + '<circle class="ring-fg" cx="22" cy="22" r="' + r + '" stroke="' + scoreColor + '" stroke-dasharray="' + filled + ' ' + circ + '"/></svg>'
+      + '<span class="siloq-page-card__score-num">' + page.score + '</span>'
+      + '</div>'
+      + '<div class="siloq-page-card__info">'
+      + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
+      + '<div class="siloq-page-card__meta">'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '">' + escHtml(page.page_type.toUpperCase()) + '</span>'
+      + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
+      + '</div>'
+      + (pillsHtml ? '<div class="siloq-page-card__issues-pills">' + pillsHtml + '</div>' : '')
+      + '</div>'
+      + '</div>'
+      + '<div class="siloq-page-card__actions">'
+      + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Analyze</a>'
+      + (issues.length > 0 ? '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-view-issues-btn">View Issues</button>' : '')
+      + '</div>'
+      + (issues.length > 0 ? '<div class="siloq-page-card__issue-list">' + issueListHtml + '</div>' : '')
+      + '</div>';
+  }
+
   /* ─── Utility ────────────────────────────────── */
   function escHtml(str) {
     if (!str) return '';
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(str));
     return div.innerHTML;
+  }
+
+  function escAttr(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ─── Schema Tab ──────────────────────────────── */
+  var schemaLoaded = false;
+  var schemaGraphLoaded = false;
+
+  function initSchemaTab() {
+    // Lazy-load schema data when tab is clicked
+    $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-schema"]', function () {
+      if (!schemaLoaded) loadSchemaStatus();
+      if (!schemaGraphLoaded) loadSchemaGraph();
+      animateEntityRing();
+    });
+
+    // If schema tab is active on load (via hash)
+    if ($('#siloq-tab-schema').hasClass('active') || window.location.hash === '#siloq-tab-schema') {
+      loadSchemaStatus();
+      loadSchemaGraph();
+      animateEntityRing();
+    }
+
+    // Refresh button
+    $(document).on('click', '#siloq-schema-refresh', function () {
+      schemaLoaded = false;
+      loadSchemaStatus();
+    });
+
+    // Generate schema button
+    $(document).on('click', '.siloq-schema-generate-btn', function () {
+      var $btn = $(this);
+      var postId = $btn.data('post-id');
+      $btn.prop('disabled', true).text('Generating...');
+      $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
+        action: 'siloq_generate_schema',
+        post_id: postId,
+        nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
+      }, function (res) {
+        if (res.success) {
+          $btn.text('Generated!').addClass('siloq-btn--success');
+          // Reload schema status
+          schemaLoaded = false;
+          setTimeout(function () { loadSchemaStatus(); }, 500);
+        } else {
+          $btn.text('Error').addClass('siloq-btn--danger');
+          alert(res.data && res.data.message ? res.data.message : 'Schema generation failed.');
+        }
+        setTimeout(function () {
+          $btn.prop('disabled', false).text('Generate Schema')
+            .removeClass('siloq-btn--success siloq-btn--danger');
+        }, 3000);
+      }).fail(function () {
+        $btn.prop('disabled', false).text('Generate Schema');
+      });
+    });
+
+    // View schema toggle
+    $(document).on('click', '.siloq-schema-view-btn', function () {
+      var postId = $(this).data('post-id');
+      var $preview = $('#siloq-schema-json-' + postId);
+      $preview.toggleClass('active');
+      $(this).text($preview.hasClass('active') ? 'Hide Schema' : 'View Schema');
+    });
+  }
+
+  function animateEntityRing() {
+    var $fg = $('.siloq-entity-ring-fg');
+    if (!$fg.length) return;
+    var score = parseInt($fg.data('score'), 10) || 0;
+    var radius = parseFloat($fg.data('radius')) || 48;
+    var circumference = 2 * Math.PI * radius;
+    $fg.css({ 'stroke-dasharray': '0 ' + circumference, 'stroke-dashoffset': '0' });
+    setTimeout(function () {
+      var filled = (score / 100) * circumference;
+      $fg.css('stroke-dasharray', filled + ' ' + circumference);
+    }, 200);
+    var $val = $('.siloq-entity-ring-value');
+    if ($val.length) {
+      $({ v: 0 }).animate({ v: score }, {
+        duration: 800,
+        easing: 'swing',
+        step: function () { $val.text(Math.round(this.v)); },
+        complete: function () { $val.text(score); }
+      });
+    }
+  }
+
+  function loadSchemaStatus() {
+    var $list = $('#siloq-schema-pages-list');
+    $list.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading schema status...</span></div>');
+    $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
+      action: 'siloq_get_schema_status',
+      nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
+    }, function (res) {
+      schemaLoaded = true;
+      if (!res.success || !res.data || !res.data.pages) {
+        $list.html('<div class="siloq-empty"><p>No synced pages found. Sync pages first from the Pages tab.</p></div>');
+        return;
+      }
+      renderSchemaPages(res.data.pages);
+    }).fail(function () {
+      $list.html('<div class="siloq-empty"><p>Failed to load schema status.</p></div>');
+    });
+  }
+
+  function renderSchemaPages(pages) {
+    var $list = $('#siloq-schema-pages-list');
+    if (!pages.length) {
+      $list.html('<div class="siloq-empty"><p>No synced pages found. Sync pages first from the Pages tab.</p></div>');
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < pages.length; i++) {
+      var p = pages[i];
+      var statusLabel = '';
+      if (p.status === 'applied') statusLabel = '<span style="color:var(--siloq-success)">Applied &#10003;</span>';
+      else if (p.status === 'partial') statusLabel = '<span style="color:var(--siloq-warning)">Partial &#9888;</span>';
+      else statusLabel = '<span style="color:var(--siloq-danger)">None &#10007;</span>';
+
+      var appliedBadges = '';
+      if (p.applied_types && p.applied_types.length) {
+        for (var a = 0; a < p.applied_types.length; a++) {
+          appliedBadges += '<span class="siloq-schema-badge siloq-schema-badge--applied">' + escHtml(p.applied_types[a]) + '</span>';
+        }
+      }
+
+      var recBadges = '';
+      if (p.recommended_types && p.recommended_types.length) {
+        for (var r = 0; r < p.recommended_types.length; r++) {
+          if (!p.applied_types || p.applied_types.indexOf(p.recommended_types[r]) === -1) {
+            recBadges += '<span class="siloq-schema-badge siloq-schema-badge--recommended">' + escHtml(p.recommended_types[r]) + '</span>';
+          }
+        }
+      }
+
+      html += '<div class="siloq-schema-page-row">';
+      html += '<div class="siloq-schema-page-row__title"><a href="' + escAttr(p.edit_url || '#') + '" target="_blank">' + escHtml(p.title) + '</a></div>';
+      html += '<div class="siloq-schema-page-row__types">' + appliedBadges + recBadges + '</div>';
+      html += '<div class="siloq-schema-page-row__status">' + statusLabel + '</div>';
+      html += '<div class="siloq-schema-page-row__actions">';
+      html += '<button type="button" class="siloq-btn siloq-btn--outline siloq-btn--xs siloq-schema-generate-btn" data-post-id="' + p.id + '">Generate Schema</button>';
+      if (p.schema_json) {
+        html += ' <button type="button" class="siloq-btn siloq-btn--outline siloq-btn--xs siloq-schema-view-btn" data-post-id="' + p.id + '">View Schema</button>';
+      }
+      html += '</div>';
+      if (p.schema_json) {
+        html += '<pre id="siloq-schema-json-' + p.id + '" class="siloq-schema-json-preview">' + escHtml(p.schema_json) + '</pre>';
+      }
+      html += '</div>';
+    }
+    $list.html(html);
+  }
+
+  function loadSchemaGraph() {
+    var siteId = (window.siloqDash && window.siloqDash.siteId) || '';
+    if (!siteId) {
+      schemaGraphLoaded = true;
+      return; // placeholder already shows message
+    }
+    var $content = $('#siloq-schema-graph-content');
+    $content.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading schema graph...</span></div>');
+    $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
+      action: 'siloq_get_schema_graph',
+      nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
+    }, function (res) {
+      schemaGraphLoaded = true;
+      if (!res.success) {
+        var msg = (res.data && res.data.message) ? res.data.message : 'Schema graph available after site analysis.';
+        $content.html('<div class="siloq-empty"><p>' + escHtml(msg) + '</p></div>');
+        return;
+      }
+      renderSchemaGraph(res.data);
+    }).fail(function () {
+      schemaGraphLoaded = true;
+      $content.html('<div class="siloq-empty"><p>Schema graph available after site analysis.</p></div>');
+    });
+  }
+
+  function renderSchemaGraph(data) {
+    var $content = $('#siloq-schema-graph-content');
+    var entities = data.entities || data.nodes || [];
+    if (!entities.length) {
+      $content.html('<div class="siloq-empty"><p>No schema entities found yet. Generate schema for pages to build the graph.</p></div>');
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < entities.length; i++) {
+      var e = entities[i];
+      var connections = '';
+      if (e.connections && e.connections.length) {
+        connections = e.connections.map(function (c) { return escHtml(c); }).join(', ');
+      } else if (e.related && e.related.length) {
+        connections = e.related.map(function (c) { return escHtml(c); }).join(', ');
+      }
+      html += '<div class="siloq-schema-graph-entity">';
+      html += '<span class="siloq-schema-graph-entity__type">' + escHtml(e.type || e['@type'] || 'Entity') + '</span>';
+      html += '<span class="siloq-schema-graph-entity__connections">' + (connections || 'No connections') + '</span>';
+      html += '</div>';
+    }
+    $content.html(html);
   }
 
   /* ─── Init ───────────────────────────────────── */
@@ -249,6 +653,8 @@
     initAccordions();
     initPlanGeneration();
     initRoadmap();
+    initPagesTab();
+    initSchemaTab();
   });
 
 })(jQuery);

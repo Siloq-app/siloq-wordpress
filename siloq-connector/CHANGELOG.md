@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.72] — 2026-03-05
+
+### Added
+- **Schema Tab** — full 3-section implementation replacing placeholder:
+  - **Entity Profile Completeness**: SVG ring score (0-100%) computed from weighted business profile fields (Business Name 15, Business Type 15, Phone 10, Address 20, Primary Services 25, Service Areas 15). Per-field green/red status indicators. "Edit Business Profile" links to Settings tab.
+  - **Schema Applied Per Page**: Table of all synced pages showing applied schema types, recommended types, status (Applied/Partial/None). "Generate Schema" button triggers existing `siloq_generate_schema` AJAX. "View Schema" expands JSON-LD preview.
+  - **Schema Graph**: Fetches entity graph from Siloq API (`/sites/{id}/schema-graph/`). Falls back to placeholder if API not connected or endpoint returns 404.
+- New AJAX handlers: `siloq_get_schema_status`, `siloq_get_schema_graph`
+- `data-entity-score` attribute on dashboard insight card for JS access
+- `siteId` added to `siloqDash` localized script data
+- `.siloq-btn--xs` button size variant
+
+---
+
 ## [1.5.58] — 2026-03-04 — [PR #60](https://github.com/Siloq-app/siloq-wordpress/pull/60)
 
 ### Added

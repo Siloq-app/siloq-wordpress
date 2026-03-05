@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.71
+* Version: 1.5.73
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.71');
+define('SILOQ_VERSION', '1.5.73');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -305,6 +305,13 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_gsc_check_status', array($this, 'ajax_gsc_check_status'));
         add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
         add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
+        // Onboarding wizard handlers
+        add_action('wp_ajax_siloq_wizard_connect', array($this, 'ajax_wizard_connect'));
+        add_action('wp_ajax_siloq_wizard_save_profile', array($this, 'ajax_wizard_save_profile'));
+        add_action('wp_ajax_siloq_wizard_complete', array($this, 'ajax_wizard_complete'));
+        // Schema tab handlers
+        add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
+        add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -442,6 +449,7 @@ class Siloq_Connector {
                 'ajaxUrl'   => admin_url('admin-ajax.php'),
                 'nonce'     => wp_create_nonce('siloq_nonce'),
                 'siteScore' => intval(get_option('siloq_site_score', 42)),
+                'siteId'    => get_option('siloq_site_id', ''),
             ));
         }
 
@@ -1552,6 +1560,226 @@ class Siloq_Connector {
         delete_option('siloq_gsc_avg_position');
 
         wp_send_json_success(array('disconnected' => true));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — connect (save API key, verify with /auth/me)
+     */
+    public function ajax_wizard_connect() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_key = sanitize_text_field(wp_unslash($_POST['api_key'] ?? ''));
+        if (empty($api_key)) {
+            wp_send_json_error(array('message' => 'API key is required.'));
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+
+        // Test connection against /auth/me
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'auth/me/',
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                ),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => 'Could not reach the Siloq API: ' . $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            wp_send_json_error(array('message' => 'Invalid API key (HTTP ' . $code . '). Please check and try again.'));
+        }
+
+        // Save settings
+        update_option('siloq_api_key', $api_key);
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (!empty($body['site_id'])) {
+            update_option('siloq_site_id', sanitize_text_field($body['site_id']));
+        }
+
+        wp_send_json_success(array('message' => 'Connected'));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — save business profile
+     */
+    public function ajax_wizard_save_profile() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $fields = array(
+            'business_name'    => sanitize_text_field(wp_unslash($_POST['business_name'] ?? '')),
+            'phone'            => sanitize_text_field(wp_unslash($_POST['phone'] ?? '')),
+            'address'          => sanitize_text_field(wp_unslash($_POST['address'] ?? '')),
+            'city'             => sanitize_text_field(wp_unslash($_POST['city'] ?? '')),
+            'state'            => sanitize_text_field(wp_unslash($_POST['state'] ?? '')),
+            'zip'              => sanitize_text_field(wp_unslash($_POST['zip'] ?? '')),
+            'business_type'    => sanitize_text_field(wp_unslash($_POST['business_type'] ?? '')),
+            'primary_services' => sanitize_textarea_field(wp_unslash($_POST['primary_services'] ?? '')),
+        );
+
+        update_option('siloq_business_profile', wp_json_encode($fields));
+
+        // Also save individual options for compatibility with existing business profile feature
+        foreach ($fields as $key => $value) {
+            update_option('siloq_biz_' . $key, $value);
+        }
+
+        wp_send_json_success(array('message' => 'Profile saved'));
+    }
+
+    /**
+     * AJAX: Onboarding wizard — mark complete
+     */
+    public function ajax_wizard_complete() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        update_option('siloq_onboarding_complete', 'yes');
+        wp_send_json_success(array('message' => 'Onboarding complete'));
+    }
+
+    /**
+     * AJAX: Get schema status for all synced pages.
+     */
+    public function ajax_get_schema_status() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+        }
+
+        $args = array(
+            'post_type'      => array('post', 'page'),
+            'post_status'    => 'publish',
+            'posts_per_page' => 200,
+            'meta_query'     => array(
+                array(
+                    'key'     => '_siloq_last_sync',
+                    'compare' => 'EXISTS',
+                ),
+            ),
+        );
+
+        $query = new WP_Query($args);
+        $pages = array();
+
+        foreach ($query->posts as $post) {
+            $analysis_raw = get_post_meta($post->ID, '_siloq_analysis_data', true);
+            $analysis = array();
+            if (!empty($analysis_raw)) {
+                $decoded = is_array($analysis_raw) ? $analysis_raw : json_decode($analysis_raw, true);
+                if (is_array($decoded)) $analysis = $decoded;
+            }
+
+            // Applied types
+            $applied_raw = get_post_meta($post->ID, '_siloq_applied_types', true);
+            $applied_types = array();
+            if (!empty($applied_raw)) {
+                $decoded = json_decode($applied_raw, true);
+                if (is_array($decoded)) $applied_types = $decoded;
+            }
+
+            // Recommended types from analysis
+            $recommended = array();
+            if (!empty($analysis['recommended_schema'])) {
+                $recommended = (array) $analysis['recommended_schema'];
+            } elseif (!empty($analysis['schema_types'])) {
+                $recommended = (array) $analysis['schema_types'];
+            }
+
+            // Schema JSON output
+            $schema_json = '';
+            $suggested = get_post_meta($post->ID, '_siloq_suggested_schema', true);
+            if (!empty($suggested)) {
+                $decoded = json_decode($suggested, true);
+                if (is_array($decoded)) {
+                    $schema_json = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                }
+            }
+
+            // Determine status
+            $status = 'none';
+            if (!empty($applied_types)) {
+                if (!empty($recommended) && count(array_diff($recommended, $applied_types)) > 0) {
+                    $status = 'partial';
+                } else {
+                    $status = 'applied';
+                }
+            }
+
+            $pages[] = array(
+                'id'                => $post->ID,
+                'title'             => get_the_title($post->ID),
+                'edit_url'          => get_edit_post_link($post->ID, 'raw'),
+                'permalink'         => get_permalink($post->ID),
+                'applied_types'     => $applied_types,
+                'recommended_types' => $recommended,
+                'schema_json'       => $schema_json,
+                'status'            => $status,
+            );
+        }
+
+        wp_send_json_success(array('pages' => $pages));
+    }
+
+    /**
+     * AJAX: Get schema graph from Siloq API.
+     */
+    public function ajax_get_schema_graph() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+        }
+
+        $site_id  = get_option('siloq_site_id', '');
+        $api_key  = get_option('siloq_api_key', '');
+        $api_base = rtrim(get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/');
+
+        if (empty($site_id) || empty($api_key)) {
+            wp_send_json_error(array('message' => 'API not connected. Add your API key in Settings.'));
+        }
+
+        $response = wp_remote_get(
+            "$api_base/sites/$site_id/schema-graph/",
+            array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Accept'        => 'application/json',
+                ),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => 'API request failed: ' . $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code === 404) {
+            wp_send_json_error(array('message' => 'Schema graph available after site analysis.', 'not_found' => true));
+        }
+
+        if ($code !== 200 || !is_array($body)) {
+            wp_send_json_error(array('message' => 'Unexpected API response.'));
+        }
+
+        wp_send_json_success($body);
     }
 }
 

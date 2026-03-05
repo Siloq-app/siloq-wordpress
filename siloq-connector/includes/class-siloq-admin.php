@@ -42,11 +42,19 @@ class Siloq_Admin {
      * Render settings page
      */
     public static function render_settings_page() {
+        // Onboarding wizard gate
+        $api_key = get_option('siloq_api_key', '');
+        $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+        if ($onboarding_done !== 'yes' || empty($api_key)) {
+            self::render_onboarding_wizard();
+            return;
+        }
+
         // Ensure plugin URL constant is defined
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
-        
+
         // Handle form submission
         if (isset($_POST['siloq_save_settings']) && check_admin_referer('siloq_settings_nonce')) {
             self::save_settings();
@@ -1164,6 +1172,14 @@ class Siloq_Admin {
      * Render dashboard page
      */
     public static function render_dashboard_page() {
+        // Onboarding wizard gate
+        $api_key = get_option('siloq_api_key', '');
+        $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+        if ($onboarding_done !== 'yes' || empty($api_key)) {
+            self::render_onboarding_wizard();
+            return;
+        }
+
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
@@ -1174,7 +1190,9 @@ class Siloq_Admin {
         $activity_log    = json_decode(get_option('siloq_activity_log', '[]'), true);
         if (!is_array($activity_log)) $activity_log = [];
         $activity_log    = array_slice($activity_log, 0, 5);
-        $entity_pct      = intval(get_option('siloq_entity_completeness', 0));
+        // Compute entity profile completeness from actual business profile fields
+        $entity_pct = self::compute_entity_completeness();
+        update_option('siloq_entity_completeness', $entity_pct);
         $gsc_connected   = !empty(get_option('siloq_gsc_property', ''));
         $gsc_property    = get_option('siloq_gsc_property', '');
         $gsc_last_sync   = get_option('siloq_gsc_last_sync', '');
@@ -1277,7 +1295,7 @@ class Siloq_Admin {
 
                 <!-- Zone 3: Insight Cards -->
                 <div class="siloq-grid-3">
-                    <div class="siloq-card">
+                    <div class="siloq-card" data-entity-score="<?php echo intval($entity_pct); ?>">
                         <div class="siloq-insight-icon siloq-insight-icon--schema">&#9881;</div>
                         <div class="siloq-insight-value"><?php echo intval($entity_pct); ?>%</div>
                         <div class="siloq-insight-label">Entity &amp; Schema Completeness</div>
@@ -1429,20 +1447,82 @@ class Siloq_Admin {
 
             <!-- ═══════ SCHEMA TAB ═══════ -->
             <div id="siloq-tab-schema" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
-                <div class="siloq-card">
+
+                <!-- Section 1: Entity Profile Completeness -->
+                <?php
+                $entity_fields = self::get_entity_field_status();
+                $entity_color = $entity_pct >= 75 ? 'var(--siloq-success)' : ($entity_pct >= 50 ? 'var(--siloq-warning)' : 'var(--siloq-danger)');
+                ?>
+                <div class="siloq-card siloq-schema-completeness">
                     <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Entity &amp; Schema Health</h3>
+                        <h3 class="siloq-card-title">Entity Profile Completeness</h3>
                     </div>
-                    <div class="siloq-entity-meter">
-                        <div class="siloq-entity-meter__bar">
-                            <div class="siloq-entity-meter__fill" style="width:<?php echo intval($entity_pct); ?>%;background:<?php echo $entity_pct >= 75 ? 'var(--siloq-success)' : ($entity_pct >= 50 ? 'var(--siloq-warning)' : 'var(--siloq-danger)'); ?>"></div>
+                    <div class="siloq-schema-completeness__body">
+                        <div class="siloq-schema-completeness__ring">
+                            <div class="siloq-score-ring-wrap siloq-score-ring-wrap--sm">
+                                <svg class="siloq-score-ring siloq-score-ring--entity" viewBox="0 0 120 120">
+                                    <circle class="siloq-score-ring__bg" cx="60" cy="60" r="48"/>
+                                    <circle class="siloq-score-ring__fg siloq-entity-ring-fg" cx="60" cy="60" r="48"
+                                            stroke="<?php echo esc_attr($entity_color); ?>"
+                                            data-score="<?php echo intval($entity_pct); ?>"
+                                            data-radius="48"/>
+                                </svg>
+                                <div class="siloq-score-ring__label">
+                                    <span class="siloq-score-ring__value siloq-entity-ring-value"><?php echo intval($entity_pct); ?></span>
+                                    <span class="siloq-score-ring__caption">%</span>
+                                </div>
+                            </div>
                         </div>
-                        <span class="siloq-entity-meter__value"><?php echo intval($entity_pct); ?>%</span>
+                        <div class="siloq-schema-completeness__fields">
+                            <?php foreach ($entity_fields as $field): ?>
+                                <div class="siloq-entity-field <?php echo $field['filled'] ? 'siloq-entity-field--ok' : 'siloq-entity-field--missing'; ?>">
+                                    <span class="siloq-entity-field__icon"><?php echo $field['filled'] ? '&#10003;' : '&#10007;'; ?></span>
+                                    <span class="siloq-entity-field__label"><?php echo esc_html($field['label']); ?></span>
+                                    <span class="siloq-entity-field__weight">(<?php echo intval($field['weight']); ?>pts)</span>
+                                </div>
+                            <?php endforeach; ?>
+                            <div style="margin-top:12px;">
+                                <a href="#siloq-tab-settings" class="siloq-btn siloq-btn--outline siloq-btn--sm siloq-tab-btn" aria-controls="siloq-tab-settings">Edit Business Profile</a>
+                            </div>
+                        </div>
                     </div>
-                    <p>Entity completeness across your site pages.</p>
-                    <br>
-                    <a href="<?php echo esc_url(self::DASHBOARD_URL . '/schema'); ?>" target="_blank" class="siloq-btn siloq-btn--outline">Manage Schema in Siloq App &rarr;</a>
                 </div>
+
+                <!-- Section 2: Schema Applied Per Page -->
+                <div class="siloq-card siloq-schema-pages">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Schema Applied Per Page</h3>
+                        <button type="button" id="siloq-schema-refresh" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+                            <span class="dashicons dashicons-update"></span> Refresh
+                        </button>
+                    </div>
+                    <div id="siloq-schema-pages-list" class="siloq-schema-pages__list">
+                        <div class="siloq-pages-loading">
+                            <span class="siloq-spinner"></span>
+                            <span>Loading schema status...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Schema Graph -->
+                <div class="siloq-card siloq-schema-graph">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Schema Graph</h3>
+                    </div>
+                    <div id="siloq-schema-graph-content" class="siloq-schema-graph__content">
+                        <?php if (!empty(get_option('siloq_site_id', ''))): ?>
+                            <div class="siloq-pages-loading">
+                                <span class="siloq-spinner"></span>
+                                <span>Loading schema graph...</span>
+                            </div>
+                        <?php else: ?>
+                            <div class="siloq-empty">
+                                <p>Schema graph available after site analysis. Connect to Siloq API in Settings to enable.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
             </div><!-- /schema tab -->
 
             <!-- ═══════ GSC TAB ═══════ -->
@@ -1927,5 +2007,679 @@ class Siloq_Admin {
             </div>
         </div>
         <?php
+    }
+
+    /**
+     * Render onboarding wizard (4-step first-run experience)
+     */
+    public static function render_onboarding_wizard() {
+        if (!defined('SILOQ_PLUGIN_URL')) {
+            define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
+        }
+        $api_url = get_option('siloq_api_url', self::DEFAULT_API_URL);
+        $nonce = wp_create_nonce('siloq_ajax_nonce');
+        ?>
+        <style>
+            .siloq-wizard-wrap {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: calc(100vh - 100px);
+                background: #f0f0f1;
+                margin-left: -20px;
+                padding: 40px 20px;
+            }
+            .siloq-wizard-card {
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                max-width: 600px;
+                width: 100%;
+                padding: 40px;
+            }
+            .siloq-wizard-steps {
+                display: flex;
+                justify-content: center;
+                gap: 8px;
+                margin-bottom: 32px;
+            }
+            .siloq-wizard-step-dot {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #d1d5db;
+                transition: background 0.3s;
+            }
+            .siloq-wizard-step-dot.active {
+                background: #4f46e5;
+            }
+            .siloq-wizard-step-dot.completed {
+                background: #22c55e;
+            }
+            .siloq-wizard-panel {
+                display: none;
+            }
+            .siloq-wizard-panel.active {
+                display: block;
+            }
+            .siloq-wizard-card h2 {
+                font-size: 24px;
+                font-weight: 600;
+                margin: 0 0 8px 0;
+                text-align: center;
+                color: #111827;
+            }
+            .siloq-wizard-card .siloq-wizard-subtitle {
+                text-align: center;
+                color: #6b7280;
+                margin: 0 0 24px 0;
+            }
+            .siloq-wizard-logo {
+                text-align: center;
+                margin-bottom: 16px;
+            }
+            .siloq-wizard-logo svg {
+                width: 48px;
+                height: 48px;
+            }
+            .siloq-wizard-field {
+                margin-bottom: 16px;
+            }
+            .siloq-wizard-field label {
+                display: block;
+                font-weight: 500;
+                margin-bottom: 6px;
+                color: #374151;
+                font-size: 14px;
+            }
+            .siloq-wizard-field input[type="text"],
+            .siloq-wizard-field input[type="password"],
+            .siloq-wizard-field input[type="tel"],
+            .siloq-wizard-field select,
+            .siloq-wizard-field textarea {
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                font-size: 14px;
+                box-sizing: border-box;
+                transition: border-color 0.2s;
+            }
+            .siloq-wizard-field input:focus,
+            .siloq-wizard-field select:focus,
+            .siloq-wizard-field textarea:focus {
+                outline: none;
+                border-color: #4f46e5;
+                box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+            }
+            .siloq-wizard-field textarea {
+                min-height: 80px;
+                resize: vertical;
+            }
+            .siloq-wizard-row {
+                display: flex;
+                gap: 12px;
+            }
+            .siloq-wizard-row .siloq-wizard-field {
+                flex: 1;
+            }
+            .siloq-wizard-api-key-wrap {
+                position: relative;
+            }
+            .siloq-wizard-api-key-wrap input {
+                padding-right: 44px;
+            }
+            .siloq-wizard-toggle-key {
+                position: absolute;
+                right: 8px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: none;
+                border: none;
+                cursor: pointer;
+                color: #6b7280;
+                font-size: 18px;
+                padding: 4px;
+            }
+            .siloq-wizard-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                padding: 12px 24px;
+                background: #4f46e5;
+                color: #fff;
+                border: none;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+                margin-top: 8px;
+            }
+            .siloq-wizard-btn:hover {
+                background: #4338ca;
+            }
+            .siloq-wizard-btn:disabled {
+                background: #9ca3af;
+                cursor: not-allowed;
+            }
+            .siloq-wizard-btn .spinner-dot {
+                display: none;
+                width: 16px;
+                height: 16px;
+                border: 2px solid rgba(255,255,255,0.3);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: siloq-spin 0.6s linear infinite;
+                margin-right: 8px;
+            }
+            .siloq-wizard-btn.loading .spinner-dot {
+                display: inline-block;
+            }
+            @keyframes siloq-spin {
+                to { transform: rotate(360deg); }
+            }
+            .siloq-wizard-link {
+                text-align: center;
+                margin-top: 12px;
+            }
+            .siloq-wizard-link a {
+                color: #4f46e5;
+                text-decoration: none;
+                font-size: 14px;
+            }
+            .siloq-wizard-link a:hover {
+                text-decoration: underline;
+            }
+            .siloq-wizard-skip {
+                text-align: center;
+                margin-top: 12px;
+            }
+            .siloq-wizard-skip a {
+                color: #6b7280;
+                text-decoration: none;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            .siloq-wizard-skip a:hover {
+                color: #4f46e5;
+            }
+            .siloq-wizard-error {
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                color: #dc2626;
+                padding: 10px 14px;
+                border-radius: 8px;
+                font-size: 13px;
+                margin-bottom: 16px;
+                display: none;
+            }
+            .siloq-wizard-sync-progress {
+                text-align: center;
+                padding: 24px 0;
+            }
+            .siloq-wizard-sync-progress .sync-count {
+                font-size: 36px;
+                font-weight: 700;
+                color: #4f46e5;
+            }
+            .siloq-wizard-sync-progress .sync-label {
+                color: #6b7280;
+                font-size: 14px;
+                margin-top: 4px;
+            }
+            .siloq-wizard-sync-progress .sync-bar {
+                height: 6px;
+                background: #e5e7eb;
+                border-radius: 3px;
+                margin: 20px 0;
+                overflow: hidden;
+            }
+            .siloq-wizard-sync-progress .sync-bar-fill {
+                height: 100%;
+                background: #4f46e5;
+                border-radius: 3px;
+                transition: width 0.5s;
+                width: 0%;
+            }
+            .siloq-wizard-done {
+                text-align: center;
+                padding: 16px 0;
+            }
+            .siloq-wizard-done .done-check {
+                width: 64px;
+                height: 64px;
+                background: #22c55e;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 16px;
+            }
+            .siloq-wizard-done .done-check svg {
+                width: 32px;
+                height: 32px;
+                color: #fff;
+            }
+            .siloq-wizard-features {
+                list-style: none;
+                padding: 0;
+                margin: 20px 0;
+                text-align: left;
+            }
+            .siloq-wizard-features li {
+                padding: 8px 0;
+                color: #374151;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .siloq-wizard-features li .feat-icon {
+                color: #22c55e;
+                font-size: 16px;
+                flex-shrink: 0;
+            }
+        </style>
+
+        <div class="siloq-wizard-wrap">
+            <div class="siloq-wizard-card">
+                <!-- Step indicators -->
+                <div class="siloq-wizard-steps">
+                    <div class="siloq-wizard-step-dot active" data-step="1"></div>
+                    <div class="siloq-wizard-step-dot" data-step="2"></div>
+                    <div class="siloq-wizard-step-dot" data-step="3"></div>
+                    <div class="siloq-wizard-step-dot" data-step="4"></div>
+                </div>
+
+                <!-- STEP 1: Connect to Siloq -->
+                <div class="siloq-wizard-panel active" id="siloq-wizard-step-1">
+                    <div class="siloq-wizard-logo">
+                        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="48" height="48" rx="12" fill="#4f46e5"/>
+                            <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-family="Arial,sans-serif" font-size="22" font-weight="bold">S</text>
+                        </svg>
+                    </div>
+                    <h2><?php _e('Welcome to Siloq', 'siloq-connector'); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e('Connect your site to start optimizing your SEO architecture.', 'siloq-connector'); ?></p>
+
+                    <div class="siloq-wizard-error" id="siloq-wizard-error-1"></div>
+
+                    <div class="siloq-wizard-field">
+                        <label for="siloq-wizard-api-key"><?php _e('API Key', 'siloq-connector'); ?></label>
+                        <div class="siloq-wizard-api-key-wrap">
+                            <input type="password" id="siloq-wizard-api-key" placeholder="sk_live_..." autocomplete="off" />
+                            <button type="button" class="siloq-wizard-toggle-key" onclick="siloqWizardToggleKey()" title="<?php esc_attr_e('Show/hide key', 'siloq-connector'); ?>">&#128065;</button>
+                        </div>
+                    </div>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-connect-btn" onclick="siloqWizardConnect()">
+                        <span class="spinner-dot"></span>
+                        <?php _e('Connect and Continue', 'siloq-connector'); ?>
+                    </button>
+
+                    <div class="siloq-wizard-link">
+                        <a href="<?php echo esc_url(self::DASHBOARD_URL); ?>" target="_blank"><?php _e('Get your API key at app.siloq.ai', 'siloq-connector'); ?></a>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Your Business -->
+                <div class="siloq-wizard-panel" id="siloq-wizard-step-2">
+                    <h2><?php _e('Your Business', 'siloq-connector'); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e('Help us personalize your SEO recommendations.', 'siloq-connector'); ?></p>
+
+                    <div class="siloq-wizard-error" id="siloq-wizard-error-2"></div>
+
+                    <div class="siloq-wizard-field">
+                        <label for="siloq-wiz-biz-name"><?php _e('Business Name', 'siloq-connector'); ?></label>
+                        <input type="text" id="siloq-wiz-biz-name" />
+                    </div>
+
+                    <div class="siloq-wizard-row">
+                        <div class="siloq-wizard-field">
+                            <label for="siloq-wiz-biz-phone"><?php _e('Phone', 'siloq-connector'); ?></label>
+                            <input type="tel" id="siloq-wiz-biz-phone" />
+                        </div>
+                        <div class="siloq-wizard-field">
+                            <label for="siloq-wiz-biz-type"><?php _e('Business Type', 'siloq-connector'); ?></label>
+                            <select id="siloq-wiz-biz-type">
+                                <option value=""><?php _e('Select...', 'siloq-connector'); ?></option>
+                                <option value="local_service"><?php _e('Local Service', 'siloq-connector'); ?></option>
+                                <option value="ecommerce"><?php _e('E-Commerce', 'siloq-connector'); ?></option>
+                                <option value="saas"><?php _e('SaaS', 'siloq-connector'); ?></option>
+                                <option value="blog"><?php _e('Blog / Publisher', 'siloq-connector'); ?></option>
+                                <option value="agency"><?php _e('Agency', 'siloq-connector'); ?></option>
+                                <option value="nonprofit"><?php _e('Non-Profit', 'siloq-connector'); ?></option>
+                                <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="siloq-wizard-field">
+                        <label for="siloq-wiz-biz-address"><?php _e('Address', 'siloq-connector'); ?></label>
+                        <input type="text" id="siloq-wiz-biz-address" />
+                    </div>
+
+                    <div class="siloq-wizard-row">
+                        <div class="siloq-wizard-field">
+                            <label for="siloq-wiz-biz-city"><?php _e('City', 'siloq-connector'); ?></label>
+                            <input type="text" id="siloq-wiz-biz-city" />
+                        </div>
+                        <div class="siloq-wizard-field" style="flex:0.5;">
+                            <label for="siloq-wiz-biz-state"><?php _e('State', 'siloq-connector'); ?></label>
+                            <input type="text" id="siloq-wiz-biz-state" maxlength="2" />
+                        </div>
+                        <div class="siloq-wizard-field" style="flex:0.7;">
+                            <label for="siloq-wiz-biz-zip"><?php _e('Zip', 'siloq-connector'); ?></label>
+                            <input type="text" id="siloq-wiz-biz-zip" maxlength="10" />
+                        </div>
+                    </div>
+
+                    <div class="siloq-wizard-field">
+                        <label for="siloq-wiz-biz-services"><?php _e('Primary Services', 'siloq-connector'); ?></label>
+                        <textarea id="siloq-wiz-biz-services" placeholder="<?php esc_attr_e('e.g. Web Design, SEO, Content Marketing', 'siloq-connector'); ?>"></textarea>
+                    </div>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-profile-btn" onclick="siloqWizardSaveProfile()">
+                        <span class="spinner-dot"></span>
+                        <?php _e('Save and Continue', 'siloq-connector'); ?>
+                    </button>
+
+                    <div class="siloq-wizard-skip">
+                        <a onclick="siloqWizardGoTo(3)"><?php _e('Skip for now', 'siloq-connector'); ?></a>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Sync Your Pages -->
+                <div class="siloq-wizard-panel" id="siloq-wizard-step-3">
+                    <h2><?php _e('Sync Your Pages', 'siloq-connector'); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e('We\'re importing your pages into Siloq for analysis.', 'siloq-connector'); ?></p>
+
+                    <div class="siloq-wizard-error" id="siloq-wizard-error-3"></div>
+
+                    <div class="siloq-wizard-sync-progress">
+                        <div class="sync-count" id="siloq-wizard-sync-count">0</div>
+                        <div class="sync-label"><?php _e('pages synced', 'siloq-connector'); ?></div>
+                        <div class="sync-bar">
+                            <div class="sync-bar-fill" id="siloq-wizard-sync-bar"></div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-sync-continue-btn" onclick="siloqWizardGoTo(4)" disabled>
+                        <?php _e('Continue', 'siloq-connector'); ?>
+                    </button>
+                </div>
+
+                <!-- STEP 4: All Set -->
+                <div class="siloq-wizard-panel" id="siloq-wizard-step-4">
+                    <div class="siloq-wizard-done">
+                        <div class="done-check">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                        <h2><?php _e('You\'re all set!', 'siloq-connector'); ?></h2>
+                        <p class="siloq-wizard-subtitle"><?php _e('Siloq is connected and your pages are synced.', 'siloq-connector'); ?></p>
+
+                        <ul class="siloq-wizard-features">
+                            <li><span class="feat-icon">&#10003;</span> <?php _e('Keyword cannibalization detection', 'siloq-connector'); ?></li>
+                            <li><span class="feat-icon">&#10003;</span> <?php _e('AI-powered content recommendations', 'siloq-connector'); ?></li>
+                            <li><span class="feat-icon">&#10003;</span> <?php _e('Internal linking optimization', 'siloq-connector'); ?></li>
+                            <li><span class="feat-icon">&#10003;</span> <?php _e('Google Search Console integration', 'siloq-connector'); ?></li>
+                            <li><span class="feat-icon">&#10003;</span> <?php _e('SEO site health scoring', 'siloq-connector'); ?></li>
+                        </ul>
+                    </div>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-finish-btn" onclick="siloqWizardFinish()">
+                        <span class="spinner-dot"></span>
+                        <?php _e('Go to Dashboard', 'siloq-connector'); ?>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            var ajaxUrl = '<?php echo esc_js(admin_url('admin-ajax.php')); ?>';
+            var nonce = '<?php echo esc_js($nonce); ?>';
+            var apiUrl = '<?php echo esc_js($api_url); ?>';
+            var currentStep = 1;
+
+            function setLoading(btn, loading) {
+                if (loading) {
+                    btn.classList.add('loading');
+                    btn.disabled = true;
+                } else {
+                    btn.classList.remove('loading');
+                    btn.disabled = false;
+                }
+            }
+
+            function showError(step, msg) {
+                var el = document.getElementById('siloq-wizard-error-' + step);
+                if (el) {
+                    el.textContent = msg;
+                    el.style.display = 'block';
+                }
+            }
+
+            function hideError(step) {
+                var el = document.getElementById('siloq-wizard-error-' + step);
+                if (el) el.style.display = 'none';
+            }
+
+            window.siloqWizardGoTo = function(step) {
+                // Hide all panels
+                var panels = document.querySelectorAll('.siloq-wizard-panel');
+                for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active');
+
+                // Show target panel
+                var target = document.getElementById('siloq-wizard-step-' + step);
+                if (target) target.classList.add('active');
+
+                // Update dots
+                var dots = document.querySelectorAll('.siloq-wizard-step-dot');
+                for (var i = 0; i < dots.length; i++) {
+                    var s = parseInt(dots[i].getAttribute('data-step'));
+                    dots[i].classList.remove('active', 'completed');
+                    if (s < step) dots[i].classList.add('completed');
+                    if (s === step) dots[i].classList.add('active');
+                }
+
+                currentStep = step;
+
+                // Auto-trigger sync on step 3
+                if (step === 3) siloqWizardStartSync();
+            };
+
+            window.siloqWizardToggleKey = function() {
+                var inp = document.getElementById('siloq-wizard-api-key');
+                inp.type = inp.type === 'password' ? 'text' : 'password';
+            };
+
+            window.siloqWizardConnect = function() {
+                var key = document.getElementById('siloq-wizard-api-key').value.trim();
+                if (!key) { showError(1, '<?php echo esc_js(__('Please enter your API key.', 'siloq-connector')); ?>'); return; }
+                hideError(1);
+
+                var btn = document.getElementById('siloq-wizard-connect-btn');
+                setLoading(btn, true);
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_wizard_connect');
+                fd.append('nonce', nonce);
+                fd.append('api_key', key);
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        setLoading(btn, false);
+                        if (res.success) {
+                            siloqWizardGoTo(2);
+                        } else {
+                            showError(1, (res.data && res.data.message) || '<?php echo esc_js(__('Connection failed. Please check your API key.', 'siloq-connector')); ?>');
+                        }
+                    })
+                    .catch(function() {
+                        setLoading(btn, false);
+                        showError(1, '<?php echo esc_js(__('Network error. Please try again.', 'siloq-connector')); ?>');
+                    });
+            };
+
+            window.siloqWizardSaveProfile = function() {
+                hideError(2);
+                var btn = document.getElementById('siloq-wizard-profile-btn');
+                setLoading(btn, true);
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_wizard_save_profile');
+                fd.append('nonce', nonce);
+                fd.append('business_name', document.getElementById('siloq-wiz-biz-name').value);
+                fd.append('phone', document.getElementById('siloq-wiz-biz-phone').value);
+                fd.append('address', document.getElementById('siloq-wiz-biz-address').value);
+                fd.append('city', document.getElementById('siloq-wiz-biz-city').value);
+                fd.append('state', document.getElementById('siloq-wiz-biz-state').value);
+                fd.append('zip', document.getElementById('siloq-wiz-biz-zip').value);
+                fd.append('business_type', document.getElementById('siloq-wiz-biz-type').value);
+                fd.append('primary_services', document.getElementById('siloq-wiz-biz-services').value);
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        setLoading(btn, false);
+                        if (res.success) {
+                            siloqWizardGoTo(3);
+                        } else {
+                            showError(2, (res.data && res.data.message) || '<?php echo esc_js(__('Could not save profile.', 'siloq-connector')); ?>');
+                        }
+                    })
+                    .catch(function() {
+                        setLoading(btn, false);
+                        showError(2, '<?php echo esc_js(__('Network error. Please try again.', 'siloq-connector')); ?>');
+                    });
+            };
+
+            window.siloqWizardStartSync = function() {
+                var countEl = document.getElementById('siloq-wizard-sync-count');
+                var barEl = document.getElementById('siloq-wizard-sync-bar');
+                var continueBtn = document.getElementById('siloq-wizard-sync-continue-btn');
+                hideError(3);
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_sync_all_pages');
+                fd.append('nonce', nonce);
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res.success && res.data) {
+                            var total = res.data.total || 0;
+                            countEl.textContent = total;
+                            barEl.style.width = '100%';
+                            continueBtn.disabled = false;
+                        } else {
+                            // Even on partial failure, allow continue
+                            countEl.textContent = '0';
+                            barEl.style.width = '100%';
+                            continueBtn.disabled = false;
+                            if (res.data && res.data.message) showError(3, res.data.message);
+                        }
+                    })
+                    .catch(function() {
+                        continueBtn.disabled = false;
+                        showError(3, '<?php echo esc_js(__('Sync encountered an error, but you can continue.', 'siloq-connector')); ?>');
+                    });
+
+                // Poll sync status for live progress
+                var pollInterval = setInterval(function() {
+                    var sfd = new FormData();
+                    sfd.append('action', 'siloq_get_sync_status');
+                    sfd.append('nonce', nonce);
+
+                    fetch(ajaxUrl, { method: 'POST', body: sfd, credentials: 'same-origin' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(res) {
+                            if (res.success && res.data) {
+                                var synced = res.data.synced || 0;
+                                var total = res.data.total || 1;
+                                countEl.textContent = synced;
+                                barEl.style.width = Math.min(100, Math.round((synced / total) * 100)) + '%';
+                                if (synced >= total || res.data.complete) {
+                                    clearInterval(pollInterval);
+                                    continueBtn.disabled = false;
+                                }
+                            }
+                        })
+                        .catch(function() {
+                            clearInterval(pollInterval);
+                        });
+                }, 2000);
+            };
+
+            window.siloqWizardFinish = function() {
+                var btn = document.getElementById('siloq-wizard-finish-btn');
+                setLoading(btn, true);
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_wizard_complete');
+                fd.append('nonce', nonce);
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (res.success) {
+                            window.location.reload();
+                        } else {
+                            setLoading(btn, false);
+                        }
+                    })
+                    .catch(function() {
+                        setLoading(btn, false);
+                    });
+            };
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * Compute entity profile completeness as weighted percentage.
+     */
+    public static function compute_entity_completeness() {
+        $fields = self::get_entity_field_status();
+        $total_weight = 0;
+        $filled_weight = 0;
+        foreach ($fields as $f) {
+            $total_weight += $f['weight'];
+            if ($f['filled']) {
+                $filled_weight += $f['weight'];
+            }
+        }
+        return $total_weight > 0 ? intval(round(($filled_weight / $total_weight) * 100)) : 0;
+    }
+
+    /**
+     * Get entity profile field status with fill state and weights.
+     */
+    public static function get_entity_field_status() {
+        $business_name = get_option('siloq_business_name', '');
+        $business_type = get_option('siloq_business_type', '');
+        $phone = get_option('siloq_phone', '');
+        $address = get_option('siloq_address', '');
+        $city = get_option('siloq_city', '');
+        $state = get_option('siloq_state', '');
+        $zip = get_option('siloq_zip', '');
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+
+        $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
+
+        return [
+            ['key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => !empty($business_name)],
+            ['key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => !empty($business_type)],
+            ['key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => !empty($phone)],
+            ['key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled],
+            ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
+            ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
+        ];
     }
 }
