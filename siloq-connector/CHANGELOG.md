@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.117] — 2026-03-06
+
+### Added
+- **Image Audit** — new `Siloq_Image_Audit` class scans all published pages for image issues: missing images, stock photos, missing alt text, and unoptimized filenames. Stock detection checks 11 agency watermarks, 6+ digit filenames, and common camera patterns (DSC_, IMG_, photo-).
+- **Dashboard Image Audit card** — colored dot summary (red/yellow/green) of image status counts, with link to the Image Brief submenu page.
+- **Printable Image Brief** — new submenu page groups pages by status and shows photo type, shot brief, recommended filename, and recommended alt text for each. Print-friendly CSS hides WP admin chrome.
+- **Sync hook** — image audit runs automatically after every full sync so results stay current.
+- **AJAX endpoints** — `siloq_get_image_audit` (read results) and `siloq_apply_image_seo` (fix alt text + attachment title in one click).
+
 ## [1.5.115] — 2026-03-06
 
 ### Fixed

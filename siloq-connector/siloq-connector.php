@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.115
+* Version: 1.5.117
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.115');
+define('SILOQ_VERSION', '1.5.117');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -160,6 +160,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-faq-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -327,6 +328,10 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_dashboard_fix', array('Siloq_Admin', 'ajax_dashboard_fix'));
         // Image generation (DALL-E via API)
         add_action('wp_ajax_siloq_generate_and_insert_image', array('Siloq_Widget_Intelligence', 'ajax_generate_and_insert_image'));
+        // Image Audit
+        add_action('wp_ajax_siloq_get_image_audit', array('Siloq_Image_Audit', 'ajax_get_image_audit'));
+        add_action('wp_ajax_siloq_apply_image_seo', array('Siloq_Image_Audit', 'ajax_apply_image_seo'));
+
         // Site Audit (Track 2)
         add_action('wp_ajax_siloq_run_audit', array($this, 'ajax_run_audit'));
 
@@ -383,6 +388,19 @@ class Siloq_Connector {
             'siloq-tali',
             array(Siloq_TALI::get_instance(), 'render_admin_page')
         );
+
+        add_submenu_page(
+            'siloq-settings',
+            __('Image Brief', 'siloq-connector'),
+            __('Image Brief', 'siloq-connector'),
+            'manage_options',
+            'siloq-image-brief',
+            array($this, 'render_image_brief_page')
+        );
+    }
+
+    public function render_image_brief_page() {
+        echo Siloq_Image_Audit::render_photo_brief();
     }
     
     /**
@@ -630,6 +648,15 @@ class Siloq_Connector {
             $site_id = get_option( 'siloq_site_id', '' );
             if ( $api_key && $site_id ) {
                 delete_transient( 'siloq_dash_stats_' . md5( $site_id . $api_key ) );
+            }
+
+            // Run image audit on sync completion
+            if ( class_exists( 'Siloq_Image_Audit' ) ) {
+                Siloq_Image_Audit::run_audit( get_posts( array(
+                    'post_type'      => 'page',
+                    'posts_per_page' => -1,
+                    'post_status'    => 'publish',
+                ) ) );
             }
 
             wp_send_json_success($result);
