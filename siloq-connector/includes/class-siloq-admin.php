@@ -1325,6 +1325,36 @@ class Siloq_Admin {
     /**
      * Save settings
      */
+    public static function force_set_site_id() {
+        // Emergency direct-write bypass for stuck site_id option
+        // Usage: /wp-admin/admin.php?page=siloq-settings&siloq_fix_site_id=13
+        if ( ! isset( $_GET['siloq_fix_site_id'] ) || ! current_user_can('manage_options') ) {
+            return;
+        }
+        $new_id = sanitize_text_field( $_GET['siloq_fix_site_id'] );
+        if ( empty($new_id) ) return;
+
+        global $wpdb;
+        // Write directly to the DB options table — bypasses ALL object caching layers
+        $exists = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name = %s", 'siloq_site_id'
+        ) );
+        if ( $exists ) {
+            $wpdb->update( $wpdb->options, ['option_value' => $new_id], ['option_name' => 'siloq_site_id'] );
+        } else {
+            $wpdb->insert( $wpdb->options, ['option_name' => 'siloq_site_id', 'option_value' => $new_id, 'autoload' => 'yes'] );
+        }
+        // Flush every caching layer we can reach
+        wp_cache_delete( 'siloq_site_id', 'options' );
+        wp_cache_delete( 'alloptions', 'options' );
+        delete_transient('siloq_connection_verified');
+        delete_transient('siloq_plan_data');
+
+        // Redirect clean (remove the query param so it doesn't re-run on refresh)
+        wp_redirect( admin_url('admin.php?page=siloq-settings&siloq_fixed=1') );
+        exit;
+    }
+
     public static function save_settings() {
         if (!current_user_can('manage_options')) {
             return;
