@@ -1344,7 +1344,7 @@ class Siloq_Admin {
     /**
      * Save settings
      */
-    public function handle_gsc_connect_redirect() {
+    public static function handle_gsc_connect_redirect() {
         // PHP server-side GSC OAuth initiation — avoids JS popup blockers
         // Triggered by: /wp-admin/admin-post.php?action=siloq_gsc_connect
         check_admin_referer('siloq_gsc_connect_nonce');
