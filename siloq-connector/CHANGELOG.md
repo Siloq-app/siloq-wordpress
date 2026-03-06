@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.111] — 2026-03-06
+
+### Fixed
+- **Bug 1 — Content suggestion identical to current content** — Three-part fix: (1) API page ID lookup now strips trailing slashes and ignores www prefix, with slug fallback; (2) LLM prompt restructured with explicit TASK/RULES/CURRENT CONTENT format that forbids returning input unchanged; (3) `generate_local_suggestion()` no longer returns original content — returns empty suggestion with `no_suggestion_reason` message instead. JS adds similarity check (>80% word overlap = identical) and shows advisory message instead of Apply button.
+- **Bug 2 — Image Intelligence uses business city instead of page city** — `suggest_images()` now accepts `$post_id`, extracts city from page title (regex for "City, ST" pattern) and `_siloq_target_keyword` meta before falling back to business profile city. Excelsior Springs pages now get Excelsior Springs image prompts, not Kansas City.
+
+---
+
 ## [1.5.110] — 2026-03-06
 
 ### Fixed

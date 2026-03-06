@@ -225,34 +225,55 @@ class Siloq_Widget_Intelligence {
         $services_arr   = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
         $service_str    = is_array( $services_arr ) ? implode( ', ', array_slice( $services_arr, 0, 3 ) ) : '';
 
+        // Detect page-level city from title (e.g. "Excelsior Springs, MO")
+        $page_city = '';
+        if ( $post_id ) {
+            if ( preg_match( '/([A-Z][a-zA-Z\s]{2,}),?\s+(MO|KS|AR|OK|NE|IA|KY|TN|IL|TX)/i', $post_title, $cm ) ) {
+                $page_city = trim( $cm[0] );
+            }
+        }
+        $location_str = ! empty( $page_city ) ? $page_city : ( $city_name ? "{$city_name}" : '' );
+
         // Build a specific, actionable edit instruction
-        $edit_instruction = "Rewrite this {$widget_type} to be significantly better for local SEO and conversions. "
-            . 'Page: "' . $post_title . '". Business: ' . $business
-            . ( $city_name ? " in {$city_name}." : '.' )
-            . ( $service_str ? " Services offered: {$service_str}." : '' )
-            . " Page type: {$layer}."
-            . " Include location modifier naturally, use active voice, be specific about services and outcomes."
-            . " The rewrite must be noticeably different and clearly better — not a light paraphrase."
-            . " CRITICAL: Return valid HTML that exactly preserves the structural elements of the input."
-            . " If the input contains ul/li lists, your output MUST also use ul/li lists."
-            . " If the input contains <strong>, <em>, <p>, or other HTML tags, preserve that structure."
-            . " Never strip HTML tags. Never merge list items into a single string."
-            . " Return only the HTML content — no markdown, no code fences, no explanation.";
+        $edit_instruction = 'TASK: Rewrite the following content to improve local SEO performance for the page: "' . $post_title . '".' . "\n\n"
+            . "RULES:\n"
+            . "- The rewritten content MUST be meaningfully different from the input\n"
+            . "- Keep the same HTML structure (ul/li, headings, paragraphs — never strip tags)\n"
+            . "- The first sentence must contain the primary service keyword naturally\n"
+            . ( $location_str ? "- Include the location: {$location_str} naturally in the text\n" : '' )
+            . "- Include at least one specific, concrete detail (not generic marketing language)\n"
+            . "- Do NOT return the input unchanged under any circumstances\n"
+            . "- City pages must contain facts or details specific to that city, not just the city name swapped in\n\n"
+            . "CURRENT CONTENT:\n"
+            . $widget_content . "\n\n"
+            . "Return only the improved HTML. No explanation. No preamble. No markdown code fences.";
 
         // Find the API page ID by matching WP post URL
-        $post_url   = get_permalink( $post_id );
-        $post_host  = parse_url( $post_url, PHP_URL_HOST );
+        $post_url    = get_permalink( $post_id );
+        $wp_path     = rtrim( parse_url( $post_url, PHP_URL_PATH ) ?: '', '/' );
+        $wp_host_raw = parse_url( $post_url, PHP_URL_HOST ) ?: '';
+        $wp_host     = preg_replace( '/^www\./i', '', $wp_host_raw );
+        $wp_slug     = basename( $wp_path );
         $api_page_id = null;
-        $pages_resp = wp_remote_get( "{$api_base}/sites/{$site_id}/pages/?limit=100",
+        $pages_resp  = wp_remote_get( "{$api_base}/sites/{$site_id}/pages/?limit=100",
             [ 'headers' => [ 'Authorization' => 'Bearer ' . $api_key ], 'timeout' => 10 ] );
         if ( ! is_wp_error( $pages_resp ) && wp_remote_retrieve_response_code( $pages_resp ) === 200 ) {
             $pages_data = json_decode( wp_remote_retrieve_body( $pages_resp ), true );
             $pages_list = $pages_data['results'] ?? ( is_array( $pages_data ) ? $pages_data : [] );
             foreach ( $pages_list as $p ) {
-                $p_host = parse_url( $p['url'] ?? '', PHP_URL_HOST );
-                $p_path = parse_url( $p['url'] ?? '', PHP_URL_PATH );
-                $wp_path = parse_url( $post_url, PHP_URL_PATH );
-                if ( $p_path === $wp_path ) { $api_page_id = $p['id']; break; }
+                $p_path = rtrim( parse_url( $p['url'] ?? '', PHP_URL_PATH ) ?: '', '/' );
+                $p_host = preg_replace( '/^www\./i', '', parse_url( $p['url'] ?? '', PHP_URL_HOST ) ?: '' );
+
+                // Match by path (trailing-slash-insensitive) + host (www-insensitive)
+                if ( $p_path === $wp_path && $p_host === $wp_host ) {
+                    $api_page_id = $p['id'];
+                    break;
+                }
+                // Fallback: match by slug
+                if ( ! empty( $p['slug'] ) && $p['slug'] === $wp_slug ) {
+                    $api_page_id = $p['id'];
+                    break;
+                }
             }
         }
 
@@ -306,8 +327,13 @@ class Siloq_Widget_Intelligence {
         $layer       = $this->detect_page_layer( $payload );
 
         $violations  = $this->validate_heading_hierarchy( $heading_map );
-        // Return content with inline improvement tips (not a copy of the original)
-        $suggestion = $content;
+
+        // Never return the original content as a suggestion
+        $suggestion           = '';
+        $no_suggestion_reason = '';
+        if ( $widget_type === 'text-editor' && ! empty( $content ) ) {
+            $no_suggestion_reason = 'API unavailable — connect Siloq to your API key to get AI suggestions.';
+        }
 
         // Layer-specific advisory notes
         $layer_notes = [];
@@ -320,17 +346,21 @@ class Siloq_Widget_Intelligence {
             $layer_notes[] = 'Supporting page: answer the specific question completely. Link to the relevant spoke or hub page.';
         }
 
-        return [
+        $result = [
             'widget_id'             => $payload['active_widget']['widget_id'] ?? '',
             'suggested_content'     => $suggestion,
             'suggested_heading_tag' => $this->suggest_heading_tag( $heading_map, $payload['active_widget']['widget_id'] ?? '' ),
             'heading_violations'    => $violations,
             'layer'                 => $layer,
             'layer_violations'      => $layer_notes,
-            'image_recommendations' => $this->suggest_images( $widget_type, $content, $layer ),
+            'image_recommendations' => $this->suggest_images( $widget_type, $content, $layer, intval( $payload['page_id'] ?? 0 ) ),
             'alt_tag_analysis'      => [],
             'source'                => 'local',
         ];
+        if ( $no_suggestion_reason ) {
+            $result['no_suggestion_reason'] = $no_suggestion_reason;
+        }
+        return $result;
     }
 
     /**
@@ -419,18 +449,39 @@ class Siloq_Widget_Intelligence {
      * @param string $layer
      * @return array
      */
-    private function suggest_images( $widget_type, $content, $layer ) {
+    private function suggest_images( $widget_type, $content, $layer, $post_id = 0 ) {
         $recs          = [];
         $business_name = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
-        $city          = get_option( 'siloq_city', '' );
+        $business_city = get_option( 'siloq_city', '' );
+        $state         = get_option( 'siloq_state', 'MO' );
         $business_type = get_option( 'siloq_business_type', '' );
+
+        // Priority 1: Extract city from page title
+        $page_city = '';
+        if ( $post_id ) {
+            $page_title = get_the_title( $post_id );
+            if ( preg_match( '/([A-Z][a-zA-Z\s]{2,}),?\s+(MO|KS|AR|OK|NE|IA|KY|TN|IL|TX)/i', $page_title, $m ) ) {
+                $page_city = trim( $m[0] );
+            }
+            if ( empty( $page_city ) ) {
+                $kw = get_post_meta( $post_id, '_siloq_target_keyword', true );
+                if ( $kw && preg_match( '/([A-Z][a-zA-Z\s]{2,}),?\s+(MO|KS|AR|OK|NE|IA|KY|TN|IL|TX)/i', $kw, $m2 ) ) {
+                    $page_city = trim( $m2[0] );
+                }
+            }
+        }
+
+        // Priority 2: Fall back to business profile city
+        $city      = ! empty( $page_city ) ? $page_city : $business_city;
+        $city_slug = sanitize_title( $city );
+        $type_slug = sanitize_title( $business_type );
 
         if ( $widget_type === 'text-editor' && strlen( $content ) > 200 ) {
             $recs[] = [
                 'position'           => 'after_intro',
                 'type'               => 'photo',
                 'subject'            => "Professional {$business_type} at work in {$city}",
-                'suggested_filename' => sanitize_title( $business_type . '-' . $city . '-service' ) . '.jpg',
+                'suggested_filename' => "{$type_slug}-{$city_slug}-service.jpg",
                 'suggested_alt'      => "{$business_name} {$business_type} service in {$city}",
                 'ai_prompt'          => "Professional photo of a {$business_type} technician performing work in a residential setting in {$city}. Clean, well-lit, high quality. No text overlays.",
             ];

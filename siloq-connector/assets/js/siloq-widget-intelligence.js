@@ -402,9 +402,40 @@
             );
         });
 
-        // Content suggestion
+        // Content suggestion with similarity check
         var suggestion = data.suggested_content || '';
-        $container.find('.siloq-wi-suggestion-text').text(suggestion);
+
+        function stripHtmlForCompare(html) {
+            return (html || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+
+        var currentContent = activeWidget ? (activeWidget.raw_content || activeWidget.content || '') : '';
+        var currentClean   = stripHtmlForCompare(currentContent);
+        var suggestedClean = stripHtmlForCompare(suggestion);
+
+        function similarityScore(a, b) {
+            if (!a || !b) return 0;
+            var aWords = a.split(' ').filter(Boolean);
+            var bWords = b.split(' ').filter(Boolean);
+            if (!aWords.length) return 0;
+            var matches = aWords.filter(function(w) { return bWords.indexOf(w) !== -1; }).length;
+            return matches / aWords.length;
+        }
+
+        var isTooSimilar = (currentClean === suggestedClean) || similarityScore(currentClean, suggestedClean) >= 0.80;
+
+        if (isTooSimilar || !suggestion || data.no_suggestion_reason) {
+            $container.find('.siloq-wi-suggestion-text').html(
+                '<em style="color:#6b7280;font-size:12px;">' +
+                (data.no_suggestion_reason || 'This content is well-optimized — no changes needed, or connect to Siloq API for AI-powered suggestions.') +
+                '</em>'
+            );
+            $container.find('.siloq-wi-apply-btn').hide();
+        } else {
+            $container.find('.siloq-wi-suggestion-text').html(suggestion);
+            $container.find('.siloq-wi-apply-btn').show();
+        }
+
         $container.find('.siloq-wi-apply-btn').data({
             'widget-id':  activeWidget.widget_id,
             'suggestion': suggestion,
