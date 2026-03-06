@@ -1156,13 +1156,32 @@ class Siloq_Admin {
                         gscMsg(r.data && r.data.message ? r.data.message : 'Could not get authorization URL. Check your API key.', '#dc2626');
                         return;
                     }
-                    // Direct redirect — same tab. Google OAuth → api.siloq.ai callback → back here.
-                    window.location.href = r.data.auth_url;
+                    // Open Google OAuth in a NEW TAB — current WP admin tab stays open
+                    window.open(r.data.auth_url, '_blank');
+                    $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
+                    gscMsg('✅ Google sign-in opened in a new tab. Complete it there, then click <strong>Check Connection</strong> below.', '#16a34a');
+
+                    // Auto-poll every 4 seconds to detect when OAuth completes
+                    var pollCount = 0;
+                    var pollTimer = setInterval(function() {
+                        pollCount++;
+                        if (pollCount > 30) { clearInterval(pollTimer); return; } // stop after 2 min
+                        $.post(ajaxUrl, {action: 'siloq_gsc_check_status', nonce: nonce}, function(res) {
+                            if (res.success && res.data && res.data.connected) {
+                                clearInterval(pollTimer);
+                                gscMsg('✅ Google Search Console connected! Refreshing...', '#16a34a');
+                                setTimeout(function(){ window.location.reload(); }, 1500);
+                            }
+                        });
+                    }, 4000);
                 }).fail(function(xhr){
                     $btn.prop('disabled', false).text('⚡ Connect Google Search Console');
                     gscMsg('Request failed (HTTP ' + xhr.status + ').', '#dc2626');
                 });
             };
+
+            // Alias — some buttons use this name
+            window.siloqInitGSCConnect = window.siloqOpenGSCPopup;
 
             $(document).on('click', '#siloq-gsc-connect-btn, .siloq-gsc-connect-popup', function() {
                 window.siloqOpenGSCPopup();
@@ -1844,7 +1863,7 @@ if ($has_plan && isset($plan_data['issues'])) {
     <div style="text-align:center;padding:20px 0;color:#6b7280">
       <div style="font-size:28px;margin-bottom:8px">&#128202;</div>
       <div style="font-size:12px;margin-bottom:10px">Connect Google Search Console to see your ranking data</div>
-      <button type="button" class="siloq-btn siloq-btn--primary siloq-gsc-connect-popup" style="font-size:11px" onclick="siloqInitGSCConnect(this)">Connect GSC &rarr;</button>
+      <button type="button" class="siloq-btn siloq-btn--primary siloq-gsc-connect-popup" style="font-size:11px" onclick="if(typeof window.siloqOpenGSCPopup==='function'){window.siloqOpenGSCPopup();}">Connect GSC &rarr;</button>
     </div>
     <?php endif; ?>
   </div>
