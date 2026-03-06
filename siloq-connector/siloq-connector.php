@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.126
+* Version: 1.5.127
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.126');
+define('SILOQ_VERSION', '1.5.127');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -303,6 +303,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
         add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
         add_action('wp_ajax_siloq_create_draft_page', array($this, 'ajax_create_draft_page'));
+        add_action('wp_ajax_siloq_save_api_key',      array($this, 'ajax_save_api_key'));
         add_action('wp_ajax_siloq_get_pages_list', array($this, 'ajax_get_pages_list'));
         // GSC connection handlers
         add_action('wp_ajax_siloq_gsc_init_oauth', array($this, 'ajax_gsc_init_oauth'));
@@ -1456,6 +1457,34 @@ class Siloq_Connector {
     /**
      * AJAX: Save roadmap checkbox progress
      */
+    public function ajax_save_api_key() {
+        check_ajax_referer('siloq_save_api_key', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        $allowed = array('siloq_openai_api_key', 'siloq_anthropic_api_key');
+        $option  = isset($_POST['option_name']) ? sanitize_key($_POST['option_name']) : '';
+        $value   = isset($_POST['key_value'])   ? trim($_POST['key_value'])            : '';
+        if (!in_array($option, $allowed, true)) {
+            wp_send_json_error(array('message' => 'Invalid option'));
+            return;
+        }
+        if (empty($value)) {
+            wp_send_json_error(array('message' => 'Key cannot be empty'));
+            return;
+        }
+        update_option($option, $value);
+        wp_cache_delete($option, 'options');
+        // Verify it actually saved
+        $saved = get_option($option, '');
+        if ($saved !== $value) {
+            wp_send_json_error(array('message' => 'DB write failed — check WP file permissions'));
+            return;
+        }
+        wp_send_json_success(array('last4' => substr($value, -4)));
+    }
+
     public function ajax_create_draft_page() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('edit_posts')) {

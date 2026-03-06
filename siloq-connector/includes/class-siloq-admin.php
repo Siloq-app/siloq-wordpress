@@ -485,65 +485,61 @@ class Siloq_Admin {
                             </tr>
 
                             <tr>
-                                <th scope="row">
-                                    <label for="siloq_openai_api_key">
-                                        <?php _e('OpenAI API Key', 'siloq-connector'); ?>
-                                    </label>
-                                </th>
+                                <th scope="row"><?php _e('OpenAI API Key', 'siloq-connector'); ?></th>
                                 <td>
-                                    <?php
-                                    $openai_api_key = get_option('siloq_openai_api_key', '');
-                                    $oai_saved = !empty($openai_api_key);
-                                    $oai_hint  = $oai_saved ? '●●●●●●●● ' . substr($openai_api_key, -4) . ' — key saved ✓' : '';
-                                    ?>
-                                    <?php if ($oai_saved): ?>
-                                    <p style="margin:0 0 6px;color:#16a34a;font-weight:600;">✓ Key saved (ends in …<?php echo esc_html(substr($openai_api_key, -4)); ?>)</p>
-                                    <?php endif; ?>
-                                    <input
-                                        type="text"
-                                        id="siloq_openai_api_key"
-                                        name="siloq_openai_api_key"
-                                        value=""
-                                        class="regular-text"
-                                        placeholder="<?php echo $oai_saved ? 'Enter new key to replace saved key' : 'sk-...'; ?>"
-                                        autocomplete="off"
-                                        style="font-family:monospace;"
-                                    />
-                                    <p class="description">
-                                        <?php _e('Required for AI image generation (DALL-E). Also used as fallback for content suggestions. Leave blank to keep existing key.', 'siloq-connector'); ?>
-                                        <a href="https://platform.openai.com/api-keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
-                                    </p>
+                                    <?php $oai_saved = !empty(get_option('siloq_openai_api_key', '')); ?>
+                                    <div id="siloq-oai-status" style="margin-bottom:6px;font-weight:600;color:<?php echo $oai_saved ? '#16a34a' : '#6b7280'; ?>">
+                                        <?php echo $oai_saved ? '✓ Key saved (ends in …' . esc_html(substr(get_option('siloq_openai_api_key'), -4)) . ')' : 'No key saved'; ?>
+                                    </div>
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <input type="text" id="siloq-oai-key-input" class="regular-text" placeholder="sk-..." autocomplete="off" style="font-family:monospace;flex:1;" />
+                                        <button type="button" id="siloq-save-oai-key" class="button button-primary"><?php _e('Save Key', 'siloq-connector'); ?></button>
+                                    </div>
+                                    <p class="description" style="margin-top:6px;"><?php _e('Required for DALL-E image generation.', 'siloq-connector'); ?> <a href="https://platform.openai.com/api-keys" target="_blank">Get key →</a></p>
                                 </td>
                             </tr>
 
                             <tr>
-                                <th scope="row">
-                                    <label for="siloq_anthropic_api_key">
-                                        <?php _e('Anthropic API Key', 'siloq-connector'); ?>
-                                    </label>
-                                </th>
+                                <th scope="row"><?php _e('Anthropic API Key', 'siloq-connector'); ?></th>
                                 <td>
-                                    <?php
-                                    $anthropic_api_key = get_option('siloq_anthropic_api_key', '');
-                                    $ant_saved = !empty($anthropic_api_key);
-                                    ?>
-                                    <?php if ($ant_saved): ?>
-                                    <p style="margin:0 0 6px;color:#16a34a;font-weight:600;">✓ Key saved (ends in …<?php echo esc_html(substr($anthropic_api_key, -4)); ?>)</p>
-                                    <?php endif; ?>
-                                    <input
-                                        type="text"
-                                        id="siloq_anthropic_api_key"
-                                        name="siloq_anthropic_api_key"
-                                        value=""
-                                        class="regular-text"
-                                        placeholder="<?php echo $ant_saved ? 'Enter new key to replace saved key' : 'sk-ant-...'; ?>"
-                                        autocomplete="off"
-                                        style="font-family:monospace;"
-                                    />
-                                    <p class="description">
-                                        <?php _e('Powers AI content suggestions and draft generation (Claude Sonnet). Leave blank to keep existing key.', 'siloq-connector'); ?>
-                                        <a href="https://console.anthropic.com/settings/keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
-                                    </p>
+                                    <?php $ant_saved = !empty(get_option('siloq_anthropic_api_key', '')); ?>
+                                    <div id="siloq-ant-status" style="margin-bottom:6px;font-weight:600;color:<?php echo $ant_saved ? '#16a34a' : '#6b7280'; ?>">
+                                        <?php echo $ant_saved ? '✓ Key saved (ends in …' . esc_html(substr(get_option('siloq_anthropic_api_key'), -4)) . ')' : 'No key saved'; ?>
+                                    </div>
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <input type="text" id="siloq-ant-key-input" class="regular-text" placeholder="sk-ant-..." autocomplete="off" style="font-family:monospace;flex:1;" />
+                                        <button type="button" id="siloq-save-ant-key" class="button button-primary"><?php _e('Save Key', 'siloq-connector'); ?></button>
+                                    </div>
+                                    <p class="description" style="margin-top:6px;"><?php _e('Powers AI content suggestions and draft generation (Claude Sonnet).', 'siloq-connector'); ?> <a href="https://console.anthropic.com/settings/keys" target="_blank">Get key →</a></p>
+                                    <script>
+                                    (function(){
+                                        var nonce = '<?php echo esc_js(wp_create_nonce('siloq_save_api_key')); ?>';
+                                        function saveKey(inputId, optionName, statusId, btn) {
+                                            var val = document.getElementById(inputId).value.trim();
+                                            if (!val) { alert('Please enter a key first.'); return; }
+                                            btn.disabled = true; btn.textContent = 'Saving…';
+                                            jQuery.post(ajaxurl, {
+                                                action: 'siloq_save_api_key',
+                                                nonce: nonce,
+                                                option_name: optionName,
+                                                key_value: val
+                                            }, function(r) {
+                                                if (r.success) {
+                                                    document.getElementById(statusId).style.color = '#16a34a';
+                                                    document.getElementById(statusId).textContent = '✓ Key saved (ends in …' + r.data.last4 + ')';
+                                                    document.getElementById(inputId).value = '';
+                                                    btn.textContent = '✓ Saved';
+                                                    setTimeout(function(){ btn.disabled = false; btn.textContent = 'Save Key'; }, 2000);
+                                                } else {
+                                                    alert('Save failed: ' + (r.data && r.data.message ? r.data.message : 'Unknown error'));
+                                                    btn.disabled = false; btn.textContent = 'Save Key';
+                                                }
+                                            }).fail(function(){ alert('Request failed. Try again.'); btn.disabled = false; btn.textContent = 'Save Key'; });
+                                        }
+                                        document.getElementById('siloq-save-oai-key').addEventListener('click', function(){ saveKey('siloq-oai-key-input','siloq_openai_api_key','siloq-oai-status',this); });
+                                        document.getElementById('siloq-save-ant-key').addEventListener('click', function(){ saveKey('siloq-ant-key-input','siloq_anthropic_api_key','siloq-ant-status',this); });
+                                    })();
+                                    </script>
                                 </td>
                             </tr>
 
