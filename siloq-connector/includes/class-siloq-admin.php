@@ -486,6 +486,30 @@ class Siloq_Admin {
 
                             <tr>
                                 <th scope="row">
+                                    <label for="siloq_openai_api_key">
+                                        <?php _e('OpenAI API Key', 'siloq-connector'); ?>
+                                    </label>
+                                </th>
+                                <td>
+                                    <?php $openai_api_key = get_option('siloq_openai_api_key', ''); ?>
+                                    <input
+                                        type="password"
+                                        id="siloq_openai_api_key"
+                                        name="siloq_openai_api_key"
+                                        value="<?php echo esc_attr($openai_api_key); ?>"
+                                        class="regular-text"
+                                        placeholder="sk-..."
+                                        autocomplete="off"
+                                    />
+                                    <p class="description">
+                                        <?php _e('Required for AI image generation (DALL-E). Text content suggestions route through the Siloq API — no key needed here for those.', 'siloq-connector'); ?>
+                                        <a href="https://platform.openai.com/api-keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th scope="row">
                                     <?php _e('Auto-Sync', 'siloq-connector'); ?>
                                 </th>
                                 <td>
@@ -1682,9 +1706,11 @@ class Siloq_Admin {
         update_option('siloq_signup_url', $signup_url);
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
         update_option('siloq_show_advanced', $show_advanced);
-        // Note: AI provider keys (Anthropic, OpenAI) are NOT stored in the WP plugin.
-        // Text AI calls route through api.siloq.ai (Siloq manages the Anthropic key server-side).
-        // OpenAI key for DALL-E is set in the plugin via the DALL-E section, not here.
+        // OpenAI key for DALL-E image generation (client-side, must stay in plugin)
+        $openai_key_setting = isset($_POST['siloq_openai_api_key']) ? sanitize_text_field($_POST['siloq_openai_api_key']) : '';
+        if (!empty($openai_key_setting)) { update_option('siloq_openai_api_key', $openai_key_setting); }
+        // Note: Anthropic key for text AI NOT stored in plugin — routes through api.siloq.ai.
+        // BYOK users manage their Anthropic key in the Siloq dashboard, not here.
 
         // Save content types to sync (Advanced Settings checkboxes)
         if (isset($_POST['siloq_content_types']) && is_array($_POST['siloq_content_types'])) {
