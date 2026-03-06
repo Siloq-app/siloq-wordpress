@@ -1260,7 +1260,7 @@ class Siloq_Admin {
         $site_id = get_option('siloq_site_id', '');
         if (empty($site_id) || $old_api_key !== $api_key) {
             $this_site_url = trailingslashit(home_url());
-            $this_site_host = parse_url($this_site_url, PHP_URL_HOST);
+            $this_site_host = strtolower(preg_replace('/^www\./', '', parse_url($this_site_url, PHP_URL_HOST) ?? ''));
 
             $sites_resp = wp_remote_get(
                 trailingslashit($api_url) . 'sites/',
@@ -1279,8 +1279,8 @@ class Siloq_Admin {
                 // Match this WP site's URL against API sites — never auto-pick if ambiguous
                 $matched_site = null;
                 foreach ($sites_list as $s) {
-                    $api_host = parse_url(isset($s['url']) ? $s['url'] : '', PHP_URL_HOST);
-                    if ($api_host && $this_site_host && strtolower($api_host) === strtolower($this_site_host)) {
+                    $api_host = strtolower(preg_replace('/^www\./', '', parse_url(isset($s['url']) ? $s['url'] : '', PHP_URL_HOST) ?? ''));
+                    if ($api_host && $this_site_host && $api_host === $this_site_host) {
                         $matched_site = $s;
                         break;
                     }
