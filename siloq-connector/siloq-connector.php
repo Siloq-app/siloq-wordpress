@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.101
+* Version: 1.5.102
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.101');
+define('SILOQ_VERSION', '1.5.102');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1653,9 +1653,16 @@ class Siloq_Connector {
             if (!is_wp_error($sites_resp)) {
                 $sites_data = json_decode(wp_remote_retrieve_body($sites_resp), true);
                 $sites_list = isset($sites_data['results']) ? $sites_data['results'] : (is_array($sites_data) ? $sites_data : array());
-                if (!empty($sites_list[0]['id'])) {
-                    $site_id = $sites_list[0]['id'];
-                    update_option('siloq_site_id', $site_id);
+                // Match by URL — do NOT blindly use sites_list[0]
+                $this_host = strtolower( preg_replace( '/^www\./', '', parse_url( trailingslashit( home_url() ), PHP_URL_HOST ) ?? '' ) );
+                foreach ( $sites_list as $s ) {
+                    $api_host = strtolower( preg_replace( '/^www\./', '', parse_url( isset( $s['url'] ) ? $s['url'] : '', PHP_URL_HOST ) ?? '' ) );
+                    if ( $api_host && $this_host && $api_host === $this_host ) {
+                        $site_id = $s['id'];
+                        update_option( 'siloq_site_id', $site_id );
+                        wp_cache_delete( 'siloq_site_id', 'options' );
+                        break;
+                    }
                 }
             }
         }
@@ -1992,8 +1999,25 @@ class Siloq_Connector {
             $sites_body = json_decode( wp_remote_retrieve_body( $sites_response ), true );
             // Response may be an array of sites or {results: [...]}
             $sites = isset( $sites_body['results'] ) ? $sites_body['results'] : ( is_array( $sites_body ) ? $sites_body : [] );
-            if ( ! empty( $sites[0]['id'] ) ) {
+            // Match by URL — NEVER blindly grab sites[0] which may be a different client
+            $this_host = strtolower( preg_replace( '/^www\./', '', parse_url( trailingslashit( home_url() ), PHP_URL_HOST ) ?? '' ) );
+            $matched_id = null;
+            foreach ( $sites as $s ) {
+                $api_host = strtolower( preg_replace( '/^www\./', '', parse_url( isset( $s['url'] ) ? $s['url'] : '', PHP_URL_HOST ) ?? '' ) );
+                if ( $api_host && $this_host && $api_host === $this_host ) {
+                    $matched_id = $s['id'];
+                    break;
+                }
+            }
+            // Fallback: if no URL match, keep whatever is already stored — do NOT overwrite with sites[0]
+            if ( $matched_id ) {
+                update_option( 'siloq_site_id', sanitize_text_field( $matched_id ) );
+                wp_cache_delete( 'siloq_site_id', 'options' );
+                $site_id_saved = true;
+            } elseif ( ! empty( $sites[0]['id'] ) && empty( get_option( 'siloq_site_id', '' ) ) ) {
+                // Only fall back to sites[0] if nothing is stored yet — ambiguous but better than nothing
                 update_option( 'siloq_site_id', sanitize_text_field( $sites[0]['id'] ) );
+                wp_cache_delete( 'siloq_site_id', 'options' );
                 $site_id_saved = true;
             }
         }

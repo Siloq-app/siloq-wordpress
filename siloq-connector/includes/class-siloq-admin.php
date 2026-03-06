@@ -1336,6 +1336,7 @@ class Siloq_Admin {
         $site_id_manual = isset($_POST['siloq_site_id_manual']) ? sanitize_text_field($_POST['siloq_site_id_manual']) : '';
         if (!empty($site_id_manual)) {
             update_option('siloq_site_id', $site_id_manual);
+            wp_cache_delete('siloq_site_id', 'options'); // force flush any persistent object cache
             // Clear any stale auto-detect transients so everything re-loads fresh
             delete_transient('siloq_connection_verified');
             delete_transient('siloq_plan_data');
@@ -1429,6 +1430,7 @@ class Siloq_Admin {
 
                 if ($matched_site) {
                     update_option('siloq_site_id', $matched_site['id']);
+                    wp_cache_delete('siloq_site_id', 'options');
                     update_option('siloq_site_name', isset($matched_site['name']) ? $matched_site['name'] : $matched_site['url']);
                     add_settings_error('siloq_settings', 'siloq_site_detected',
                         sprintf(__('Site detected: <strong>%s</strong> (ID: %s)', 'siloq-connector'),
