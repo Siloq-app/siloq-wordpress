@@ -1671,7 +1671,7 @@ if ($has_plan && isset($plan_data['issues'])) {
     <div style="text-align:center;padding:20px 0;color:#6b7280">
       <div style="font-size:28px;margin-bottom:8px">&#128202;</div>
       <div style="font-size:12px;margin-bottom:10px">Connect Google Search Console to see your ranking data</div>
-      <a href="https://app.siloq.ai/dashboard?tab=gsc" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px">Connect GSC &rarr;</a>
+      <button type="button" class="siloq-btn siloq-btn--primary siloq-gsc-connect-popup" style="font-size:11px" onclick="siloqInitGSCConnect(this)">Connect GSC &rarr;</button>
     </div>
     <?php endif; ?>
   </div>
