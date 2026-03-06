@@ -473,18 +473,40 @@ class Siloq_Widget_Intelligence {
         }
 
         // Priority 2: Fall back to business profile city
-        $city      = ! empty( $page_city ) ? $page_city : $business_city;
-        $city_slug = sanitize_title( $city );
-        $type_slug = sanitize_title( $business_type );
+        $city = ! empty( $page_city ) ? $page_city : $business_city;
+
+        // Build a human-readable service label for the prompt.
+        // siloq_business_type stores slugs like "local_service", "electrical", etc.
+        // Pull the first primary service as the descriptor — far more specific and
+        // produces accurate DALL-E images (e.g. "electrician" not "local_service").
+        $services_raw  = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        $service_label = ( is_array( $services_raw ) && ! empty( $services_raw ) )
+            ? strtolower( trim( $services_raw[0] ) )
+            : strtolower( trim( $business_type ) );
+
+        // Also try to pull service label from page title (e.g. "Electrician" from "Excelsior Springs, MO Electrician")
+        if ( $post_id ) {
+            $page_title = get_the_title( $post_id );
+            // Strip city/state from title to get the service keyword
+            $stripped = preg_replace( '/[A-Z][a-zA-Z\s]+,?\s+(MO|KS|AR|OK|NE|IA|KY|TN|IL|TX)\s*/i', '', $page_title );
+            $stripped = trim( $stripped, " \t\n\r\0\x0B|,-" );
+            if ( ! empty( $stripped ) && strlen( $stripped ) > 2 && strlen( $stripped ) < 40 ) {
+                $service_label = strtolower( $stripped );
+            }
+        }
+
+        $city_slug    = sanitize_title( $city );
+        $service_slug = sanitize_title( $service_label );
 
         if ( $widget_type === 'text-editor' && strlen( $content ) > 200 ) {
             $recs[] = [
                 'position'           => 'after_intro',
                 'type'               => 'photo',
-                'subject'            => "Professional {$business_type} at work in {$city}",
-                'suggested_filename' => "{$type_slug}-{$city_slug}-service.jpg",
-                'suggested_alt'      => "{$business_name} {$business_type} service in {$city}",
-                'ai_prompt'          => "Professional photo of a {$business_type} technician performing work in a residential setting in {$city}. Clean, well-lit, high quality. No text overlays.",
+                'subject'            => "Professional {$service_label} at work in {$city}",
+                'suggested_filename' => "{$service_slug}-{$city_slug}-service.jpg",
+                'suggested_alt'      => "{$business_name} {$service_label} service in {$city}",
+                // Specific prompt: trade/service is explicit so DALL-E generates the right person
+                'ai_prompt'          => "Professional photo of a {$service_label} technician actively performing work on-site in {$city}. Show realistic trade work — tools, equipment, work environment appropriate for {$service_label}. Real professional appearance, clean and well-lit. No text overlays. No generic office settings.",
             ];
         }
 

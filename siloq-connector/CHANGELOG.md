@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.113] — 2026-03-06
+
+### Fixed
+- **Image prompt uses actual service label** — was passing raw `siloq_business_type` slug (e.g. `local_service`) to DALL-E, generating generic office workers. Now extracts service keyword from page title first (e.g. "Electrician" from "Excelsior Springs, MO Electrician"), then falls back to first primary service, then business type. Prompt also explicitly describes the trade work environment so DALL-E generates the correct tradesperson on-site.
+
 ## [1.5.112] — 2026-03-06
 
 ### Fixed
