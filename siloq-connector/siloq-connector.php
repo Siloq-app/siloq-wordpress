@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.117
+* Version: 1.5.118
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.117');
+define('SILOQ_VERSION', '1.5.118');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1377,14 +1377,9 @@ class Siloq_Connector {
                     );
                 }
             } elseif ($arch_type === 'hub' || $arch_type === 'apex_hub' || $page_type === 'hub' || $page_type === 'apex_hub') {
-                // Hub pages should have supporting content — flag it
-                $missing_count++;
-                $supporting[] = array(
-                    'title'  => 'Add supporting pages under "' . $title . '"',
-                    'type'   => 'sub-page',
-                    'parent' => $title,
-                    'detail' => 'This hub page needs spoke pages that cover specific subtopics in depth.',
-                );
+                // Hub with no analysis data yet — skip the generic "Add supporting pages" card entirely.
+                // Real gap-analysis cards are generated in the Supporting Content Opportunities section
+                // using categorize_pages() + primary services + service areas. No generic cards here.
             }
         }
 

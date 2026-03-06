@@ -1897,6 +1897,16 @@ foreach ($all_synced_pages as $hp) {
 if (empty($hub_data)) {
     foreach ($all_synced_pages as $hp) {
         if ($hp->post_parent != 0) continue;
+        // Apply the same CPT/internal post type filter as the main loop above
+        $fb_slug  = $hp->post_name;
+        $fb_title = strtolower($hp->post_title);
+        $fb_skip  = false;
+        foreach ($internal_name_patterns as $pat) {
+            if (strpos($fb_title, $pat) !== false || strpos($fb_slug, $pat) !== false) {
+                $fb_skip = true; break;
+            }
+        }
+        if ($fb_skip) continue;
         $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
         $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
         $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
