@@ -232,7 +232,12 @@ class Siloq_Widget_Intelligence {
             . ( $service_str ? " Services offered: {$service_str}." : '' )
             . " Page type: {$layer}."
             . " Include location modifier naturally, use active voice, be specific about services and outcomes."
-            . " The rewrite must be noticeably different and clearly better — not a light paraphrase.";
+            . " The rewrite must be noticeably different and clearly better — not a light paraphrase."
+            . " CRITICAL: Return valid HTML that exactly preserves the structural elements of the input."
+            . " If the input contains ul/li lists, your output MUST also use ul/li lists."
+            . " If the input contains <strong>, <em>, <p>, or other HTML tags, preserve that structure."
+            . " Never strip HTML tags. Never merge list items into a single string."
+            . " Return only the HTML content — no markdown, no code fences, no explanation.";
 
         // Find the API page ID by matching WP post URL
         $post_url   = get_permalink( $post_id );

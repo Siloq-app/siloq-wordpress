@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.110] — 2026-03-06
+
+### Fixed
+- **Bug 1 — Elementor `doc.get is not a function`** — `buildPageMap()` now guards against Elementor document objects that don't expose Backbone `.get()` (newer Elementor builds). Falls back to `elementor.elements` when `.get()` is unavailable. Added `$(window).on('elementor:init', ...)` hook so init fires reliably in all load orders. Zero console errors on widget click.
+- **Bug 2 — Schema "API confirmation failed" error** — Schema generation no longer blocks on API GET confirmation (which always failed because schema was never POSTed). Now POSTs generated schema to API with correct `Authorization: Bearer` header and 30s timeout. Failures are `error_log`'d but never shown to user — schema saves to post_meta and succeeds every time.
+- **Bug 3 — Apply destroys bullet list formatting** — Three-part fix: (1) text-editor widget content now preserves HTML on collection (`.html()` not `.text()`); (2) Apply button uses TinyMCE `setContent()` for text-editor widgets so HTML structure is honored by the editor; (3) PHP prompt explicitly instructs LLM to return valid HTML preserving `ul/li`, `strong`, `p` and all structural tags — never strip or merge list items.
+
+---
+
 ## [1.5.109] — 2026-03-06
 
 ### Added

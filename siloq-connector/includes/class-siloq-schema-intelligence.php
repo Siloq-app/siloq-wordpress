@@ -992,34 +992,43 @@ class Siloq_Schema_Intelligence {
         update_post_meta( $post_id, '_siloq_schema_type', $schema_type_str );
         update_post_meta( $post_id, '_siloq_schema_applied', '1' );
 
-        // Confirm schema was saved on the API side
+        // Sync schema to API (non-blocking — local save already succeeded above).
+        // Schema is stored in post_meta regardless; API sync is best-effort.
         $api_confirmed = false;
-        $site_id  = get_option( 'siloq_site_id', '' );
-        $api_key  = get_option( 'siloq_api_key', '' );
-        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
+        $site_id   = get_option( 'siloq_site_id', '' );
+        $api_key   = get_option( 'siloq_api_key', '' );
+        $api_base  = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
         $sync_data = get_post_meta( $post_id, '_siloq_sync_data', true );
         $api_page_id = is_array( $sync_data ) && isset( $sync_data['id'] ) ? $sync_data['id'] : $post_id;
 
         if ( $site_id && $api_key ) {
-            $confirm_resp = wp_remote_get(
-                "$api_base/sites/$site_id/pages/$api_page_id/analysis/schema/",
+            // POST the generated schema to the API so it has a record.
+            $sync_resp = wp_remote_post(
+                "$api_base/sites/$site_id/pages/$api_page_id/schema/",
                 [
-                    'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Accept' => 'application/json' ],
-                    'timeout' => 10,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                        'Accept'        => 'application/json',
+                    ],
+                    'body'    => wp_json_encode( [ 'schemas' => $schemas, 'schema_types' => $schema_types ] ),
+                    'timeout' => 30,
                 ]
             );
-            if ( ! is_wp_error( $confirm_resp ) && wp_remote_retrieve_response_code( $confirm_resp ) >= 200 && wp_remote_retrieve_response_code( $confirm_resp ) < 300 ) {
+
+            if ( is_wp_error( $sync_resp ) ) {
+                error_log( '[Siloq Schema] API sync error for post ' . $post_id . ': ' . $sync_resp->get_error_message() );
+            } elseif ( wp_remote_retrieve_response_code( $sync_resp ) >= 200 && wp_remote_retrieve_response_code( $sync_resp ) < 300 ) {
                 $api_confirmed = true;
+            } else {
+                $code = wp_remote_retrieve_response_code( $sync_resp );
+                $body = wp_remote_retrieve_body( $sync_resp );
+                error_log( "[Siloq Schema] API sync returned HTTP {$code} for post {$post_id}: {$body}" );
             }
         }
 
-        if ( ! $api_confirmed ) {
-            wp_send_json_error( [
-                'message' => 'Schema generated and saved locally, but API confirmation failed. Please retry.',
-                'schemas' => $schemas,
-            ] );
-            return;
-        }
+        // Schema is already saved to post_meta — always return success to the user.
+        // API sync failure is logged but must not block the user from using schema.
 
         $validation = self::validate( $schemas, $entity_profile );
 

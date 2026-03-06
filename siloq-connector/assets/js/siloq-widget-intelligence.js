@@ -18,6 +18,11 @@
     if (typeof siloqWI === 'undefined') return;
 
     if (typeof elementor === 'undefined') {
+        // Hook into Elementor's own init event first (most reliable)
+        $(window).on('elementor:init', function() {
+            initSiloqWI($);
+        });
+        // Polling fallback for environments where the event fires before our script
         var _retries = 0;
         var _retryTimer = setInterval(function() {
             _retries++;
@@ -44,8 +49,19 @@
     function buildPageMap() {
         if (!elementor.documents || !elementor.documents.getCurrent()) return null;
 
-        var doc        = elementor.documents.getCurrent();
-        var elements   = doc.get('elements');
+        var doc      = elementor.documents.getCurrent();
+        var elements;
+        // Elementor 3.x: doc is a Backbone Model — use .get(). Some builds return
+        // a plain object without Backbone methods; fall back to elementor.elements.
+        if (doc && typeof doc.get === 'function') {
+            elements = doc.get('elements');
+        } else if (typeof elementor.elements !== 'undefined') {
+            elements = elementor.elements;
+        } else {
+            console.warn('[Siloq WI] buildPageMap: cannot access elements collection.');
+            return null;
+        }
+        if (!elements) return null;
         var headingMap = [];
         var containerMap = [];
 
@@ -224,7 +240,9 @@
 
                 return {
                     type:        type,
-                    content:     $('<div>').html(content).text(),
+                    // Preserve HTML for text-editor so bullets/lists survive round-trip.
+                    // For heading/button strip tags (they store plain text natively).
+                    content:     (type === 'text-editor') ? content : $('<div>').html(content).text(),
                     widget_id:   id,
                     raw_content: content,
                 };
@@ -457,7 +475,33 @@
         };
         var field = fieldMap[widgetType] || 'editor';
 
-        var ok = applyToWidget(widgetId, field, suggestion);
+        // For text-editor widgets, TinyMCE must be used to preserve HTML structure
+        // (ul/li, strong, etc.). Elementor's settings API alone strips formatting.
+        var ok = false;
+        if (widgetType === 'text-editor') {
+            // Try TinyMCE first — it's the only way to preserve HTML in text-editor
+            var editorId = 'elementor-controls-editor-' + widgetId;
+            var tmce = (typeof tinymce !== 'undefined') ? tinymce.get(editorId) : null;
+            if (!tmce) {
+                // Elementor sometimes uses a generic ID — check all active editors
+                if (typeof tinymce !== 'undefined' && tinymce.activeEditor) {
+                    tmce = tinymce.activeEditor;
+                }
+            }
+            if (tmce) {
+                tmce.setContent(suggestion);
+                tmce.fire('change');
+                // Sync back to Elementor model so save picks it up
+                applyToWidget(widgetId, field, suggestion);
+                ok = true;
+            } else {
+                // TinyMCE not ready — fall back to Elementor settings API
+                ok = applyToWidget(widgetId, field, suggestion);
+            }
+        } else {
+            ok = applyToWidget(widgetId, field, suggestion);
+        }
+
         if (ok) {
             $btn.text('✅ Applied').prop('disabled', true);
         } else {
