@@ -711,6 +711,11 @@ class Siloq_Admin {
                             </table>
                             
                             <input type="hidden" name="siloq_show_advanced" value="<?php echo esc_attr($show_advanced); ?>" id="siloq_show_advanced">
+                            <p style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
+                                <button type="submit" name="siloq_save_settings" class="button button-primary">
+                                    <?php _e('Save Advanced Settings', 'siloq-connector'); ?>
+                                </button>
+                            </p>
                         </div>
                     </div>
                 </form>

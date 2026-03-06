@@ -2292,3 +2292,45 @@ button.siloq-syncing {
 .wp-core-ui .button {
     border-radius: 6px !important;
 }
+
+
+/* ── Settings page layout fixes ── */
+.siloq-admin-wrap {
+    max-width: 860px;
+    padding: 0 20px 40px;
+    clear: both;
+    overflow: visible;
+}
+.siloq-admin-wrap .siloq-header {
+    padding: 20px 0 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+.siloq-admin-wrap .siloq-settings-container {
+    max-width: 100%;
+    clear: both;
+}
+.siloq-admin-wrap .siloq-card {
+    margin-bottom: 20px;
+    overflow: hidden;
+    clear: both;
+    position: relative;
+}
+.siloq-connection-banner {
+    clear: both;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+/* Prevent Advanced Settings from being cut off */
+.siloq-advanced-card .siloq-advanced-content {
+    overflow: visible !important;
+}
+.siloq-advanced-card .form-table {
+    width: 100%;
+    table-layout: fixed;
+}
+.siloq-advanced-card .form-table td {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
