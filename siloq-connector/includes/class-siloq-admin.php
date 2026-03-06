@@ -1904,7 +1904,11 @@ if ($has_plan && isset($plan_data['issues'])) {
     <div style="text-align:center;padding:20px 0;color:#6b7280">
       <div style="font-size:28px;margin-bottom:8px">&#128202;</div>
       <div style="font-size:12px;margin-bottom:10px">Connect Google Search Console to see your ranking data</div>
-      <button type="button" class="siloq-btn siloq-btn--primary siloq-gsc-connect-popup" style="font-size:11px" onclick="if(typeof window.siloqOpenGSCPopup==='function'){window.siloqOpenGSCPopup();}">Connect GSC &rarr;</button>
+      <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline;">
+        <?php wp_nonce_field('siloq_gsc_connect_nonce'); ?>
+        <input type="hidden" name="action" value="siloq_gsc_connect">
+        <button type="submit" class="siloq-btn siloq-btn--primary" style="font-size:11px">Connect GSC &rarr;</button>
+      </form>
     </div>
     <?php endif; ?>
   </div>

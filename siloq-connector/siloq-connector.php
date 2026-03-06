@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.105
+* Version: 1.5.106
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.105');
+define('SILOQ_VERSION', '1.5.106');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1843,7 +1843,8 @@ class Siloq_Connector {
         $code = wp_remote_retrieve_response_code($response);
         if ($code >= 400) {
             $body = json_decode(wp_remote_retrieve_body($response), true);
-            wp_send_json_error(array('message' => isset($body['detail']) ? $body['detail'] : 'Sync failed'));
+            $err_msg = isset($body['detail']) ? $body['detail'] : (isset($body['error']) ? $body['error'] : 'GSC sync failed (HTTP ' . $code . ')');
+            wp_send_json_error(array('message' => $err_msg));
         }
 
         $now = current_time('mysql');
