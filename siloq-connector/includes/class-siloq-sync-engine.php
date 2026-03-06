@@ -85,45 +85,62 @@ class Siloq_Sync_Engine {
      * Sync all pages
      */
     public function sync_all_pages($offset = 0, $batch_size = 50) {
-        $args = array(
-            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => array('publish', 'draft'),
-            'posts_per_page' => $batch_size,
-            'offset' => $offset,
-            'orderby' => 'modified',
-            'order' => 'DESC'
-        );
-        
-        $posts = get_posts($args);
+        // BUG 4 FIX: Fetch ALL posts with numberposts=-1 to sync every page
+        $all_posts = get_posts( array(
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields'      => 'ids',
+        ) );
+
         $synced_count = 0;
-        $error_count = 0;
-        $results = array();
-        
-        foreach ($posts as $post) {
-            $result = $this->sync_page($post->ID);
+        $error_count  = 0;
+        $results      = array();
+
+        foreach ($all_posts as $post_id) {
+            $post   = get_post($post_id);
+            $result = $this->sync_page($post_id);
             $results[] = array(
-                'post_id' => $post->ID,
-                'title' => $post->post_title,
-                'result' => $result
+                'post_id' => $post_id,
+                'title'   => $post ? $post->post_title : '',
+                'result'  => $result,
             );
-            
+
             if ($result['success']) {
                 $synced_count++;
             } else {
                 $error_count++;
             }
-            
-            // Small delay to avoid overwhelming the API
+
             usleep(100000); // 0.1 seconds
         }
-        
+
+        // BUG 4 FIX: Schedule auto-analysis for unanalyzed pages
+        $unanalyzed = get_posts( array(
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'fields'      => 'ids',
+            'meta_query'  => array(
+                'relation' => 'AND',
+                array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
+                array( 'key' => '_siloq_analysis_score', 'compare' => 'NOT EXISTS' ),
+            ),
+        ) );
+        if ( ! empty( $unanalyzed ) ) {
+            update_option( 'siloq_analysis_queue_count', count( $unanalyzed ) );
+            if ( ! wp_next_scheduled( 'siloq_analyze_batch' ) ) {
+                wp_schedule_single_event( time() + 30, 'siloq_analyze_batch' );
+            }
+        }
+
         return array(
-            'success' => $synced_count > 0,
-            'synced' => $synced_count,
-            'errors' => $error_count,
-            'total' => count($posts),
-            'results' => $results,
-            'has_more' => count($posts) === $batch_size
+            'success'  => $synced_count > 0,
+            'synced'   => $synced_count,
+            'errors'   => $error_count,
+            'total'    => count($all_posts),
+            'results'  => $results,
+            'has_more' => false, // all pages synced in one pass
         );
     }
     

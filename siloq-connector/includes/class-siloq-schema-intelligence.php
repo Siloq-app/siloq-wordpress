@@ -985,11 +985,47 @@ class Siloq_Schema_Intelligence {
             return $s['@type'] ?? 'Unknown';
         }, $schemas );
 
+        // BUG 3 FIX: Write schema JSON to post meta so it persists in WordPress
+        $schema_json_encoded = wp_json_encode( $schemas, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+        update_post_meta( $post_id, '_siloq_schema_json', wp_json_encode( $schemas ) );
+        $schema_type_str = implode( ', ', $schema_types );
+        update_post_meta( $post_id, '_siloq_schema_type', $schema_type_str );
+        update_post_meta( $post_id, '_siloq_schema_applied', '1' );
+
+        // Confirm schema was saved on the API side
+        $api_confirmed = false;
+        $site_id  = get_option( 'siloq_site_id', '' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
+        $sync_data = get_post_meta( $post_id, '_siloq_sync_data', true );
+        $api_page_id = is_array( $sync_data ) && isset( $sync_data['id'] ) ? $sync_data['id'] : $post_id;
+
+        if ( $site_id && $api_key ) {
+            $confirm_resp = wp_remote_get(
+                "$api_base/sites/$site_id/pages/$api_page_id/analysis/schema/",
+                [
+                    'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Accept' => 'application/json' ],
+                    'timeout' => 10,
+                ]
+            );
+            if ( ! is_wp_error( $confirm_resp ) && wp_remote_retrieve_response_code( $confirm_resp ) >= 200 && wp_remote_retrieve_response_code( $confirm_resp ) < 300 ) {
+                $api_confirmed = true;
+            }
+        }
+
+        if ( ! $api_confirmed ) {
+            wp_send_json_error( [
+                'message' => 'Schema generated and saved locally, but API confirmation failed. Please retry.',
+                'schemas' => $schemas,
+            ] );
+            return;
+        }
+
         $validation = self::validate( $schemas, $entity_profile );
 
         wp_send_json_success( [
             'schemas'       => $schemas,
-            'schema_json'   => wp_json_encode( $schemas, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
+            'schema_json'   => $schema_json_encoded,
             'count'         => count( $schemas ),
             'schema_types'  => $schema_types,
             'page_type'     => self::detect_page_type( $post_id, $page_analysis ),

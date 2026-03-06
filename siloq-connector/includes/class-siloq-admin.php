@@ -2017,6 +2017,14 @@ if ($has_plan && isset($plan_data['issues'])) {
                     </div>
                 </div>
 
+                <?php
+                $queue_count = intval( get_option( 'siloq_analysis_queue_count', 0 ) );
+                if ( $queue_count > 0 ) : ?>
+                <div class="siloq-analysis-queue-banner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:8px 16px;margin-bottom:12px;font-size:13px;color:#92400e;">
+                    &#9203; Analyzing <?php echo intval( $queue_count ); ?> page<?php echo $queue_count > 1 ? 's' : ''; ?> in background...
+                </div>
+                <?php endif; ?>
+
                 <!-- Page cards container -->
                 <div id="siloq-pages-grid" class="siloq-pages-grid">
                     <div class="siloq-pages-loading">

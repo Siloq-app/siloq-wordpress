@@ -340,6 +340,35 @@
       $list.toggleClass('is-open');
       $(this).text($list.hasClass('is-open') ? 'Hide Issues' : 'View Issues');
     });
+
+    // Role dropdown change
+    $(document).on('change', '.siloq-role-select', function () {
+      var $sel = $(this);
+      var pageId = $sel.data('page-id');
+      var role = $sel.val();
+      $sel.prop('disabled', true);
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_set_page_role',
+        nonce: cfg.nonce,
+        page_id: pageId,
+        role: role
+      }, function (res) {
+        $sel.prop('disabled', false);
+        if (res.success) {
+          // Update the badge on the card
+          var $card = $sel.closest('.siloq-page-card');
+          var displayType = role || $card.data('type');
+          $card.data('type', displayType);
+          var $badge = $card.find('.siloq-badge').first();
+          $badge.attr('class', 'siloq-badge siloq-badge--' + (displayType || 'gray'))
+                .text(displayType ? displayType.toUpperCase() : 'AUTO');
+        } else {
+          alert(res.data && res.data.message ? res.data.message : 'Failed to update role.');
+        }
+      }).fail(function () {
+        $sel.prop('disabled', false);
+      });
+    });
   }
 
   function loadPages(append) {
@@ -453,6 +482,21 @@
         + '</div>';
     });
 
+    // Role dropdown
+    var currentRole = page.page_role || '';
+    var roleOpts = [
+      {v: '', l: 'Auto'},
+      {v: 'hub', l: 'Hub'},
+      {v: 'spoke', l: 'Spoke'},
+      {v: 'supporting', l: 'Supporting'},
+      {v: 'unclassified', l: 'Unclassified'}
+    ];
+    var roleSelect = '<select class="siloq-role-select" data-page-id="' + page.id + '" style="font-size:12px;padding:2px 4px;margin-left:8px;">';
+    roleOpts.forEach(function (o) {
+      roleSelect += '<option value="' + o.v + '"' + (currentRole === o.v ? ' selected' : '') + '>' + o.l + '</option>';
+    });
+    roleSelect += '</select>';
+
     return '<div class="siloq-page-card" data-title="' + escAttr(page.title) + '" data-type="' + escAttr(page.page_type) + '">'
       + '<div class="siloq-page-card__top">'
       + '<div class="siloq-page-card__score-ring">'
@@ -464,6 +508,7 @@
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
       + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Open in Elementor and run Analyze."' : '') + (page.page_type === 'pending' ? ' title="Open in Elementor and run Analyze to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : escHtml(page.page_type.toUpperCase())) + '</span>'
+      + roleSelect
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'
       + (pillsHtml ? '<div class="siloq-page-card__issues-pills">' + pillsHtml + '</div>' : '')

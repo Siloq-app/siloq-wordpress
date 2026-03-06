@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.95
+* Version: 1.5.96
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.95');
+define('SILOQ_VERSION', '1.5.96');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -315,6 +315,8 @@ class Siloq_Connector {
         // Schema tab handlers
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
+        // Page role override
+        add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -1460,8 +1462,7 @@ class Siloq_Connector {
 
         $args = array(
             'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'posts_per_page' => 20,
-            'offset'         => $offset,
+            'numberposts'    => -1, // BUG 4 FIX: fetch ALL synced pages, no limit
             'post_status'    => 'publish',
             'orderby'        => 'modified',
             'order'          => 'DESC',
@@ -1508,6 +1509,7 @@ class Siloq_Connector {
                 'edit_url'        => get_edit_post_link($post->ID, 'raw'),
                 'elementor_url'   => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
                 'page_type'       => $page_type,
+                'page_role'       => get_post_meta($post->ID, '_siloq_page_role', true),
                 'score'           => $score,
                 'primary_keyword' => $primary_keyword,
                 'issues'          => array_slice($issues, 0, 10),
@@ -1517,7 +1519,71 @@ class Siloq_Connector {
 
         wp_send_json_success(array(
             'pages'  => $pages,
-            'offset' => $offset + 20,
+            'offset' => 0, // all pages returned at once
+        ));
+    }
+
+    /**
+     * AJAX: Set page role (hub/spoke/supporting/unclassified)
+     */
+    public function ajax_set_page_role() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $page_id = intval($_POST['page_id'] ?? 0);
+        $role    = sanitize_text_field($_POST['role'] ?? '');
+
+        if (!$page_id) {
+            wp_send_json_error(array('message' => 'Missing page_id'));
+            return;
+        }
+
+        $allowed_roles = array('', 'hub', 'spoke', 'supporting', 'unclassified');
+        if (!in_array($role, $allowed_roles, true)) {
+            wp_send_json_error(array('message' => 'Invalid role'));
+            return;
+        }
+
+        // Save to post meta
+        if (empty($role)) {
+            delete_post_meta($page_id, '_siloq_page_role');
+        } else {
+            update_post_meta($page_id, '_siloq_page_role', $role);
+        }
+
+        // Notify API
+        $api_ok   = false;
+        $site_id  = get_option('siloq_site_id', '');
+        $api_key  = get_option('siloq_api_key', '');
+        $api_base = rtrim(get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/');
+        $sync_data    = get_post_meta($page_id, '_siloq_sync_data', true);
+        $api_page_id  = is_array($sync_data) && isset($sync_data['id']) ? $sync_data['id'] : $page_id;
+
+        if ($site_id && $api_key) {
+            $resp = wp_remote_request(
+                "$api_base/sites/$site_id/pages/$api_page_id/",
+                array(
+                    'method'  => 'PATCH',
+                    'headers' => array(
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                    ),
+                    'body'    => wp_json_encode(array(
+                        'page_type_override'       => !empty($role),
+                        'page_type_classification' => $role ?: 'supporting',
+                    )),
+                    'timeout' => 10,
+                )
+            );
+            $api_ok = !is_wp_error($resp) && wp_remote_retrieve_response_code($resp) < 400;
+        }
+
+        wp_send_json_success(array(
+            'role'     => $role,
+            'api_sync' => $api_ok,
         ));
     }
 
@@ -2007,15 +2073,26 @@ class Siloq_Connector {
                 $recommended = (array) $analysis['schema_types'];
             }
 
-            // Schema JSON output
+            // Schema JSON output — check _siloq_schema_json first (persisted), then fall back to suggested
             $schema_json = '';
-            $suggested = get_post_meta($post->ID, '_siloq_suggested_schema', true);
-            if (!empty($suggested)) {
-                $decoded = json_decode($suggested, true);
+            $saved_schema = get_post_meta($post->ID, '_siloq_schema_json', true);
+            if (!empty($saved_schema)) {
+                $decoded = json_decode($saved_schema, true);
                 if (is_array($decoded)) {
                     $schema_json = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
                 }
+            } else {
+                $suggested = get_post_meta($post->ID, '_siloq_suggested_schema', true);
+                if (!empty($suggested)) {
+                    $decoded = json_decode($suggested, true);
+                    if (is_array($decoded)) {
+                        $schema_json = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                    }
+                }
             }
+
+            // If _siloq_schema_applied is set, treat as applied even without API call
+            $schema_applied = get_post_meta($post->ID, '_siloq_schema_applied', true);
 
             // Determine status
             $status = 'none';
@@ -2025,6 +2102,8 @@ class Siloq_Connector {
                 } else {
                     $status = 'applied';
                 }
+            } elseif (!empty($schema_applied) && !empty($schema_json)) {
+                $status = 'applied';
             }
 
             $pages[] = array(
@@ -2205,6 +2284,171 @@ function siloq_output_schema_markup() {
         echo '<script type="application/ld+json">' . wp_json_encode($schema) . '</script>' . "\n";
     }
 }
+
+/**
+ * BUG 4 FIX: Auto-analysis batch cron handler.
+ * Analyzes up to 5 unanalyzed pages per batch, then reschedules if more remain.
+ */
+function siloq_run_analyze_batch() {
+    $post_types = function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post');
+
+    $unanalyzed = get_posts( array(
+        'post_type'   => $post_types,
+        'post_status' => 'publish',
+        'numberposts' => 5,
+        'fields'      => 'ids',
+        'meta_query'  => array(
+            'relation' => 'AND',
+            array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
+            array( 'key' => '_siloq_analysis_score', 'compare' => 'NOT EXISTS' ),
+        ),
+    ) );
+
+    foreach ( $unanalyzed as $post_id ) {
+        $post  = get_post( $post_id );
+        if ( ! $post ) continue;
+
+        $url   = get_permalink( $post_id );
+        $title = $post->post_title;
+        $path  = wp_parse_url( $url, PHP_URL_PATH );
+
+        // Lightweight analysis: check title, meta description, H1 presence
+        $checks = array();
+        $score  = 50; // base score
+
+        // Title check
+        if ( ! empty( $title ) && strlen( $title ) >= 10 ) {
+            $checks['title'] = array( 'status' => 'pass', 'message' => 'Title present' );
+            $score += 10;
+        } else {
+            $checks['title'] = array( 'status' => 'fail', 'message' => 'Title missing or too short' );
+        }
+
+        // Meta description check
+        $meta_desc = get_post_meta( $post_id, '_yoast_wpseo_metadesc', true )
+                  ?: get_post_meta( $post_id, '_rank_math_description', true );
+        if ( ! empty( $meta_desc ) ) {
+            $checks['meta_description'] = array( 'status' => 'pass', 'message' => 'Meta description present' );
+            $score += 10;
+        } else {
+            $checks['meta_description'] = array( 'status' => 'fail', 'message' => 'Meta description missing' );
+        }
+
+        // H1 presence (check post content)
+        $content = $post->post_content;
+        if ( preg_match( '/<h1[^>]*>/i', $content ) || preg_match( '/<!-- wp:heading {"level":1}/', $content ) ) {
+            $checks['h1'] = array( 'status' => 'pass', 'message' => 'H1 heading found' );
+            $score += 10;
+        } else {
+            $checks['h1'] = array( 'status' => 'fail', 'message' => 'No H1 heading found' );
+        }
+
+        // Content length check
+        $text_len = strlen( wp_strip_all_tags( $content ) );
+        if ( $text_len > 300 ) {
+            $checks['content_length'] = array( 'status' => 'pass', 'message' => 'Content has ' . $text_len . ' characters' );
+            $score += 10;
+        } else {
+            $checks['content_length'] = array( 'status' => 'fail', 'message' => 'Content too thin (' . $text_len . ' chars)' );
+        }
+
+        $score = min( 100, $score );
+
+        // Auto-detect page type (skip if manual role already set)
+        $existing_role = get_post_meta( $post_id, '_siloq_page_role', true );
+        $page_type = 'supporting';
+        $path_lower = strtolower( $path );
+        $title_lower = strtolower( $title );
+
+        // Never-orphan pages
+        $never_orphan = preg_match( '#^/$#', $path_lower )
+            || preg_match( '#/(contact|about|privacy|terms|disclaimer)/?$#i', $path_lower );
+
+        if ( preg_match( '#^/$#', $path_lower ) ) {
+            $page_type = 'hub';
+        } elseif ( preg_match( '#/(services?|service-areas?)/?$#', $path_lower ) ) {
+            $page_type = 'hub';
+        } elseif ( $post->post_parent ) {
+            $parent_path = wp_parse_url( get_permalink( $post->post_parent ), PHP_URL_PATH );
+            if ( preg_match( '#/(services?|service-areas?)/?$#', strtolower( $parent_path ) ) ) {
+                $page_type = 'spoke';
+            }
+        }
+
+        // City name patterns → spoke (if site has a services/service-areas page)
+        $city_pattern = '#/(houston|dallas|austin|san-antonio|fort-worth|arlington|plano|irving|frisco|mckinney|denton|katy|sugar-land|the-woodlands|spring|pearland|league-city|pasadena|beaumont|midland|odessa|lubbock|amarillo|el-paso|corpus-christi|brownsville|killeen|waco|tyler|longview|round-rock|pflugerville|georgetown|cedar-park|new-york|los-angeles|chicago|phoenix|philadelphia|jacksonville|columbus|charlotte|indianapolis|denver|seattle|nashville|oklahoma-city|portland|las-vegas|memphis|louisville|baltimore|milwaukee|albuquerque|tucson|fresno|sacramento|mesa|kansas-city|atlanta|omaha|colorado-springs|raleigh|miami|tampa|orlando|minneapolis|cleveland|pittsburgh|st-louis|cincinnati)/?$#i';
+        if ( preg_match( $city_pattern, $path_lower ) ) {
+            $page_type = 'spoke';
+        }
+
+        // Service keywords in URL/title → supporting (if not already hub)
+        $service_kws = '#(electrician|electrical|panel|wiring|ev[- ]charg|generator|plumb|hvac|roof|repair|install|maintenance|remodel)#i';
+        if ( $page_type === 'supporting' && ( preg_match( $service_kws, $path_lower ) || preg_match( $service_kws, $title_lower ) ) ) {
+            $page_type = 'supporting';
+        }
+
+        // Check if this page is a parent of 3+ children
+        $child_count = count( get_children( array( 'post_parent' => $post_id, 'post_type' => $post_types, 'numberposts' => 4 ) ) );
+        if ( $child_count >= 3 ) {
+            $page_type = 'hub';
+        }
+
+        // Orphan detection: no parent, not a hub, not never-orphan
+        if ( $page_type === 'supporting' && ! $never_orphan && ! $post->post_parent ) {
+            // Check if any nav menu contains this page
+            $in_menu = false;
+            $menus = get_nav_menu_locations();
+            foreach ( $menus as $menu_id ) {
+                $items = wp_get_nav_menu_items( $menu_id );
+                if ( is_array( $items ) ) {
+                    foreach ( $items as $item ) {
+                        if ( intval( $item->object_id ) === $post_id ) {
+                            $in_menu = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if ( ! $in_menu ) {
+                $page_type = 'orphan';
+            }
+        }
+
+        // If manual role exists, use it instead
+        if ( ! empty( $existing_role ) ) {
+            $page_type = $existing_role;
+        }
+
+        update_post_meta( $post_id, '_siloq_analysis_score', $score );
+        update_post_meta( $post_id, '_siloq_analysis_data', wp_json_encode( array(
+            'score'  => $score,
+            'checks' => $checks,
+            'page_type_classification' => $page_type,
+            'auto_analyzed' => true,
+        ) ) );
+        update_post_meta( $post_id, '_siloq_page_type_detected', $page_type );
+    }
+
+    // Check remaining and reschedule if needed
+    $remaining = get_posts( array(
+        'post_type'   => $post_types,
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'fields'      => 'ids',
+        'meta_query'  => array(
+            'relation' => 'AND',
+            array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
+            array( 'key' => '_siloq_analysis_score', 'compare' => 'NOT EXISTS' ),
+        ),
+    ) );
+    $remaining_count = count( $remaining );
+    update_option( 'siloq_analysis_queue_count', $remaining_count );
+
+    if ( $remaining_count > 0 ) {
+        wp_schedule_single_event( time() + 120, 'siloq_analyze_batch' );
+    }
+}
+add_action( 'siloq_analyze_batch', 'siloq_run_analyze_batch' );
 
 /**
  * Initialize the plugin
