@@ -180,7 +180,17 @@ class Siloq_Admin {
                 ?>
                 <div class="siloq-card" style="margin-bottom:20px;">
                     <h2><?php _e('Google Search Console', 'siloq-connector'); ?></h2>
-                    <?php if ($gsc_is_connected): ?>
+                    <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
+                        <div id="siloq-gsc-property-picker" class="notice notice-info" style="padding:16px;margin:12px 0;">
+                            <h3 style="margin:0 0 8px;">&#9989; Google account connected &mdash; choose your property</h3>
+                            <p style="color:#555;margin:0 0 12px;">Select which Search Console property to use for this site:</p>
+                            <div id="siloq-gsc-property-list">Loading properties...</div>
+                            <p style="margin:12px 0 0;">
+                                <button type="button" id="siloq-gsc-confirm-property" class="button button-primary" disabled>Confirm Connection</button>
+                                <button type="button" id="siloq-gsc-cancel-property" class="button" style="margin-left:8px;">Cancel</button>
+                            </p>
+                        </div>
+                    <?php elseif ($gsc_is_connected): ?>
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
                             <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;flex-shrink:0;border-radius:50%;"></span>
                             <strong><?php _e('Connected', 'siloq-connector'); ?></strong>
@@ -1185,6 +1195,56 @@ class Siloq_Admin {
                     else gscMsg('Disconnect failed.', '#dc2626');
                 });
             });
+
+            // ── GSC Property Picker (Settings page) ──
+            <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
+            (function(){
+                var $list = $('#siloq-gsc-property-list');
+                var $confirm = $('#siloq-gsc-confirm-property');
+                $.post(ajaxUrl, {action: 'siloq_gsc_get_properties', nonce: nonce}, function(r) {
+                    if (!r.success || !r.data || !r.data.properties || r.data.properties.length === 0) {
+                        $list.html('<p style="color:#dc2626;">Could not load properties. ' + (r.data && r.data.message ? r.data.message : 'Try again.') + '</p>');
+                        return;
+                    }
+                    var props = r.data.properties;
+                    var homeUrl = (r.data.home_url || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
+                    var html = '';
+                    for (var i = 0; i < props.length; i++) {
+                        var p = typeof props[i] === 'string' ? props[i] : (props[i].siteUrl || props[i].url || '');
+                        var normalized = p.replace(/^sc-domain:/, '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
+                        var checked = (normalized === homeUrl) ? ' checked' : '';
+                        html += '<label style="display:block;padding:6px 0;cursor:pointer;"><input type="radio" name="siloq_gsc_prop" value="' + p.replace(/"/g, '&quot;') + '"' + checked + ' style="margin-right:8px;"> ' + p.replace(/</g, '&lt;') + '</label>';
+                    }
+                    $list.html(html);
+                    if ($list.find('input:checked').length) $confirm.prop('disabled', false);
+                }).fail(function(){ $list.html('<p style="color:#dc2626;">Network error loading properties.</p>'); });
+
+                $list.on('change', 'input[name="siloq_gsc_prop"]', function() {
+                    $confirm.prop('disabled', false);
+                });
+
+                $confirm.on('click', function() {
+                    var selected = $list.find('input[name="siloq_gsc_prop"]:checked').val();
+                    if (!selected) return;
+                    $(this).prop('disabled', true).text('Saving...');
+                    $.post(ajaxUrl, {action: 'siloq_gsc_save_property', nonce: nonce, property: selected}, function(r) {
+                        if (r.success) {
+                            gscMsg('Connected to ' + (r.data.property || selected), '#16a34a');
+                            setTimeout(function(){ location.reload(); }, 800);
+                        } else {
+                            gscMsg(r.data && r.data.message ? r.data.message : 'Save failed.', '#dc2626');
+                            $confirm.prop('disabled', false).text('Confirm Connection');
+                        }
+                    }).fail(function(){ gscMsg('Network error.', '#dc2626'); $confirm.prop('disabled', false).text('Confirm Connection'); });
+                });
+
+                $('#siloq-gsc-cancel-property').on('click', function() {
+                    $.post(ajaxUrl, {action: 'siloq_gsc_disconnect', nonce: nonce}, function() {
+                        location.reload();
+                    });
+                });
+            })();
+            <?php endif; ?>
         })(jQuery);
         </script>
         <?php
@@ -2123,7 +2183,17 @@ if ($has_plan && isset($plan_data['issues'])) {
             <div id="siloq-tab-gsc" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
                 <div class="siloq-card">
                     <div class="siloq-gsc-status" style="text-align:center;padding:32px 16px;">
-                        <?php if ($gsc_connected): ?>
+                        <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
+                            <div id="siloq-gsc-property-picker-tab" class="notice notice-info" style="padding:16px;margin:12px 0;text-align:left;">
+                                <h3 style="margin:0 0 8px;">&#9989; Google account connected &mdash; choose your property</h3>
+                                <p style="color:#555;margin:0 0 12px;">Select which Search Console property to use for this site:</p>
+                                <div id="siloq-gsc-property-list-tab">Loading properties...</div>
+                                <p style="margin:12px 0 0;">
+                                    <button type="button" id="siloq-gsc-confirm-property-tab" class="siloq-btn siloq-btn--primary" disabled>Confirm Connection</button>
+                                    <button type="button" id="siloq-gsc-cancel-property-tab" class="siloq-btn siloq-btn--outline" style="margin-left:8px;">Cancel</button>
+                                </p>
+                            </div>
+                        <?php elseif ($gsc_connected): ?>
                             <div class="siloq-gsc-status__icon">&#9989;</div>
                             <h3>Google Search Console Connected</h3>
                             <dl class="siloq-gsc-status__details">
@@ -2279,6 +2349,56 @@ if ($has_plan && isset($plan_data['issues'])) {
                             else tabMsg('Failed','error');
                         });
                     });
+
+                    // ── GSC Property Picker (Dashboard tab) ──
+                    <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
+                    (function(){
+                        var $list = $('#siloq-gsc-property-list-tab');
+                        var $confirm = $('#siloq-gsc-confirm-property-tab');
+                        $.post(ajaxUrl, {action: 'siloq_gsc_get_properties', nonce: nonce}, function(r) {
+                            if (!r.success || !r.data || !r.data.properties || r.data.properties.length === 0) {
+                                $list.html('<p style="color:#dc2626;">Could not load properties. ' + (r.data && r.data.message ? r.data.message : 'Try again.') + '</p>');
+                                return;
+                            }
+                            var props = r.data.properties;
+                            var homeUrl = (r.data.home_url || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
+                            var html = '';
+                            for (var i = 0; i < props.length; i++) {
+                                var p = typeof props[i] === 'string' ? props[i] : (props[i].siteUrl || props[i].url || '');
+                                var normalized = p.replace(/^sc-domain:/, '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/+$/, '');
+                                var checked = (normalized === homeUrl) ? ' checked' : '';
+                                html += '<label style="display:block;padding:6px 0;cursor:pointer;"><input type="radio" name="siloq_gsc_prop_tab" value="' + p.replace(/"/g, '&quot;') + '"' + checked + ' style="margin-right:8px;"> ' + p.replace(/</g, '&lt;') + '</label>';
+                            }
+                            $list.html(html);
+                            if ($list.find('input:checked').length) $confirm.prop('disabled', false);
+                        }).fail(function(){ $list.html('<p style="color:#dc2626;">Network error loading properties.</p>'); });
+
+                        $list.on('change', 'input[name="siloq_gsc_prop_tab"]', function() {
+                            $confirm.prop('disabled', false);
+                        });
+
+                        $confirm.on('click', function() {
+                            var selected = $list.find('input[name="siloq_gsc_prop_tab"]:checked').val();
+                            if (!selected) return;
+                            $(this).prop('disabled', true).text('Saving...');
+                            $.post(ajaxUrl, {action: 'siloq_gsc_save_property', nonce: nonce, property: selected}, function(r) {
+                                if (r.success) {
+                                    tabMsg('Connected to ' + (r.data.property || selected), 'success');
+                                    setTimeout(function(){ location.reload(); }, 800);
+                                } else {
+                                    tabMsg(r.data && r.data.message ? r.data.message : 'Save failed.', 'error');
+                                    $confirm.prop('disabled', false).text('Confirm Connection');
+                                }
+                            }).fail(function(){ tabMsg('Network error.', 'error'); $confirm.prop('disabled', false).text('Confirm Connection'); });
+                        });
+
+                        $('#siloq-gsc-cancel-property-tab').on('click', function() {
+                            $.post(ajaxUrl, {action: 'siloq_gsc_disconnect', nonce: nonce}, function() {
+                                location.reload();
+                            });
+                        });
+                    })();
+                    <?php endif; ?>
                 });
             </script>
         </div>

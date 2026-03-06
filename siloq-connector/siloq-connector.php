@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.96
+* Version: 1.5.99
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.96');
+define('SILOQ_VERSION', '1.5.99');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -308,6 +308,8 @@ class Siloq_Connector {
         add_action('admin_init', array($this, 'handle_gsc_oauth_return'));
         add_action('wp_ajax_siloq_gsc_sync', array($this, 'ajax_gsc_sync'));
         add_action('wp_ajax_siloq_gsc_disconnect', array($this, 'ajax_gsc_disconnect'));
+        add_action('wp_ajax_siloq_gsc_get_properties', array($this, 'ajax_gsc_get_properties'));
+        add_action('wp_ajax_siloq_gsc_save_property', array($this, 'ajax_gsc_save_property'));
         // Onboarding wizard handlers
         add_action('wp_ajax_siloq_wizard_connect', array($this, 'ajax_wizard_connect'));
         add_action('wp_ajax_siloq_wizard_save_profile', array($this, 'ajax_wizard_save_profile'));
@@ -1609,36 +1611,10 @@ class Siloq_Connector {
         $result = sanitize_text_field($_GET['siloq_gsc']);
 
         if ($result === 'connected') {
-            // Confirm connection with API
-            $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
-            $api_key = get_option('siloq_api_key', '');
-            $site_id = get_option('siloq_site_id', '');
-
-            if ($api_key && $site_id) {
-                $resp = wp_remote_get(
-                    trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/status/',
-                    array('headers' => array('Authorization' => 'Bearer ' . $api_key), 'timeout' => 15)
-                );
-                if (!is_wp_error($resp) && wp_remote_retrieve_response_code($resp) === 200) {
-                    $body = json_decode(wp_remote_retrieve_body($resp), true);
-                    if (!empty($body['connected'])) {
-                        update_option('siloq_gsc_connected', 'yes');
-                        update_option('siloq_gsc_property', sanitize_text_field($body['property'] ?? ''));
-                        if (!empty($body['account_email'])) {
-                            update_option('siloq_gsc_account_email', sanitize_text_field($body['account_email']));
-                        }
-                        if (!empty($body['last_sync'])) {
-                            update_option('siloq_gsc_last_sync', sanitize_text_field($body['last_sync']));
-                        }
-                        add_action('admin_notices', function() {
-                            echo '<div class="notice notice-success is-dismissible"><p>✅ <strong>Google Search Console connected!</strong> Siloq will now use GSC data to prioritize your SEO recommendations.</p></div>';
-                        });
-                    }
-                }
-            }
-            // Redirect to clean URL (remove ?siloq_gsc param)
+            // Don't immediately save connection — let user pick the right GSC property first
+            update_option('siloq_gsc_needs_property_selection', 'yes');
+            // Redirect to settings GSC tab (clean URL, no siloq_gsc param)
             if (!headers_sent()) {
-                $clean_url = remove_query_arg(array('siloq_gsc', 'gsc_error'), wp_get_referer() ?: admin_url('admin.php?page=siloq-settings&tab=gsc'));
                 wp_safe_redirect(admin_url('admin.php?page=siloq-settings&tab=gsc'));
                 exit;
             }
@@ -1897,8 +1873,92 @@ class Siloq_Connector {
         delete_option('siloq_gsc_clicks');
         delete_option('siloq_gsc_clicks_28d');
         delete_option('siloq_gsc_avg_position');
+        delete_option('siloq_gsc_needs_property_selection');
 
         wp_send_json_success(array('disconnected' => true));
+    }
+
+    /**
+     * AJAX: Get available GSC properties for the connected Google account
+     */
+    public function ajax_gsc_get_properties() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_send_json_error(array('message' => 'Plugin not connected.'));
+        }
+
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/properties/',
+            array(
+                'headers' => array('Authorization' => 'Bearer ' . $api_key, 'Accept' => 'application/json'),
+                'timeout' => 15,
+            )
+        );
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => $response->get_error_message()));
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code >= 400) {
+            $err = isset($body['error']) ? $body['error'] : (isset($body['detail']) ? $body['detail'] : 'HTTP ' . $code);
+            wp_send_json_error(array('message' => 'API error: ' . $err));
+        }
+
+        $properties = isset($body['properties']) ? $body['properties'] : (is_array($body) ? $body : array());
+        wp_send_json_success(array('properties' => $properties, 'home_url' => home_url()));
+    }
+
+    /**
+     * AJAX: Save selected GSC property
+     */
+    public function ajax_gsc_save_property() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'), 403);
+        }
+
+        $property = isset($_POST['property']) ? sanitize_text_field($_POST['property']) : '';
+        if (empty($property)) {
+            wp_send_json_error(array('message' => 'No property selected.'));
+        }
+
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
+
+        // Save to WP options
+        update_option('siloq_gsc_property', $property);
+        update_option('siloq_gsc_connected', 'yes');
+        delete_option('siloq_gsc_needs_property_selection');
+
+        // Tell the API which property was selected
+        if (!empty($api_key) && !empty($site_id)) {
+            wp_remote_request(
+                trailingslashit($api_url) . 'sites/' . $site_id . '/',
+                array(
+                    'method'  => 'PATCH',
+                    'headers' => array(
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                    ),
+                    'body'    => wp_json_encode(array('gsc_site_url' => $property)),
+                    'timeout' => 15,
+                )
+            );
+        }
+
+        wp_send_json_success(array('property' => $property));
     }
 
     /**
