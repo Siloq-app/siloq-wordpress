@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.123
+* Version: 1.5.124
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.123');
+define('SILOQ_VERSION', '1.5.124');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1508,53 +1508,186 @@ class Siloq_Connector {
             if (!empty($city)) $cities[] = $city;
         }
 
-        $phone_html = $biz_phone ? ' Call us at <strong>' . esc_html($biz_phone) . '</strong> to get started.' : '';
+        $phone_html = $biz_phone ? ' Call <strong>' . esc_html($biz_phone) . '</strong>' : '';
+        $service_label = !empty($services) ? strtolower($services[0]) : 'electrical services';
 
         if ($draft_type === 'service-areas') {
-            // Service Areas hub page
-            $city_list = '';
-            if (!empty($cities)) {
-                $city_list = '<ul>';
-                foreach ($cities as $city) {
-                    $city_list .= '<li><strong>' . esc_html($city) . '</strong> — ' . esc_html($biz_name) . ' serves ' . esc_html($city) . ' with the same team and standards as our home base.</li>';
-                }
-                $city_list .= '</ul>';
-            }
-            return '<p>' . esc_html($biz_name) . ' is proud to serve homeowners and businesses across the greater ' . esc_html($biz_city . ($biz_state ? ', ' . $biz_state : '')) . ' area. No matter where you are in our service area, you get the same experienced team, the same quality work, and the same commitment to getting it right the first time.</p>'
-                . "\n\n" . ($city_list ?: '<p><!-- Add your service area cities here --></p>')
-                . "\n\n" . '<p>Every community we serve gets our full attention.' . $phone_html . '</p>';
+            return $this->generate_service_areas_content($biz_name, $biz_city, $biz_state, $biz_phone, $cities, $service_label);
         }
 
         if ($draft_type === 'service') {
-            // Service page — extract service name from title
-            return '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html(strtolower($title)) . ' services in ' . esc_html($biz_city . ($biz_state ? ', ' . $biz_state : '')) . ' and surrounding areas. Our licensed team brings years of hands-on experience to every job.</p>'
-                . "\n\n" . '<h2>What to Expect</h2>'
-                . "\n" . '<ul>'
-                . "\n" . '<li><!-- Add specific detail about your process --></li>'
-                . "\n" . '<li><!-- Add another key point --></li>'
-                . "\n" . '<li><!-- Add what sets you apart --></li>'
-                . "\n" . '</ul>'
-                . "\n\n" . '<h2>Why Choose ' . esc_html($biz_name) . '?</h2>'
-                . "\n" . '<p><!-- Describe your experience, licensing, or unique advantage here --></p>'
-                . "\n\n" . '<p>Ready to get started?' . $phone_html . '</p>';
+            return $this->generate_service_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services);
         }
 
         if ($draft_type === 'city') {
-            // City landing page — extract city name from title
-            $city_match = array();
-            preg_match('/^(.*?)(?:,?\s+[A-Z]{2})?\s+(?:electrician|electric|plumb|hvac|roof|service|contractor)/i', $title, $city_match);
-            $city_name = !empty($city_match[1]) ? trim($city_match[1]) : $title;
-            $service_label = !empty($services) ? $services[0] : 'services';
-            return '<p>' . esc_html($biz_name) . ' serves ' . esc_html($city_name) . ' with reliable, licensed ' . esc_html(strtolower($service_label)) . '. When you need work done right, our team comes to you — same-day availability and upfront pricing.</p>'
-                . "\n\n" . '<h2>Services Available in ' . esc_html($city_name) . '</h2>'
-                . "\n" . '<ul>'
-                . (!empty($services) ? "\n" . implode('', array_map(function($s){ return '<li>' . esc_html($s) . '</li>'; }, $services)) : "\n<li><!-- Add services --></li>")
-                . "\n" . '</ul>'
-                . "\n\n" . '<p>We\'ve served the ' . esc_html($city_name) . ' area for years.' . $phone_html . '</p>';
+            return $this->generate_city_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services);
         }
 
-        // Generic fallback
         return '<p><!-- Add your content for ' . esc_html($title) . ' here. --></p>';
+    }
+
+    /**
+     * Build a city-name → page-URL map from synced WP pages.
+     * Used to hyperlink city names to their city landing pages.
+     */
+    private function get_city_page_url_map() {
+        $map = array(); // 'Kansas City' => 'https://...'
+        $posts = get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'post_status'    => 'publish',
+            'posts_per_page' => 200,
+            'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+        ));
+        $state_abbrs = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC';
+        foreach ($posts as $p) {
+            $t = $p->post_title;
+            // Extract city name: "Electrician Smithville, MO" → "Smithville"
+            //                    "Smithville, MO Electrician" → "Smithville"
+            // Strip service keywords and state abbreviations, keep city name
+            $clean = preg_replace('/\b(' . $state_abbrs . ')\b/i', '', $t);
+            $clean = preg_replace('/\b(electrician|electric|plumb|hvac|roof|repair|install|service|services|clean|contractor|licensed|serving)\b/i', '', $clean);
+            $clean = trim(preg_replace('/[,\s]+/', ' ', $clean));
+            if (!empty($clean) && strlen($clean) > 2) {
+                $map[$clean] = get_permalink($p->ID);
+                // Also map the full raw title minus state/service in lowercase
+                $map[strtolower($clean)] = get_permalink($p->ID);
+            }
+        }
+        return $map;
+    }
+
+    /**
+     * Try to generate content via Anthropic Claude (direct BYOK fallback while
+     * Siloq API suggest-content endpoint is being built by Ahmad).
+     * Returns generated HTML or empty string on failure.
+     */
+    private function call_claude_for_content($system, $user_prompt) {
+        $key = get_option('siloq_anthropic_api_key', '');
+        if (empty($key)) return '';
+        $resp = wp_remote_post('https://api.anthropic.com/v1/messages', array(
+            'timeout' => 60,
+            'headers' => array(
+                'x-api-key'         => $key,
+                'anthropic-version' => '2023-06-01',
+                'content-type'      => 'application/json',
+            ),
+            'body' => wp_json_encode(array(
+                'model'      => 'claude-sonnet-4-6',
+                'max_tokens' => 2048,
+                'system'     => $system,
+                'messages'   => array(array('role' => 'user', 'content' => $user_prompt)),
+            )),
+        ));
+        if (is_wp_error($resp) || wp_remote_retrieve_response_code($resp) !== 200) return '';
+        $body = json_decode(wp_remote_retrieve_body($resp), true);
+        return $body['content'][0]['text'] ?? '';
+    }
+
+    private function generate_service_areas_content($biz_name, $biz_city, $biz_state, $biz_phone, $cities, $service_label) {
+        // Build city → URL map from synced pages
+        $city_url_map = $this->get_city_page_url_map();
+
+        // Split cities into MO / KS / Other groups
+        $mo_cities = $ks_cities = $other_cities = array();
+        foreach ($cities as $city) {
+            if (preg_match('/,\s*MO$/i', $city))      $mo_cities[]    = $city;
+            elseif (preg_match('/,\s*KS$/i', $city))  $ks_cities[]    = $city;
+            else                                        $other_cities[] = $city;
+        }
+
+        // Try Claude first for proper unique descriptions
+        $anthropic_key = get_option('siloq_anthropic_api_key', '');
+        if (!empty($anthropic_key) && !empty($cities)) {
+            $city_url_json = wp_json_encode($city_url_map);
+            $cities_list   = implode(', ', $cities);
+            $prompt = "Write a Service Areas hub page for {$biz_name}, a licensed electrician in {$biz_city}, {$biz_state}.\n\n"
+                . "Phone: {$biz_phone}\nCities served: {$cities_list}\n\n"
+                . "STRUCTURE REQUIRED (3 layers):\n\n"
+                . "LAYER 1 — Answer-First (first paragraph, ~60 words):\n"
+                . "One declarative sentence: who serves this area, where, what type of work. "
+                . "Then 2 sentences establishing entity: years/experience, license status, residential + commercial scope. "
+                . "Must include the keyword 'licensed electrician' and 'Kansas City metro area' in the first 100 words.\n\n"
+                . "LAYER 2 — SEO body:\n"
+                . "Group cities under H2 headings by state: 'Kansas City Metro — Missouri Communities', 'Kansas City Metro — Kansas Communities'. "
+                . "Each city gets ONE sentence that is UNIQUE to that city — reference actual characteristics (suburb vs downtown, residential density, commercial mix, proximity to KC). "
+                . "NEVER use the phrase 'same team and standards as our home base' or any repeated phrase. "
+                . "Each city name that has a URL in this map must be an HTML hyperlink: {$city_url_json}. "
+                . "Cities with no URL in the map should NOT be linked — just plain text.\n\n"
+                . "LAYER 3 — CTA closing paragraph:\n"
+                . "Specific: mention Johnson County KS and the KC metro by name. Include phone as a tel: link. "
+                . "One sentence about what to expect (free estimate, licensed, insured).\n\n"
+                . "Return valid HTML only. Use <p>, <h2>, <ul>, <li>, <a href=\"...\"> tags. No markdown. No code fences.";
+
+            $system = "You are an expert local SEO copywriter specializing in home services businesses. "
+                . "You write content that passes Google's information gain test: every city description must be meaningfully different. "
+                . "Never use template phrases. Always return valid HTML.";
+
+            $ai_content = $this->call_claude_for_content($system, $prompt);
+            if (!empty($ai_content)) {
+                return $ai_content;
+            }
+        }
+
+        // Fallback: structured template WITH internal links, no repeated descriptions
+        // Each city gets a unique placeholder that's clearly editable, not fake content
+        $helper = function($city_list_arr) use ($biz_name, $city_url_map) {
+            if (empty($city_list_arr)) return '';
+            $out = '<ul>';
+            foreach ($city_list_arr as $city) {
+                // Extract clean city name for URL map lookup
+                $clean_city = trim(preg_replace('/,\s*(MO|KS|[A-Z]{2})$/i', '', $city));
+                $url = $city_url_map[$clean_city] ?? $city_url_map[strtolower($clean_city)] ?? '';
+                $city_link = $url
+                    ? '<a href="' . esc_url($url) . '"><strong>' . esc_html($city) . '</strong></a>'
+                    : '<strong>' . esc_html($city) . '</strong>';
+                $out .= '<li>' . $city_link . ' — <em>[Add a unique 1-sentence description of why ' . esc_html($biz_name) . ' serves this community and what makes it distinct]</em></li>';
+            }
+            $out .= '</ul>';
+            return $out;
+        };
+
+        $mo_block    = !empty($mo_cities)    ? '<h2>Kansas City Metro — Missouri Communities</h2>' . "\n" . $helper($mo_cities)    : '';
+        $ks_block    = !empty($ks_cities)    ? '<h2>Kansas City Metro — Kansas Communities</h2>'  . "\n" . $helper($ks_cities)    : '';
+        $other_block = !empty($other_cities) ? '<h2>Additional Service Areas</h2>'                . "\n" . $helper($other_cities) : '';
+
+        $tel_link = $biz_phone ? '<a href="tel:' . preg_replace('/\D/', '', $biz_phone) . '">' . esc_html($biz_phone) . '</a>' : '[phone]';
+
+        return '<p>' . esc_html($biz_name) . ' provides licensed electrical services across the Kansas City metro area, serving residential and commercial customers in both Missouri and Kansas. Our licensed, insured electricians bring the same expertise to every community we serve — from panel upgrades to EV charger installations to full rewires.</p>'
+            . "\n\n" . $mo_block
+            . "\n\n" . $ks_block
+            . "\n\n" . $other_block
+            . "\n\n" . '<p>We serve all of Johnson County, KS and the greater Kansas City metro — Missouri and Kansas. Ready to get started? Call ' . $tel_link . ' or use our contact form for a free estimate. Licensed, insured, and locally owned.</p>'
+            . "\n\n" . '<!-- NOTE: City descriptions above are placeholders. Add the Anthropic API key in Siloq Settings to auto-generate unique descriptions for each city, or edit them manually. Each city name linked above connects to its dedicated city page. -->';
+    }
+
+    private function generate_service_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services) {
+        $service_lower = strtolower($title);
+        $location = $biz_city . ($biz_state ? ', ' . $biz_state : '');
+        return '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_lower) . ' in ' . esc_html($location) . ' and surrounding areas. Our licensed team delivers reliable results on every job — residential and commercial.</p>'
+            . "\n\n" . '<h2>What\'s Included</h2>'
+            . "\n" . '<ul>'
+            . "\n" . '<li><!-- Describe your specific process or deliverable --></li>'
+            . "\n" . '<li><!-- What makes your approach different --></li>'
+            . "\n" . '<li><!-- Any warranty, guarantee, or certification relevant to this service --></li>'
+            . "\n" . '</ul>'
+            . "\n\n" . '<h2>Why ' . esc_html($biz_name) . '?</h2>'
+            . "\n" . '<p><!-- Add your licensing details, years of experience, or key differentiator --></p>'
+            . "\n\n" . '<p>Ready to schedule?' . $phone_html . ' for a free estimate.</p>';
+    }
+
+    private function generate_city_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services) {
+        $city_match = array();
+        preg_match('/^(.*?)(?:,?\s+[A-Z]{2})?\s*(?:electrician|electric|plumb|hvac|roof|service|contractor)/i', $title, $city_match);
+        $city_name = !empty($city_match[1]) ? trim($city_match[1]) : $title;
+        $service_label = !empty($services) ? strtolower($services[0]) : 'electrical services';
+        return '<p>' . esc_html($biz_name) . ' serves ' . esc_html($city_name) . ' with reliable, licensed ' . esc_html($service_label) . '. Our team comes to you — same-day availability, upfront pricing, no surprises.</p>'
+            . "\n\n" . '<h2>' . esc_html($service_label ? ucfirst($service_label) : 'Services') . ' in ' . esc_html($city_name) . '</h2>'
+            . "\n" . '<ul>'
+            . (!empty($services) ? "\n" . implode('', array_map(function($s){ return '<li>' . esc_html($s) . '</li>'; }, $services)) : "\n<li><!-- Add services --></li>")
+            . "\n" . '</ul>'
+            . "\n\n" . '<h2>Why Choose ' . esc_html($biz_name) . ' in ' . esc_html($city_name) . '?</h2>'
+            . "\n" . '<p><!-- Add what specifically makes you the right choice for ' . esc_html($city_name) . ' customers --></p>'
+            . "\n\n" . '<p>Serving ' . esc_html($city_name) . ' and the greater ' . esc_html($biz_city) . ' area.' . $phone_html . ' for a free estimate.</p>';
     }
 
     public function ajax_save_roadmap_progress() {

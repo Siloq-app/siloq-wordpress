@@ -393,7 +393,77 @@ class Siloq_Widget_Intelligence {
             }
         }
 
-        // Fallback 3: local rule-based only (no AI available yet)
+        // Fallback 3: Direct Anthropic Claude call (BYOK — key in WP Settings)
+        // Temporary until api.siloq.ai/suggest-content/ is built by Ahmad.
+        $ai_system_prompt = 'You are an expert local SEO copywriter. Rewrite the provided content to improve local SEO. '
+            . 'Rules: (1) Return valid HTML preserving all tags exactly — ul/li in = ul/li out. '
+            . '(2) Never strip HTML tags. (3) Content must be meaningfully different from input. '
+            . '(4) First sentence must contain the primary service keyword. '
+            . '(5) Include city and state naturally. (6) No generic filler — at least one concrete specific detail. '
+            . 'Return only the improved HTML. No explanation. No markdown fences.';
+
+        $anthropic_key = get_option( 'siloq_anthropic_api_key', '' );
+        if ( ! empty( $anthropic_key ) && ! empty( $widget_content ) ) {
+            $ant_resp = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
+                'timeout' => 45,
+                'headers' => [
+                    'x-api-key'         => $anthropic_key,
+                    'anthropic-version' => '2023-06-01',
+                    'content-type'      => 'application/json',
+                ],
+                'body' => wp_json_encode( [
+                    'model'      => 'claude-sonnet-4-6',
+                    'max_tokens' => 1024,
+                    'system'     => $ai_system_prompt,
+                    'messages'   => [ [ 'role' => 'user', 'content' => $edit_instruction ] ],
+                ] ),
+            ] );
+            if ( ! is_wp_error( $ant_resp ) && wp_remote_retrieve_response_code( $ant_resp ) === 200 ) {
+                $ant_body    = json_decode( wp_remote_retrieve_body( $ant_resp ), true );
+                $ant_content = $ant_body['content'][0]['text'] ?? '';
+                if ( ! empty( $ant_content ) ) {
+                    $result = $this->generate_local_suggestion( $payload );
+                    $result['suggested_content'] = $ant_content;
+                    $result['source']            = 'anthropic_byok';
+                    unset( $result['no_suggestion_reason'] );
+                    wp_send_json_success( $result );
+                    return;
+                }
+            }
+        }
+
+        // Fallback 4: OpenAI GPT-4o (DALL-E key reused for text when Anthropic not set)
+        $openai_key = get_option( 'siloq_openai_api_key', '' );
+        if ( ! empty( $openai_key ) && ! empty( $widget_content ) ) {
+            $oai_resp = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
+                'timeout' => 30,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $openai_key,
+                    'Content-Type'  => 'application/json',
+                ],
+                'body' => wp_json_encode( [
+                    'model'    => 'gpt-4o',
+                    'messages' => [
+                        [ 'role' => 'system', 'content' => $ai_system_prompt ],
+                        [ 'role' => 'user',   'content' => $edit_instruction ],
+                    ],
+                ] ),
+            ] );
+            if ( ! is_wp_error( $oai_resp ) && wp_remote_retrieve_response_code( $oai_resp ) === 200 ) {
+                $oai_body    = json_decode( wp_remote_retrieve_body( $oai_resp ), true );
+                $oai_content = $oai_body['choices'][0]['message']['content'] ?? '';
+                if ( ! empty( $oai_content ) ) {
+                    $result = $this->generate_local_suggestion( $payload );
+                    $result['suggested_content'] = $oai_content;
+                    $result['source']            = 'openai_byok';
+                    unset( $result['no_suggestion_reason'] );
+                    wp_send_json_success( $result );
+                    return;
+                }
+            }
+        }
+
+        // Fallback 5: local rule-based only
         wp_send_json_success( $this->generate_local_suggestion( $payload ) );
     }
 
