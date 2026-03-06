@@ -141,8 +141,16 @@ class Siloq_Admin {
         if ( preg_match( '#/(' . $state_abbrs . ')/?$#', $path ) ) {
             return 'spoke';
         }
-        // City-service combo: /city-name-service/ or known city names
-        if ( preg_match( '#/[a-z]+-[a-z]+-(?:electrician|plumb|hvac|roof|repair|install|service|clean|maint|remodel)#', $path ) ) {
+        // City-service combo: any slug ending in a service keyword (handles multi-word city slugs)
+        // e.g. /excelsior-springs-mo-electrician/, /bonner-springs-ks-electrician/
+        if ( preg_match( '#/[a-z]+(?:-[a-z]+)*-(?:electrician|electric|plumb|hvac|roof|repair|install|service|clean|maint|remodel|contractor|landscap|pest|paint|plaster|carpet|gutter|fence|concrete|foundation|waterproof|handyman|general)/?$#', $path ) ) {
+            return 'spoke';
+        }
+        // Title-based: "[City], [State] [Service]" or "[Service] [City], [State]" — classify as spoke
+        $state_abbrs_list = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC';
+        $post_title = get_the_title( $post_id );
+        if ( preg_match( '/\b(' . $state_abbrs_list . ')\b/', $post_title ) &&
+             preg_match( '/\b(electrician|electric|plumb|hvac|roof|repair|install|service|clean|maint|remodel|contractor|landscap|pest|paint|concrete|handyman)\b/i', $post_title ) ) {
             return 'spoke';
         }
         // Known large US cities
@@ -2715,7 +2723,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                                     <p style="color:#666;font-size:13px;margin:0 0 8px;">You have <?php echo intval( $city_count ); ?> city pages with no hub connecting them. They compete instead of reinforcing one authoritative page.</p>
                                     <p style="color:#999;font-size:12px;margin:0 0 4px;"><strong>Recommended URL:</strong> /service-areas/</p>
                                     <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Impact:</strong> High &mdash; affects all <?php echo intval( $city_count ); ?> city pages</p>
-                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( 'Service Areas' ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                    <button onclick="siloqCreateGapDraft(this,'Service Areas','service-areas')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -2725,7 +2733,30 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                             $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
                             if ( ! is_array( $primary_services ) ) { $primary_services = array(); }
 
+                            // Filter out garbage service values: skip anything that looks like an
+                            // extracted title fragment (contains state abbr, ends with "Electrician",
+                            // or is longer than 5 words). Only show clean service names.
+                            $state_abbrs_svc = array('AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC');
+                            $primary_services = array_filter( $primary_services, function( $s ) use ( $state_abbrs_svc ) {
+                                if ( str_word_count( $s ) > 5 ) return false; // too long — likely a title fragment
+                                foreach ( $state_abbrs_svc as $st ) {
+                                    if ( preg_match( '/\b' . $st . '\b/', $s ) ) return false; // contains state abbr
+                                }
+                                return true;
+                            });
+
                             $existing_urls = array_map( function( $p ) { return strtolower( $p['url'] ); }, $page_data );
+
+                            // Extract clean city name from the first city page title
+                            // Title patterns: "Electrician Smithville, MO" or "Smithville, MO Electrician"
+                            $first_city_raw = ! empty( $categorized['cities'] ) ? $categorized['cities'][0]['title'] : '';
+                            $first_city = $first_city_raw;
+                            if ( ! empty( $first_city_raw ) ) {
+                                // Remove trailing service keywords and state abbreviations
+                                $first_city = preg_replace( '/\b(electrician|electric|plumb|hvac|roof|repair|install|service|clean|maint|remodel|contractor|landscap|pest|paint|concrete|handyman|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/i', '', $first_city_raw );
+                                $first_city = trim( preg_replace( '/[,\s]+$/', '', $first_city ) );
+                                if ( empty( $first_city ) ) { $first_city = $first_city_raw; }
+                            }
 
                             foreach ( $primary_services as $service ) :
                                 $service_slug = sanitize_title( $service );
@@ -2735,7 +2766,6 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                                 }
                                 if ( $found ) { continue; }
                                 $has_cards = true;
-                                $first_city = ! empty( $categorized['cities'] ) ? $categorized['cities'][0]['title'] : '';
                                 $card_title = $first_city ? esc_html( $service ) . ' in ' . esc_html( $first_city ) : esc_html( $service );
                             ?>
                             <div class="siloq-action-card" style="border-left:4px solid #3b82f6;background:#eff6ff;border-radius:6px;padding:16px;margin-bottom:12px;">
@@ -2744,7 +2774,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                                     <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $card_title; ?></p>
                                     <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $service ); ?>&rdquo; as a primary service. Adding a dedicated page improves topical authority and gives Google a clear ranking signal.</p>
                                     <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> Sub-page (Transactional)</p>
-                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( $service ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode($service); ?>,'service')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
                                 </div>
                             </div>
                             <?php endforeach; ?>
@@ -2774,7 +2804,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                                     <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $suggested_title; ?></p>
                                     <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $city_name ); ?>&rdquo;. Adding a dedicated city page helps rank for local searches and strengthens your service area coverage.</p>
                                     <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> City Landing Page (Local)</p>
-                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( $city_name . ( $first_service ? ' ' . $first_service : '' ) ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode($suggested_title); ?>,'city')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
                                 </div>
                             </div>
                             <?php endforeach; ?>
@@ -3026,6 +3056,28 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                     var isOpen = wrap.style.maxHeight !== '0px' && wrap.style.maxHeight !== '0';
                     wrap.style.maxHeight = isOpen ? '0' : '500px';
                     chev.classList.toggle('open', !isOpen);
+                }
+
+                // Create draft with generated content (for gap analysis cards)
+                function siloqCreateGapDraft(btn, title, draftType) {
+                    btn.textContent = 'Generating...';
+                    btn.disabled = true;
+                    jQuery.post(ajaxurl, {
+                        action: 'siloq_create_draft_page',
+                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                        title: title,
+                        draft_type: draftType
+                    }, function(r) {
+                        if (r.success && r.data.edit_url) {
+                            btn.textContent = '✓ Draft Created — opening...';
+                            btn.style.background = '#f0fdf4';
+                            btn.style.color = '#16a34a';
+                            setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
+                        } else {
+                            btn.textContent = 'Error — retry';
+                            btn.disabled = false;
+                        }
+                    });
                 }
 
                 // Create draft post from missing spoke card
@@ -4421,7 +4473,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
     /**
      * Check if a title or slug belongs to an internal/system post type.
      */
-    private static function is_internal_post_type_name( $title, $slug ) {
+    public static function is_internal_post_type_name( $title, $slug ) {
         $internal_patterns = array( 'koops', 'grid', 'template', 'listing', 'loop', 'cpt-', 'jet-', 'acf-', 'pods-', 'dynamic-' );
         $internal_slugs    = array( 'attachment', 'revision', 'nav_menu_item' );
 

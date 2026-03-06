@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.120
+* Version: 1.5.121
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.120');
+define('SILOQ_VERSION', '1.5.121');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1192,6 +1192,14 @@ class Siloq_Connector {
         }
 
         foreach ($posts as $post_id) {
+            // Skip JetEngine CPTs and internal post type pages — they must never appear in the architecture map
+            $post_obj = get_post( $post_id );
+            if ( $post_obj && class_exists( 'Siloq_Admin' ) ) {
+                if ( Siloq_Admin::is_internal_post_type_name( strtolower( $post_obj->post_title ), $post_obj->post_name ) ) {
+                    continue;
+                }
+            }
+
             $raw      = get_post_meta($post_id, '_siloq_analysis_data', true);
             $analysis = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : array());
             if (!is_array($analysis)) $analysis = array();
@@ -1454,15 +1462,21 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        $title = sanitize_text_field($_POST['title'] ?? '');
+        $title      = sanitize_text_field($_POST['title'] ?? '');
+        $draft_type = sanitize_text_field($_POST['draft_type'] ?? 'generic'); // service-areas | service | city | generic
         if (empty($title)) {
             wp_send_json_error(array('message' => 'Title required'));
             return;
         }
+
+        // Generate content based on draft type
+        $content = $this->generate_draft_content($title, $draft_type);
+
         $post_id = wp_insert_post(array(
-            'post_title'  => $title,
-            'post_status' => 'draft',
-            'post_type'   => 'page',
+            'post_title'   => $title,
+            'post_content' => $content,
+            'post_status'  => 'draft',
+            'post_type'    => 'page',
         ));
         if (is_wp_error($post_id)) {
             wp_send_json_error(array('message' => $post_id->get_error_message()));
@@ -1472,6 +1486,75 @@ class Siloq_Connector {
             'post_id'  => $post_id,
             'edit_url' => admin_url('post.php?post=' . $post_id . '&action=elementor'),
         ));
+    }
+
+    /**
+     * Generate starter HTML content for a draft page based on type.
+     * Uses business profile data from WP options. No API call required.
+     */
+    private function generate_draft_content($title, $draft_type) {
+        $biz_name    = get_option('siloq_business_name', get_bloginfo('name'));
+        $biz_city    = get_option('siloq_city', '');
+        $biz_state   = get_option('siloq_state', '');
+        $biz_phone   = get_option('siloq_phone', '');
+        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
+        if (!is_array($services)) $services = array();
+        $service_areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+        if (!is_array($service_areas)) $service_areas = array();
+
+        $cities = array();
+        foreach ($service_areas as $entry) {
+            $city = is_array($entry) ? ($entry['city'] ?? '') : $entry;
+            if (!empty($city)) $cities[] = $city;
+        }
+
+        $phone_html = $biz_phone ? ' Call us at <strong>' . esc_html($biz_phone) . '</strong> to get started.' : '';
+
+        if ($draft_type === 'service-areas') {
+            // Service Areas hub page
+            $city_list = '';
+            if (!empty($cities)) {
+                $city_list = '<ul>';
+                foreach ($cities as $city) {
+                    $city_list .= '<li><strong>' . esc_html($city) . '</strong> — ' . esc_html($biz_name) . ' serves ' . esc_html($city) . ' with the same team and standards as our home base.</li>';
+                }
+                $city_list .= '</ul>';
+            }
+            return '<p>' . esc_html($biz_name) . ' is proud to serve homeowners and businesses across the greater ' . esc_html($biz_city . ($biz_state ? ', ' . $biz_state : '')) . ' area. No matter where you are in our service area, you get the same experienced team, the same quality work, and the same commitment to getting it right the first time.</p>'
+                . "\n\n" . ($city_list ?: '<p><!-- Add your service area cities here --></p>')
+                . "\n\n" . '<p>Every community we serve gets our full attention.' . $phone_html . '</p>';
+        }
+
+        if ($draft_type === 'service') {
+            // Service page — extract service name from title
+            return '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html(strtolower($title)) . ' services in ' . esc_html($biz_city . ($biz_state ? ', ' . $biz_state : '')) . ' and surrounding areas. Our licensed team brings years of hands-on experience to every job.</p>'
+                . "\n\n" . '<h2>What to Expect</h2>'
+                . "\n" . '<ul>'
+                . "\n" . '<li><!-- Add specific detail about your process --></li>'
+                . "\n" . '<li><!-- Add another key point --></li>'
+                . "\n" . '<li><!-- Add what sets you apart --></li>'
+                . "\n" . '</ul>'
+                . "\n\n" . '<h2>Why Choose ' . esc_html($biz_name) . '?</h2>'
+                . "\n" . '<p><!-- Describe your experience, licensing, or unique advantage here --></p>'
+                . "\n\n" . '<p>Ready to get started?' . $phone_html . '</p>';
+        }
+
+        if ($draft_type === 'city') {
+            // City landing page — extract city name from title
+            $city_match = array();
+            preg_match('/^(.*?)(?:,?\s+[A-Z]{2})?\s+(?:electrician|electric|plumb|hvac|roof|service|contractor)/i', $title, $city_match);
+            $city_name = !empty($city_match[1]) ? trim($city_match[1]) : $title;
+            $service_label = !empty($services) ? $services[0] : 'services';
+            return '<p>' . esc_html($biz_name) . ' serves ' . esc_html($city_name) . ' with reliable, licensed ' . esc_html(strtolower($service_label)) . '. When you need work done right, our team comes to you — same-day availability and upfront pricing.</p>'
+                . "\n\n" . '<h2>Services Available in ' . esc_html($city_name) . '</h2>'
+                . "\n" . '<ul>'
+                . (!empty($services) ? "\n" . implode('', array_map(function($s){ return '<li>' . esc_html($s) . '</li>'; }, $services)) : "\n<li><!-- Add services --></li>")
+                . "\n" . '</ul>'
+                . "\n\n" . '<p>We\'ve served the ' . esc_html($city_name) . ' area for years.' . $phone_html . '</p>';
+        }
+
+        // Generic fallback
+        return '<p><!-- Add your content for ' . esc_html($title) . ' here. --></p>';
     }
 
     public function ajax_save_roadmap_progress() {
