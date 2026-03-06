@@ -6,6 +6,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.114] â€” 2026-03-06ÂÂ### FixedÂ- **Schema "Staged schema data is invalid." error** â€” Two fixes: (1) `resolve_service_cities()` now JSON-decodes the stored cities array before falling back to explode â€” prevents `["Kansas City"]` being used as the city name (double-encoding bug). (2) `ajax_apply_schema()` falls back to `_siloq_schema_json` if `_siloq_suggested_schema` is missing or undecodable, and as a last resort re-generates schema on the fly rather than showing an error. Adds `error_log` on JSON decode failure for debugging.Â- **Image prompt service label** â€” page title extraction for DALL-E prompt (from v1.5.113, carried forward).ÂÂ
 ## [1.5.113] â€” 2026-03-06
 
 ### Fixed

@@ -880,9 +880,21 @@ class Siloq_Schema_Intelligence {
         if ( empty( $entity_profile['service_cities'] ) ) {
             return [];
         }
-        $cities = is_array( $entity_profile['service_cities'] )
-            ? $entity_profile['service_cities']
-            : explode( ',', $entity_profile['service_cities'] );
+        $raw = $entity_profile['service_cities'];
+
+        if ( is_array( $raw ) ) {
+            $cities = $raw;
+        } else {
+            // Try JSON decode first — service cities are stored as JSON arrays
+            // e.g. '["Kansas City","Excelsior Springs"]' must NOT be exploded raw
+            $decoded = json_decode( $raw, true );
+            if ( json_last_error() === JSON_ERROR_NONE && is_array( $decoded ) ) {
+                $cities = $decoded;
+            } else {
+                // Fallback: plain comma-separated string
+                $cities = explode( ',', $raw );
+            }
+        }
 
         return array_values( array_filter( array_map( 'trim', $cities ) ) );
     }
@@ -1070,17 +1082,30 @@ class Siloq_Schema_Intelligence {
             return;
         }
 
-        // Load staged schemas.
+        // Load staged schemas — try _siloq_suggested_schema first, fall back to _siloq_schema_json.
         $staged_raw = get_post_meta( $post_id, '_siloq_suggested_schema', true );
         if ( empty( $staged_raw ) ) {
-            wp_send_json_error( [ 'message' => 'No staged schema found. Run Generate first.' ] );
+            $staged_raw = get_post_meta( $post_id, '_siloq_schema_json', true );
+        }
+        if ( empty( $staged_raw ) ) {
+            wp_send_json_error( [ 'message' => 'No staged schema found. Click Generate Schema first.' ] );
             return;
         }
 
         $schemas = json_decode( $staged_raw, true );
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            error_log( '[Siloq Schema] json_decode failed on staged schema for post ' . $post_id . ': ' . json_last_error_msg() . ' | raw: ' . substr( $staged_raw, 0, 200 ) );
+        }
         if ( ! is_array( $schemas ) || empty( $schemas ) ) {
-            wp_send_json_error( [ 'message' => 'Staged schema data is invalid.' ] );
-            return;
+            // Last resort: re-generate schema on the fly rather than blocking the user
+            $entity_profile = self::get_entity_profile( $post_id );
+            $schemas        = self::generate( $post_id, $entity_profile, [] );
+            if ( empty( $schemas ) ) {
+                wp_send_json_error( [ 'message' => 'Schema data could not be loaded. Please click Generate Schema again.' ] );
+                return;
+            }
+            // Re-stage the freshly generated schema
+            update_post_meta( $post_id, '_siloq_suggested_schema', wp_json_encode( $schemas ) );
         }
 
         // G4: Validation gate — must pass before writing to active storage.
