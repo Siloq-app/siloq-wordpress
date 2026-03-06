@@ -491,18 +491,26 @@ class Siloq_Admin {
                                     </label>
                                 </th>
                                 <td>
-                                    <?php $openai_api_key = get_option('siloq_openai_api_key', ''); ?>
+                                    <?php
+                                    $openai_api_key = get_option('siloq_openai_api_key', '');
+                                    $oai_saved = !empty($openai_api_key);
+                                    $oai_hint  = $oai_saved ? '●●●●●●●● ' . substr($openai_api_key, -4) . ' — key saved ✓' : '';
+                                    ?>
+                                    <?php if ($oai_saved): ?>
+                                    <p style="margin:0 0 6px;color:#16a34a;font-weight:600;">✓ Key saved (ends in …<?php echo esc_html(substr($openai_api_key, -4)); ?>)</p>
+                                    <?php endif; ?>
                                     <input
-                                        type="password"
+                                        type="text"
                                         id="siloq_openai_api_key"
                                         name="siloq_openai_api_key"
-                                        value="<?php echo esc_attr($openai_api_key); ?>"
+                                        value=""
                                         class="regular-text"
-                                        placeholder="sk-..."
+                                        placeholder="<?php echo $oai_saved ? 'Enter new key to replace saved key' : 'sk-...'; ?>"
                                         autocomplete="off"
+                                        style="font-family:monospace;"
                                     />
                                     <p class="description">
-                                        <?php _e('Required for AI image generation (DALL-E). Also used as fallback for content suggestions until the Siloq API endpoint is ready.', 'siloq-connector'); ?>
+                                        <?php _e('Required for AI image generation (DALL-E). Also used as fallback for content suggestions. Leave blank to keep existing key.', 'siloq-connector'); ?>
                                         <a href="https://platform.openai.com/api-keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
                                     </p>
                                 </td>
@@ -515,18 +523,25 @@ class Siloq_Admin {
                                     </label>
                                 </th>
                                 <td>
-                                    <?php $anthropic_api_key = get_option('siloq_anthropic_api_key', ''); ?>
+                                    <?php
+                                    $anthropic_api_key = get_option('siloq_anthropic_api_key', '');
+                                    $ant_saved = !empty($anthropic_api_key);
+                                    ?>
+                                    <?php if ($ant_saved): ?>
+                                    <p style="margin:0 0 6px;color:#16a34a;font-weight:600;">✓ Key saved (ends in …<?php echo esc_html(substr($anthropic_api_key, -4)); ?>)</p>
+                                    <?php endif; ?>
                                     <input
-                                        type="password"
+                                        type="text"
                                         id="siloq_anthropic_api_key"
                                         name="siloq_anthropic_api_key"
-                                        value="<?php echo esc_attr($anthropic_api_key); ?>"
+                                        value=""
                                         class="regular-text"
-                                        placeholder="sk-ant-..."
+                                        placeholder="<?php echo $ant_saved ? 'Enter new key to replace saved key' : 'sk-ant-...'; ?>"
                                         autocomplete="off"
+                                        style="font-family:monospace;"
                                     />
                                     <p class="description">
-                                        <?php _e('Powers AI content suggestions and draft generation (Claude Sonnet). Used until Siloq API handles this server-side. BYOK — your key, your billing.', 'siloq-connector'); ?>
+                                        <?php _e('Powers AI content suggestions and draft generation (Claude Sonnet). Leave blank to keep existing key.', 'siloq-connector'); ?>
                                         <a href="https://console.anthropic.com/settings/keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
                                     </p>
                                 </td>
@@ -1731,11 +1746,18 @@ class Siloq_Admin {
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
         update_option('siloq_show_advanced', $show_advanced);
         // OpenAI key for DALL-E (client-side image generation)
-        $openai_key_setting = isset($_POST['siloq_openai_api_key']) ? sanitize_text_field($_POST['siloq_openai_api_key']) : '';
-        if (!empty($openai_key_setting)) { update_option('siloq_openai_api_key', $openai_key_setting); }
-        // Anthropic key — temporary BYOK until api.siloq.ai/suggest-content endpoint is live
-        $anthropic_key_setting = isset($_POST['siloq_anthropic_api_key']) ? sanitize_text_field($_POST['siloq_anthropic_api_key']) : '';
-        if (!empty($anthropic_key_setting)) { update_option('siloq_anthropic_api_key', $anthropic_key_setting); }
+        // Only update if non-empty — blank submission means "leave existing key alone"
+        $openai_key_setting = isset($_POST['siloq_openai_api_key']) ? sanitize_text_field(trim($_POST['siloq_openai_api_key'])) : '';
+        if (!empty($openai_key_setting)) {
+            update_option('siloq_openai_api_key', $openai_key_setting);
+            wp_cache_delete('siloq_openai_api_key', 'options');
+        }
+        // Anthropic key — BYOK until api.siloq.ai/suggest-content endpoint is live
+        $anthropic_key_setting = isset($_POST['siloq_anthropic_api_key']) ? sanitize_text_field(trim($_POST['siloq_anthropic_api_key'])) : '';
+        if (!empty($anthropic_key_setting)) {
+            update_option('siloq_anthropic_api_key', $anthropic_key_setting);
+            wp_cache_delete('siloq_anthropic_api_key', 'options');
+        }
 
         // Save content types to sync (Advanced Settings checkboxes)
         if (isset($_POST['siloq_content_types']) && is_array($_POST['siloq_content_types'])) {
