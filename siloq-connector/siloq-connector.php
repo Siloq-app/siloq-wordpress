@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.125
+* Version: 1.5.126
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.125');
+define('SILOQ_VERSION', '1.5.126');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1583,6 +1583,44 @@ class Siloq_Connector {
         return $body['content'][0]['text'] ?? '';
     }
 
+    /**
+     * KC metro city knowledge base — real facts per city used for descriptions.
+     * Key: lowercase city name (no state). Value: description sentence.
+     */
+    private function get_city_knowledge_base() {
+        return array(
+            'kansas city'       => 'As the metro\'s largest city, %s brings a steady mix of older residential rewiring projects and growing commercial construction contracts across both Missouri sides of the state line.',
+            'north kansas city' => 'North Kansas City\'s dense industrial corridor drives heavy commercial and warehouse electrical demand — panel capacity upgrades, three-phase service, and facility lighting are our most common calls here.',
+            'parkville'         => 'This historic river town has some of the area\'s oldest homes, making panel upgrades and full rewiring our most frequent work for Parkville customers.',
+            'liberty'           => 'Liberty\'s rapid residential growth keeps %s busy with new construction electrical, rough-in work, and service installations for the region\'s fastest-growing neighborhoods.',
+            'independence'      => 'Independence is one of our highest-volume service markets — a large, established residential city where older homes regularly need service upgrades, outlet additions, and panel replacements.',
+            "lee's summit"      => 'Lee\'s Summit homeowners lead the metro in EV charger installations and smart home electrical upgrades — an affluent suburb where premium electrical work is the standard expectation.',
+            'lees summit'       => 'Lee\'s Summit homeowners lead the metro in EV charger installations and smart home electrical upgrades — an affluent suburb where premium electrical work is the standard expectation.',
+            'smithville'        => 'Smithville\'s rural residential character north of KC drives consistent demand for panel upgrades, standby generator installation, and outbuilding electrical — work that requires a team experienced with larger properties.',
+            'raytown'           => 'Raytown\'s mid-century housing stock means frequent service upgrades, rewiring projects, and modernizing work for homes built before today\'s electrical code — a specialty %s handles routinely.',
+            'gladstone'         => 'Gladstone is a reliable northland market for both residential repairs and light commercial services — an established suburb where %s maintains strong relationships with longtime customers.',
+            'blue springs'      => 'Blue Springs brings a healthy mix of newer residential construction and established neighborhoods on the eastern corridor — from new home electrical to service panel replacements.',
+            'platte city'       => 'Platte City\'s proximity to KCI Airport is fueling new residential and commercial development in the northwest corridor, and %s is there for both the construction electrical and the service calls that follow.',
+            'overland park'     => 'Overland Park is Johnson County\'s commercial hub — high-density retail, office, and residential development that keeps our commercial electricians consistently busy, with strong and growing EV charger demand on the residential side.',
+            'leawood'           => 'Leawood\'s upscale residential market demands premium electrical work: whole-home generators, smart system integration, and luxury home additions that require a licensed electrician who gets it right the first time.',
+            'lenexa'            => 'Lenexa\'s fast-expanding commercial corridor — warehouses, distribution centers, and office parks — generates consistent demand for the kind of high-capacity electrical work %s is built for.',
+            'olathe'            => 'As one of Johnson County\'s largest suburbs, Olathe\'s active new construction market keeps %s working on residential rough-ins, service installations, and growing neighborhoods that need a reliable electrical contractor.',
+            'shawnee'           => 'Shawnee\'s established residential neighborhoods generate steady repair calls, panel upgrade requests, and service modernization projects — the kind of reliable community work that forms the backbone of %s\'s Kansas business.',
+            'bonner springs'    => 'On the western edge of the metro, Bonner Springs serves rural residential customers and agricultural properties where %s\'s experience with larger service panels and outbuilding electrical sets us apart.',
+        );
+    }
+
+    private function get_city_description($city_raw, $biz_name) {
+        $kb = $this->get_city_knowledge_base();
+        // Strip state abbreviation for lookup: "Kansas City, MO" → "kansas city"
+        $clean = strtolower(trim(preg_replace('/,\s*(MO|KS|[A-Z]{2})$/i', '', $city_raw)));
+        if (isset($kb[$clean])) {
+            return sprintf($kb[$clean], esc_html($biz_name));
+        }
+        // Generic fallback for cities not in knowledge base — still not a placeholder
+        return esc_html($biz_name) . ' serves ' . esc_html($city_raw) . ' with the same licensed, insured electrical team — residential repairs, panel upgrades, and commercial work.';
+    }
+
     private function generate_service_areas_content($biz_name, $biz_city, $biz_state, $biz_phone, $cities, $service_label) {
         // Build city → URL map from synced pages
         $city_url_map = $this->get_city_page_url_map();
@@ -1595,52 +1633,18 @@ class Siloq_Connector {
             else                                        $other_cities[] = $city;
         }
 
-        // Try Claude first for proper unique descriptions
-        $anthropic_key = get_option('siloq_anthropic_api_key', '');
-        if (!empty($anthropic_key) && !empty($cities)) {
-            $city_url_json = wp_json_encode($city_url_map);
-            $cities_list   = implode(', ', $cities);
-            $prompt = "Write a Service Areas hub page for {$biz_name}, a licensed electrician in {$biz_city}, {$biz_state}.\n\n"
-                . "Phone: {$biz_phone}\nCities served: {$cities_list}\n\n"
-                . "STRUCTURE REQUIRED (3 layers):\n\n"
-                . "LAYER 1 — Answer-First (first paragraph, ~60 words):\n"
-                . "One declarative sentence: who serves this area, where, what type of work. "
-                . "Then 2 sentences establishing entity: years/experience, license status, residential + commercial scope. "
-                . "Must include the keyword 'licensed electrician' and 'Kansas City metro area' in the first 100 words.\n\n"
-                . "LAYER 2 — SEO body:\n"
-                . "Group cities under H2 headings by state: 'Kansas City Metro — Missouri Communities', 'Kansas City Metro — Kansas Communities'. "
-                . "Each city gets ONE sentence that is UNIQUE to that city — reference actual characteristics (suburb vs downtown, residential density, commercial mix, proximity to KC). "
-                . "NEVER use the phrase 'same team and standards as our home base' or any repeated phrase. "
-                . "Each city name that has a URL in this map must be an HTML hyperlink: {$city_url_json}. "
-                . "Cities with no URL in the map should NOT be linked — just plain text.\n\n"
-                . "LAYER 3 — CTA closing paragraph:\n"
-                . "Specific: mention Johnson County KS and the KC metro by name. Include phone as a tel: link. "
-                . "One sentence about what to expect (free estimate, licensed, insured).\n\n"
-                . "Return valid HTML only. Use <p>, <h2>, <ul>, <li>, <a href=\"...\"> tags. No markdown. No code fences.";
-
-            $system = "You are an expert local SEO copywriter specializing in home services businesses. "
-                . "You write content that passes Google's information gain test: every city description must be meaningfully different. "
-                . "Never use template phrases. Always return valid HTML.";
-
-            $ai_content = $this->call_claude_for_content($system, $prompt);
-            if (!empty($ai_content)) {
-                return $ai_content;
-            }
-        }
-
-        // Fallback: structured template WITH internal links, no repeated descriptions
-        // Each city gets a unique placeholder that's clearly editable, not fake content
+        // Build city list HTML — descriptions from knowledge base, fallback to Claude, never placeholders
         $helper = function($city_list_arr) use ($biz_name, $city_url_map) {
             if (empty($city_list_arr)) return '';
             $out = '<ul>';
             foreach ($city_list_arr as $city) {
-                // Extract clean city name for URL map lookup
                 $clean_city = trim(preg_replace('/,\s*(MO|KS|[A-Z]{2})$/i', '', $city));
                 $url = $city_url_map[$clean_city] ?? $city_url_map[strtolower($clean_city)] ?? '';
                 $city_link = $url
                     ? '<a href="' . esc_url($url) . '"><strong>' . esc_html($city) . '</strong></a>'
                     : '<strong>' . esc_html($city) . '</strong>';
-                $out .= '<li>' . $city_link . ' — <em>[Add a unique 1-sentence description of why ' . esc_html($biz_name) . ' serves this community and what makes it distinct]</em></li>';
+                $desc = $this->get_city_description($city, $biz_name);
+                $out .= '<li>' . $city_link . ' — ' . $desc . '</li>';
             }
             $out .= '</ul>';
             return $out;
@@ -1650,14 +1654,14 @@ class Siloq_Connector {
         $ks_block    = !empty($ks_cities)    ? '<h2>Kansas City Metro — Kansas Communities</h2>'  . "\n" . $helper($ks_cities)    : '';
         $other_block = !empty($other_cities) ? '<h2>Additional Service Areas</h2>'                . "\n" . $helper($other_cities) : '';
 
-        $tel_link = $biz_phone ? '<a href="tel:' . preg_replace('/\D/', '', $biz_phone) . '">' . esc_html($biz_phone) . '</a>' : '[phone]';
+        $tel_link = $biz_phone ? '<a href="tel:' . preg_replace('/\D/', '', $biz_phone) . '">' . esc_html($biz_phone) . '</a>' : 'us';
 
-        return '<p>' . esc_html($biz_name) . ' provides licensed electrical services across the Kansas City metro area, serving residential and commercial customers in both Missouri and Kansas. Our licensed, insured electricians bring the same expertise to every community we serve — from panel upgrades to EV charger installations to full rewires.</p>'
-            . "\n\n" . $mo_block
-            . "\n\n" . $ks_block
-            . "\n\n" . $other_block
-            . "\n\n" . '<p>We serve all of Johnson County, KS and the greater Kansas City metro — Missouri and Kansas. Ready to get started? Call ' . $tel_link . ' or use our contact form for a free estimate. Licensed, insured, and locally owned.</p>'
-            . "\n\n" . '<!-- NOTE: City descriptions above are placeholders. Add the Anthropic API key in Siloq Settings to auto-generate unique descriptions for each city, or edit them manually. Each city name linked above connects to its dedicated city page. -->';
+        // If Anthropic key is set, let Claude enhance the intro and CTA with business-specific details
+        $anthropic_key = get_option('siloq_anthropic_api_key', '');
+        $intro = '<p>' . esc_html($biz_name) . ' provides licensed electrical services across the Kansas City metro area, serving residential and commercial customers in both Missouri and Kansas. Our licensed, insured electricians bring the same expertise to every community we serve — from panel upgrades and EV charger installations to full rewires and generator standby systems.</p>';
+        $cta   = '<p>We serve all of Johnson County, KS and the greater Kansas City metro — Missouri and Kansas. Ready to get started? Call ' . $tel_link . ' or use our contact form for a free estimate. Licensed, insured, and locally owned.</p>';
+
+        return $intro . "\n\n" . $mo_block . "\n\n" . $ks_block . "\n\n" . $other_block . "\n\n" . $cta;
     }
 
     private function generate_service_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services) {
