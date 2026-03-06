@@ -2169,6 +2169,46 @@ if ($has_plan && isset($plan_data['issues'])) {
   </div>
 </div>
 
+<!-- Image Audit -->
+<?php
+$img_audit_raw = get_option('siloq_image_audit_results', '');
+$img_audit_items = $img_audit_raw ? json_decode($img_audit_raw, true) : array();
+?>
+<div class="siloq-card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px">&#128247; Image Audit</div>
+    </div>
+    <?php if (!empty($img_audit_items)): ?>
+    <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-image-brief')); ?>" class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:5px 10px">View Image Brief &rarr;</a>
+    <?php endif; ?>
+  </div>
+  <?php if (empty($img_audit_items)): ?>
+    <div style="font-size:12px;color:#6b7280">Run a full sync to generate your image audit.</div>
+  <?php else:
+    $img_counts = array('no_images' => 0, 'stock_photo' => 0, 'missing_alt' => 0, 'unoptimized' => 0, 'good' => 0);
+    foreach ($img_audit_items as $ia) { $s = $ia['status'] ?? 'good'; if (isset($img_counts[$s])) $img_counts[$s]++; }
+  ?>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px">
+      <?php if ($img_counts['no_images']): ?>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block"></span> <?php echo $img_counts['no_images']; ?> No Images</span>
+      <?php endif; ?>
+      <?php if ($img_counts['stock_photo']): ?>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;display:inline-block"></span> <?php echo $img_counts['stock_photo']; ?> Stock</span>
+      <?php endif; ?>
+      <?php if ($img_counts['missing_alt']): ?>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;display:inline-block"></span> <?php echo $img_counts['missing_alt']; ?> Missing Alt</span>
+      <?php endif; ?>
+      <?php if ($img_counts['unoptimized']): ?>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;display:inline-block"></span> <?php echo $img_counts['unoptimized']; ?> Unoptimized</span>
+      <?php endif; ?>
+      <?php if ($img_counts['good']): ?>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span> <?php echo $img_counts['good']; ?> Good</span>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
+</div>
+
 <!-- Priority Actions (from plan) -->
 <?php if ($has_plan && !empty($plan_data['actions'])): ?>
 <div class="siloq-card" style="margin-bottom:16px;padding:20px">

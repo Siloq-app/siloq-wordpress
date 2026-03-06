@@ -6,15 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.5.116] — 2026-03-06
+## [1.5.117] — 2026-03-06
 
 ### Added
-- **Real supporting content gap analysis** — replaced generic "Add supporting pages under Services" template strings with live gap detection. The Supporting Content Opportunities section now runs `categorize_pages()` against all published pages and renders three card types:
-  - **Amber "HIGHEST PRIORITY"** — appears when 3+ city pages exist but no Service Areas hub page links them together, causing keyword cannibalization.
-  - **Blue "CONTENT GAP"** — one card per primary service that has no dedicated page, with a one-click Create Draft button.
-  - **Purple "LOCAL SEO GAP"** — one card per configured service area city with no matching page, suggesting a city landing page title.
-- `categorize_pages()` private method classifies pages into hubs, cities, spokes, and service_area_page using URL/title pattern matching and `_siloq_page_role` meta.
-- `is_internal_post_type_name()` private method filters out JetEngine, ACF, Pods, template, and other system post types from analysis.
+- **Image Audit** — new `Siloq_Image_Audit` class scans all published pages for image issues: missing images, stock photos, missing alt text, and unoptimized filenames. Stock detection checks 11 agency watermarks, 6+ digit filenames, and common camera patterns (DSC_, IMG_, photo-).
+- **Dashboard Image Audit card** — colored dot summary (red/yellow/green) of image status counts, with link to the Image Brief submenu page.
+- **Printable Image Brief** — new submenu page groups pages by status and shows photo type, shot brief, recommended filename, and recommended alt text for each. Print-friendly CSS hides WP admin chrome.
+- **Sync hook** — image audit runs automatically after every full sync so results stay current.
+- **AJAX endpoints** — `siloq_get_image_audit` (read results) and `siloq_apply_image_seo` (fix alt text + attachment title in one click).
 
 ## [1.5.115] — 2026-03-06
 
