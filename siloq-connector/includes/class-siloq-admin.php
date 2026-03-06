@@ -2184,6 +2184,144 @@ if ($has_plan && isset($plan_data['issues'])) {
 </div>
 <?php endif; ?>
 
+<!-- ═══════ SITE AUDIT (Track 2) ═══════ -->
+<?php
+$audit_results = get_transient('siloq_audit_results');
+$last_audit_time = get_option('siloq_last_audit_time', '');
+$audit_fresh = !empty($audit_results);
+?>
+<div class="siloq-card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px">&#128269; Site Audit</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px">
+        <?php if ($last_audit_time): ?>
+          Last run: <?php echo esc_html($last_audit_time); ?>
+        <?php else: ?>
+          Run an audit to score every page on your site
+        <?php endif; ?>
+      </div>
+    </div>
+    <button class="siloq-btn siloq-btn--primary siloq-run-audit-btn" style="font-size:11px;padding:6px 14px" onclick="siloqRunAudit(this)">
+      <?php echo $audit_fresh ? 'Re-run Audit' : 'Run Audit'; ?>
+    </button>
+  </div>
+
+  <?php if ($audit_fresh && isset($audit_results['site_score'])): ?>
+  <?php
+    $audit_score = intval($audit_results['site_score']);
+    if ($audit_score >= 80) { $audit_score_bg = '#f0fdf4'; $audit_score_color = '#16a34a'; }
+    elseif ($audit_score >= 60) { $audit_score_bg = '#fffbeb'; $audit_score_color = '#d97706'; }
+    else { $audit_score_bg = '#fef2f2'; $audit_score_color = '#dc2626'; }
+  ?>
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px 16px;background:<?php echo $audit_score_bg; ?>;border-radius:12px">
+    <div style="font-size:36px;font-weight:800;color:<?php echo $audit_score_color; ?>;line-height:1"><?php echo $audit_score; ?></div>
+    <div>
+      <div style="font-size:13px;font-weight:600;color:<?php echo $audit_score_color; ?>">
+        <?php if ($audit_score >= 80): ?>Healthy
+        <?php elseif ($audit_score >= 60): ?>Needs Improvement
+        <?php else: ?>Needs Attention<?php endif; ?>
+      </div>
+      <div style="font-size:11px;color:#6b7280"><?php echo count($audit_results['pages'] ?? array()); ?> pages audited</div>
+    </div>
+  </div>
+
+  <?php if (!empty($audit_results['pages'])):
+    // Sort by score ascending (worst first)
+    $audit_pages = $audit_results['pages'];
+    usort($audit_pages, function($a, $b) { return ($a['score'] ?? 100) - ($b['score'] ?? 100); });
+  ?>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <?php foreach (array_slice($audit_pages, 0, 10) as $ap):
+      $ap_score = intval($ap['score'] ?? 0);
+      if ($ap_score >= 80) { $ap_bg = '#f0fdf4'; $ap_clr = '#16a34a'; }
+      elseif ($ap_score >= 60) { $ap_bg = '#fffbeb'; $ap_clr = '#d97706'; }
+      else { $ap_bg = '#fef2f2'; $ap_clr = '#dc2626'; }
+      $ap_title = get_the_title($ap['post_id'] ?? 0) ?: ('Post #' . ($ap['post_id'] ?? '?'));
+      $ap_type = $ap['tier'] ?? 'supporting';
+      $type_colors = array(
+        'apex_hub'   => array('#7c3aed','#f5f3ff'),
+        'hub'        => array('#6366f1','#eef2ff'),
+        'spoke'      => array('#0d9488','#f0fdfa'),
+        'supporting' => array('#6b7280','#f3f4f6'),
+        'orphan'     => array('#dc2626','#fef2f2'),
+      );
+      $tc = $type_colors[$ap_type] ?? array('#6b7280','#f3f4f6');
+    ?>
+    <div class="siloq-audit-page-row" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;cursor:pointer" onclick="this.querySelector('.siloq-audit-actions')?.classList.toggle('open')">
+      <div style="width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;background:<?php echo $ap_bg; ?>;color:<?php echo $ap_clr; ?>"><?php echo $ap_score; ?></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?php echo esc_html($ap_title); ?></div>
+        <div style="display:flex;gap:5px;margin-top:3px;flex-wrap:wrap">
+          <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:<?php echo $tc[1]; ?>;color:<?php echo $tc[0]; ?>;text-transform:uppercase"><?php echo esc_html(str_replace('_', ' ', $ap_type)); ?></span>
+          <?php if (!empty($ap['actions'])): ?>
+          <span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px;background:#f3f4f6;color:#6b7280"><?php echo count($ap['actions']); ?> action<?php echo count($ap['actions']) > 1 ? 's' : ''; ?></span>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php if (!empty($ap['actions'])): ?>
+      <span style="font-size:10px;color:#9ca3af">&#9660;</span>
+      <?php endif; ?>
+    </div>
+    <?php if (!empty($ap['actions'])): ?>
+    <div class="siloq-audit-actions" style="display:none;padding:0 0 0 44px;margin-top:-4px;margin-bottom:4px">
+      <?php foreach ($ap['actions'] as $action):
+        $sev_colors = array('critical'=>'#dc2626','high'=>'#ea580c','warning'=>'#d97706','medium'=>'#6b7280','info'=>'#3b82f6');
+        $sev_clr = $sev_colors[$action['severity'] ?? 'info'] ?? '#6b7280';
+      ?>
+      <div style="padding:6px 10px;margin-bottom:3px;border-left:3px solid <?php echo $sev_clr; ?>;background:#fafafa;border-radius:0 6px 6px 0">
+        <div style="font-size:11px;font-weight:600;color:#1e293b"><?php echo esc_html($action['title'] ?? ''); ?></div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px"><?php echo esc_html($action['recommendation'] ?? ''); ?></div>
+        <div style="display:flex;gap:5px;margin-top:3px">
+          <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:<?php echo $sev_clr; ?>15;color:<?php echo $sev_clr; ?>"><?php echo esc_html(strtoupper($action['severity'] ?? '')); ?></span>
+          <span style="font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px;background:#f3f4f6;color:#6b7280"><?php echo esc_html($action['category'] ?? ''); ?></span>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+  <?php else: ?>
+  <div style="text-align:center;padding:20px 0;color:#6b7280">
+    <div style="font-size:28px;margin-bottom:8px">&#128269;</div>
+    <div style="font-size:12px">Click "Run Audit" to analyze all your pages and get actionable recommendations.</div>
+  </div>
+  <?php endif; ?>
+</div>
+
+<style>
+.siloq-audit-actions.open { display:block !important; }
+</style>
+
+<script>
+function siloqRunAudit(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    jQuery.post(ajaxurl, {
+        action: 'siloq_run_audit',
+        nonce: siloqDash.nonce
+    }, function(resp) {
+        if (resp.success) {
+            location.reload();
+        } else {
+            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Audit failed.';
+            if (resp.data && resp.data.data && resp.data.data.error === 'upgrade_required') {
+                msg = 'Page limit reached (' + resp.data.data.limit + ' pages). Upgrade your plan to audit more pages.';
+            }
+            alert(msg);
+            btn.disabled = false;
+            btn.textContent = 'Run Audit';
+        }
+    }).fail(function() {
+        alert('Network error — please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Run Audit';
+    });
+}
+</script>
+
 <!-- Site Architecture Map -->
 <div class="siloq-arch-map" id="siloq-arch-map-section">
   <div class="siloq-arch-map-hdr">
@@ -3786,6 +3924,158 @@ if ($has_plan && isset($plan_data['issues'])) {
         })();
         </script>
         <?php
+    }
+
+    // =========================================================================
+    // Track 2: Site Audit — collect page data, POST to API, cache results
+    // =========================================================================
+
+    public static function run_site_audit() {
+        $site_id = get_option('siloq_site_id', '');
+        if (empty($site_id)) {
+            return array('success' => false, 'message' => 'Site not connected to Siloq.');
+        }
+
+        $post_types = function_exists('get_siloq_crawlable_post_types')
+            ? get_siloq_crawlable_post_types()
+            : array('page', 'post');
+
+        $posts = get_posts(array(
+            'post_type'      => $post_types,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+        ));
+
+        if (empty($posts)) {
+            return array('success' => false, 'message' => 'No published pages found.');
+        }
+
+        // Build internal link map for inbound counts
+        $all_urls = array();
+        foreach ($posts as $p) {
+            $all_urls[$p->ID] = wp_parse_url(get_permalink($p->ID), PHP_URL_PATH);
+        }
+
+        $inbound_counts = array();
+        foreach ($posts as $p) {
+            $count = 0;
+            $my_path = $all_urls[$p->ID];
+            foreach ($posts as $other) {
+                if ($other->ID === $p->ID) continue;
+                if (stripos($other->post_content, $my_path) !== false) {
+                    $count++;
+                }
+            }
+            $inbound_counts[$p->ID] = $count;
+        }
+
+        // Collect titles to detect duplicates
+        $all_titles = array();
+        foreach ($posts as $p) {
+            $title = self::siloq_get_page_title($p->ID);
+            $all_titles[$p->ID] = strtolower(trim($title));
+        }
+        $title_counts = array_count_values($all_titles);
+
+        $pages_payload = array();
+        foreach ($posts as $p) {
+            $title = self::siloq_get_page_title($p->ID);
+            $meta_result = self::siloq_get_meta_description($p->ID);
+            if (is_array($meta_result) && isset($meta_result['status'])) {
+                $meta_desc = '';
+                $meta_status = $meta_result['status'];
+            } elseif (empty($meta_result)) {
+                $meta_desc = '';
+                $meta_status = 'missing';
+            } else {
+                $meta_desc = $meta_result;
+                $meta_status = 'ok';
+            }
+
+            $url = get_permalink($p->ID);
+            $page_type = self::siloq_classify_page($p->ID, $url);
+
+            // H1 extraction from content
+            $h1 = '';
+            if (preg_match('/<h1[^>]*>(.*?)<\/h1>/si', $p->post_content, $h1_match)) {
+                $h1 = wp_strip_all_tags($h1_match[1]);
+            }
+
+            $word_count = str_word_count(wp_strip_all_tags($p->post_content));
+
+            // Count outbound links
+            preg_match_all('/<a\s[^>]*href/si', $p->post_content, $link_matches);
+            $outbound_links = count($link_matches[0]);
+
+            // Images missing alt
+            preg_match_all('/<img\s[^>]*>/si', $p->post_content, $img_matches);
+            $images_missing_alt = 0;
+            foreach ($img_matches[0] as $img_tag) {
+                if (!preg_match('/alt\s*=\s*["\'][^"\']+["\']/i', $img_tag)) {
+                    $images_missing_alt++;
+                }
+            }
+
+            // Schema types from stored meta
+            $schema_types = array();
+            $applied_types = get_post_meta($p->ID, '_siloq_applied_types', true);
+            if (!empty($applied_types)) {
+                $schema_types = is_array($applied_types) ? $applied_types : json_decode($applied_types, true);
+                if (!is_array($schema_types)) $schema_types = array();
+            }
+
+            $has_dup = ($title_counts[strtolower(trim($title))] ?? 0) > 1;
+
+            $pages_payload[] = array(
+                'post_id'                => $p->ID,
+                'url'                    => $url,
+                'title'                  => $title,
+                'meta_description'       => $meta_desc,
+                'meta_description_status'=> $meta_status,
+                'h1'                     => $h1,
+                'word_count'             => $word_count,
+                'page_type'              => $page_type,
+                'inbound_links'          => $inbound_counts[$p->ID] ?? 0,
+                'outbound_links'         => $outbound_links,
+                'schema_types'           => $schema_types,
+                'images_missing_alt'     => $images_missing_alt,
+                'has_duplicate_title'    => $has_dup,
+            );
+        }
+
+        // Build site context from entity profile
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+        $site_context = array(
+            'business_name'           => get_option('siloq_business_name', get_bloginfo('name')),
+            'business_type'           => get_option('siloq_business_type', ''),
+            'primary_service'         => is_array($services) && !empty($services) ? $services[0] : '',
+            'service_cities'          => is_array($areas) ? $areas : array(),
+            'entity_profile_complete' => self::compute_entity_completeness() >= 80,
+        );
+
+        $api = new Siloq_API_Client();
+        $response = $api->post('/sites/' . $site_id . '/audit/', array(
+            'pages'        => $pages_payload,
+            'site_context' => $site_context,
+        ));
+
+        if (!empty($response['success']) && !empty($response['data'])) {
+            $data = $response['data'];
+            set_transient('siloq_audit_results', $data, 6 * HOUR_IN_SECONDS);
+            update_option('siloq_last_audit_id', $data['audit_id'] ?? '');
+            update_option('siloq_last_audit_time', current_time('mysql'));
+            if (isset($data['site_score'])) {
+                update_option('siloq_site_score', intval($data['site_score']));
+            }
+            return array('success' => true, 'data' => $data);
+        }
+
+        return array(
+            'success' => false,
+            'message' => $response['message'] ?? 'Audit request failed.',
+            'data'    => $response['data'] ?? null,
+        );
     }
 
     /**

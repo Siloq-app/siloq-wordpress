@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.109] — 2026-03-06
+
+### Added
+- **Site Audit Integration (Track 2)** — `run_site_audit()` collects all published pages with SEO metadata (title, meta description, H1, word count, schema types, internal links, alt text, duplicate detection), builds site context from entity profile, POSTs to Siloq API `POST /api/v1/sites/{id}/audit/` endpoint.
+- **Audit Results Dashboard** — New "Site Audit" card on Dashboard tab shows site score (green/yellow/red), per-page scores sorted worst-first, page type badges, expandable action lists with severity indicators and recommendations.
+- **Run Audit Button** — AJAX-powered "Run Audit" button triggers audit via `siloq_run_audit` handler; results cached in transient for 6 hours.
+- **Audit Persistence** — Stores `siloq_last_audit_id` and `siloq_last_audit_time` in options; updates `siloq_site_score` from audit response.
+
+---
+
 ## [1.5.108] — 2026-03-06
 
 ### Fixed

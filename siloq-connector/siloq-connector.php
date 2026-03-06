@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.108
+* Version: 1.5.109
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.108');
+define('SILOQ_VERSION', '1.5.109');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -323,6 +323,8 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
+        // Site Audit (Track 2)
+        add_action('wp_ajax_siloq_run_audit', array($this, 'ajax_run_audit'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -1616,6 +1618,28 @@ class Siloq_Connector {
             'role'     => $role,
             'api_sync' => $api_ok,
         ));
+    }
+
+    /**
+     * AJAX: Run site audit via Siloq API (Track 2).
+     */
+    public function ajax_run_audit() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+
+        $result = Siloq_Admin::run_site_audit();
+
+        if (!empty($result['success'])) {
+            wp_send_json_success($result['data']);
+        } else {
+            wp_send_json_error(array(
+                'message' => $result['message'] ?? 'Audit failed.',
+                'data'    => $result['data'] ?? null,
+            ));
+        }
     }
 
     /**
