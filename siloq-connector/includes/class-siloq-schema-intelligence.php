@@ -930,6 +930,9 @@ class Siloq_Schema_Intelligence {
      * Action: wp_ajax_siloq_generate_schema
      */
     public static function ajax_generate_schema() {
+        // Wrap entire handler in try-catch so PHP exceptions surface as JSON errors
+        // rather than 500 responses that silently reset the Generate Schema button.
+        try {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
@@ -1053,6 +1056,11 @@ class Siloq_Schema_Intelligence {
             'business_type' => self::map_business_type( $entity_profile['business_type'] ?? '' ) ?: ( $entity_profile['business_type'] ?? 'LocalBusiness' ),
             'validation'    => $validation,
         ] );
+        } catch ( \Throwable $e ) {
+            wp_send_json_error( [
+                'message' => 'Schema generation error: ' . $e->getMessage() . ' (line ' . $e->getLine() . ' in ' . basename( $e->getFile() ) . ')',
+            ] );
+        }
     }
 
     /**

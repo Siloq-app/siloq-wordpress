@@ -587,6 +587,7 @@
         }, 3000);
       }).fail(function () {
         $btn.prop('disabled', false).text('Generate Schema');
+        alert('Schema request failed — server returned no response. Check that your Siloq API key is valid and try again. If this persists, contact support.');
       });
     });
 
