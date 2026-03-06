@@ -1344,6 +1344,47 @@ class Siloq_Admin {
     /**
      * Save settings
      */
+    public function handle_gsc_connect_redirect() {
+        // PHP server-side GSC OAuth initiation — avoids JS popup blockers
+        // Triggered by: /wp-admin/admin-post.php?action=siloq_gsc_connect
+        check_admin_referer('siloq_gsc_connect_nonce');
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized');
+        }
+
+        $api_url  = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+        $api_key  = get_option('siloq_api_key', '');
+        $site_id  = get_option('siloq_site_id', '');
+
+        if (empty($api_key) || empty($site_id)) {
+            wp_redirect(admin_url('admin.php?page=siloq-settings&tab=gsc&gsc_error=missing_config'));
+            exit;
+        }
+
+        $return_url = admin_url('admin.php?page=siloq-settings&tab=gsc');
+        $response = wp_remote_get(
+            trailingslashit($api_url) . 'gsc/auth-url/?site_id=' . $site_id . '&wp_return_url=' . rawurlencode($return_url),
+            array('headers' => array('Authorization' => 'Bearer ' . $api_key, 'Accept' => 'application/json'), 'timeout' => 15)
+        );
+
+        if (is_wp_error($response)) {
+            wp_redirect(admin_url('admin.php?page=siloq-settings&tab=gsc&gsc_error=api_unreachable'));
+            exit;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $code = wp_remote_retrieve_response_code($response);
+
+        if ($code >= 400 || empty($body['auth_url'])) {
+            wp_redirect(admin_url('admin.php?page=siloq-settings&tab=gsc&gsc_error=no_auth_url'));
+            exit;
+        }
+
+        // Real browser redirect to Google OAuth — same tab, no popup blocker issues
+        wp_redirect($body['auth_url']);
+        exit;
+    }
+
     public static function force_set_site_id() {
         // Emergency direct-write bypass for stuck site_id option
         // Usage: /wp-admin/admin.php?page=siloq-settings&siloq_fix_site_id=13
