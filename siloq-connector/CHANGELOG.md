@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.108] — 2026-03-06
+
+### Fixed
+- **SEO Title Detection** — `siloq_get_page_title()` now reads AIOSEO `wp_aioseo_posts` table first, strips `%%post_title%%`/`%%separator_sa%%` tokens, falls back to Yoast `_yoast_wpseo_title`, then `post_title`. Eliminates false-positive "missing title" warnings.
+- **Meta Description BROKEN_FALLBACK** — `siloq_get_meta_description()` detects descriptions over 500 characters as broken fallbacks (full page content dumped into meta field). Flags as CRITICAL instead of treating as present/healthy.
+- **Page Auto-Classification** — `siloq_classify_page()` auto-detects page types by URL pattern: homepage → `apex_hub`, `/services/` → `hub`, city/state patterns → `spoke`, `/blog/`/`/about/` → `supporting`, zero inbound links → `orphan`. Integrated into sync and plan data flows.
+- **Priority Action Sorting** — Actions now sort by 4-tier system: Tier 1 STRUCTURAL (missing title, broken meta, H1 issues, duplicate titles) → Tier 2 CONTENT (thin content, missing links, alt text) → Tier 3 SCHEMA → Tier 4 CLASSIFICATION. Within each tier, sorted by severity.
+- **APEX_HUB Badge** — Added CSS (solid purple `#7c3aed` background, white text) and rendering for `apex_hub` page type across dashboard, floating panel, widget intelligence, and intelligence core JS. Added to role dropdown and architecture type ordering.
+
+---
+
 ## [1.5.74] — 2026-03-05
 
 ### Added

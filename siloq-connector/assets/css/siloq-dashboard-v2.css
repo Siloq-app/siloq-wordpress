@@ -360,6 +360,7 @@
 
 /* Page type badges */
 .siloq-page-type { font-size: 11px; font-weight: 600; }
+.siloq-page-type--apex_hub   { color: #fff; background: #7c3aed; padding: 1px 6px; border-radius: 6px; }
 .siloq-page-type--hub        { color: var(--siloq-primary); }
 .siloq-page-type--spoke      { color: var(--siloq-teal); }
 .siloq-page-type--supporting { color: var(--siloq-muted); }
@@ -1175,6 +1176,7 @@
 }
 
 /* Page type badge colors */
+.siloq-badge--apex_hub { background: #7c3aed; color: #fff; }
 .siloq-badge--hub { background: #faf5ff; color: #7c3aed; }
 .siloq-badge--spoke { background: #eff6ff; color: #3b82f6; }
 .siloq-badge--supporting { background: #f0fdfa; color: #0d9488; }

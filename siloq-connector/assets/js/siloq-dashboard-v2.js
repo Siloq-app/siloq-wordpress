@@ -447,7 +447,8 @@
     var filled = (page.score / 100) * circ;
 
     var typeBadgeClass = 'gray';
-    if (page.page_type === 'hub') typeBadgeClass = 'hub';
+    if (page.page_type === 'apex_hub') typeBadgeClass = 'apex_hub';
+    else if (page.page_type === 'hub') typeBadgeClass = 'hub';
     else if (page.page_type === 'spoke') typeBadgeClass = 'spoke';
     else if (page.page_type === 'supporting') typeBadgeClass = 'supporting';
     else if (page.page_type === 'orphan') typeBadgeClass = 'orphan';
@@ -486,6 +487,7 @@
     var currentRole = page.page_role || '';
     var roleOpts = [
       {v: '', l: 'Auto'},
+      {v: 'apex_hub', l: 'Apex Hub'},
       {v: 'hub', l: 'Hub'},
       {v: 'spoke', l: 'Spoke'},
       {v: 'supporting', l: 'Supporting'},
@@ -507,7 +509,7 @@
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Open in Elementor and run Analyze."' : '') + (page.page_type === 'pending' ? ' title="Open in Elementor and run Analyze to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : escHtml(page.page_type.toUpperCase())) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Open in Elementor and run Analyze."' : '') + (page.page_type === 'pending' ? ' title="Open in Elementor and run Analyze to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml(page.page_type.toUpperCase()))) + '</span>'
       + roleSelect
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'

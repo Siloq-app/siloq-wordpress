@@ -396,7 +396,8 @@
 
         var typeBadgeColor = '#6b7280';
         var typeBadgeBg    = '#f3f4f6';
-        var typeLabel      = pageType.toUpperCase();
+        var typeLabel      = pageType === 'apex_hub' ? 'APEX HUB' : pageType.toUpperCase();
+        if (pageType === 'apex_hub')   { typeBadgeColor = '#fff'; typeBadgeBg = '#7c3aed'; }
         if (pageType === 'hub')        { typeBadgeColor = '#4f46e5'; typeBadgeBg = '#ede9fe'; }
         if (pageType === 'spoke')      { typeBadgeColor = '#0891b2'; typeBadgeBg = '#cffafe'; }
         if (pageType === 'supporting') { typeBadgeColor = '#059669'; typeBadgeBg = '#d1fae5'; }

@@ -87,7 +87,7 @@ class Siloq_Page_Analyzer {
                 'body' => wp_json_encode( array(
                     'site_id'         => $site_id,
                     'wp_post_id'      => $post_id,
-                    'page_title'      => $post ? $post->post_title : '',
+                    'page_title'      => class_exists( 'Siloq_Admin' ) ? Siloq_Admin::siloq_get_page_title( $post_id ) : ( $post ? $post->post_title : '' ),
                     'page_url'        => $permalink,
                     'content_payload' => $content_payload,
                 ) ),

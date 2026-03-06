@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.107
+* Version: 1.5.108
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.107');
+define('SILOQ_VERSION', '1.5.108');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1174,23 +1174,32 @@ class Siloq_Connector {
             $elementor_url = admin_url('post.php?post=' . $post_id . '&action=elementor');
             $page_url = get_permalink($post_id);
 
-            // Check meta title
-            $meta_title = '';
-            $meta_desc  = '';
-            global $wpdb;
-            $aioseo_row = $wpdb->get_row($wpdb->prepare(
-                "SELECT title, description FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d LIMIT 1", $post_id
-            ));
-            if ($aioseo_row) {
-                $meta_title = $aioseo_row->title;
-                $meta_desc  = $aioseo_row->description;
+            // Fix 1: Use AIOSEO priority chain for title
+            $meta_title = class_exists('Siloq_Admin') ? Siloq_Admin::siloq_get_page_title($post_id) : get_the_title($post_id);
+            // If the helper returned the same as post_title, treat as missing SEO title
+            if ($meta_title === get_the_title($post_id)) {
+                $meta_title = ''; // no dedicated SEO title set
+            }
+
+            // Fix 2: Use BROKEN_FALLBACK-aware meta description
+            $meta_desc_result = class_exists('Siloq_Admin') ? Siloq_Admin::siloq_get_meta_description($post_id) : '';
+            $meta_desc_broken = false;
+            if (is_array($meta_desc_result) && isset($meta_desc_result['status']) && $meta_desc_result['status'] === 'broken_fallback') {
+                $meta_desc = '';
+                $meta_desc_broken = true;
             } else {
-                $meta_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
-                $meta_desc  = get_post_meta($post_id, '_yoast_wpseo_metadesc', true);
-                if (!$meta_title) {
-                    $meta_title = get_post_meta($post_id, '_aioseop_title', true);
-                    $meta_desc  = get_post_meta($post_id, '_aioseop_description', true);
+                $meta_desc = is_string($meta_desc_result) ? $meta_desc_result : '';
+            }
+
+            // Fix 3: Auto-classify with apex_hub support (unless manually overridden)
+            $existing_role = get_post_meta($post_id, '_siloq_page_role', true);
+            if (empty($existing_role) && class_exists('Siloq_Admin')) {
+                $auto_type = Siloq_Admin::siloq_classify_page($post_id, $page_url);
+                if (!empty($auto_type)) {
+                    $page_type = $auto_type;
                 }
+            } elseif (!empty($existing_role)) {
+                $page_type = $existing_role;
             }
 
             // Check schema
@@ -1211,7 +1220,15 @@ class Siloq_Connector {
                     'elementor_url'=> $elementor_url,
                 );
             }
-            if (empty($meta_desc)) {
+            if ($meta_desc_broken) {
+                $issues['critical'][] = array(
+                    'title'        => $title,
+                    'issue'        => 'BROKEN_FALLBACK meta description (' . $meta_desc_result['length'] . ' chars) — full page content dumped into meta field',
+                    'post_id'      => $post_id,
+                    'edit_url'     => $edit_url,
+                    'elementor_url'=> $elementor_url,
+                );
+            } elseif (empty($meta_desc)) {
                 $issues['important'][] = array(
                     'title'        => $title,
                     'issue'        => 'Missing meta description — write a compelling 150-character summary',
@@ -1242,10 +1259,10 @@ class Siloq_Connector {
             $silo_data = get_post_meta($post_id, '_siloq_silo_data', true);
             $has_analysis = !empty($analysis);
 
-            if ($page_type === 'hub') {
+            if ($page_type === 'apex_hub' || $page_type === 'hub') {
                 $hub_count++;
                 $hubs[] = $post_id;
-                $arch_type = 'hub';
+                $arch_type = $page_type;
             } elseif (!$has_analysis) {
                 // Not analyzed yet — show as pending, not orphan
                 $arch_type = 'pending';
@@ -1259,7 +1276,7 @@ class Siloq_Connector {
             }
 
             // No inbound links check (after arch_type is determined)
-            if (!isset($inbound_links[$post_id]) && $arch_type !== 'hub') {
+            if (!isset($inbound_links[$post_id]) && $arch_type !== 'hub' && $arch_type !== 'apex_hub') {
                 $issues['critical'][] = array(
                     'title'        => $title,
                     'issue'        => 'No internal links pointing to this page — Google may not be crawling it',
@@ -1326,7 +1343,7 @@ class Siloq_Connector {
                         'parent' => $title,
                     );
                 }
-            } elseif ($arch_type === 'hub' || $page_type === 'hub') {
+            } elseif ($arch_type === 'hub' || $arch_type === 'apex_hub' || $page_type === 'hub' || $page_type === 'apex_hub') {
                 // Hub pages should have supporting content — flag it
                 $missing_count++;
                 $supporting[] = array(
@@ -1338,19 +1355,23 @@ class Siloq_Connector {
             }
         }
 
-        // Sort architecture: hubs first, then spokes, then supporting, then orphans, then missing
-        $type_order = array('hub' => 0, 'spoke' => 1, 'supporting' => 2, 'orphan' => 3, 'missing' => 4);
+        // Sort architecture: apex_hub first, then hubs, spokes, supporting, orphans, missing
+        $type_order = array('apex_hub' => 0, 'hub' => 1, 'spoke' => 2, 'supporting' => 3, 'orphan' => 4, 'missing' => 5);
         usort($architecture, function($a, $b) use ($type_order) {
-            $oa = isset($type_order[$a['type']]) ? $type_order[$a['type']] : 5;
-            $ob = isset($type_order[$b['type']]) ? $type_order[$b['type']] : 5;
+            $oa = isset($type_order[$a['type']]) ? $type_order[$a['type']] : 6;
+            $ob = isset($type_order[$b['type']]) ? $type_order[$b['type']] : 6;
             return $oa - $ob;
         });
 
-        // Sort actions by priority
-        usort($actions, function($a, $b) {
-            $p = array('high' => 0, 'medium' => 1, 'low' => 2);
-            return ($p[$a['priority']] ?? 2) - ($p[$b['priority']] ?? 2);
-        });
+        // Fix 4: Sort actions by tier system (STRUCTURAL > CONTENT > SCHEMA > CLASSIFICATION)
+        if (class_exists('Siloq_Admin')) {
+            Siloq_Admin::siloq_sort_actions($actions);
+        } else {
+            usort($actions, function($a, $b) {
+                $p = array('high' => 0, 'medium' => 1, 'low' => 2);
+                return ($p[$a['priority']] ?? 2) - ($p[$b['priority']] ?? 2);
+            });
+        }
 
         // Default roadmap
         $roadmap = array(
@@ -1489,15 +1510,19 @@ class Siloq_Connector {
 
             $silo_data = get_post_meta($post->ID, '_siloq_silo_data', true);
             $has_analysis = !empty($analysis);
-            if ($has_analysis) {
-                // Page has been through Widget Intelligence — use its classification
+            // Use manual role first, then auto-classify, then analysis data
+            $manual_role = get_post_meta($post->ID, '_siloq_page_role', true);
+            if (!empty($manual_role)) {
+                $page_type = $manual_role;
+            } elseif (class_exists('Siloq_Admin')) {
+                $page_type = Siloq_Admin::siloq_classify_page($post->ID, get_permalink($post->ID));
+            } elseif ($has_analysis) {
                 $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] :
                              (isset($analysis['page_type']) ? $analysis['page_type'] : 'supporting');
-                if (empty($silo_data) && $page_type !== 'hub') {
+                if (empty($silo_data) && $page_type !== 'hub' && $page_type !== 'apex_hub') {
                     $page_type = 'orphan';
                 }
             } else {
-                // Not yet analyzed — don't label as orphan, just "pending"
                 $page_type = 'pending';
             }
 
@@ -1547,7 +1572,7 @@ class Siloq_Connector {
             return;
         }
 
-        $allowed_roles = array('', 'hub', 'spoke', 'supporting', 'unclassified');
+        $allowed_roles = array('', 'apex_hub', 'hub', 'spoke', 'supporting', 'unclassified');
         if (!in_array($role, $allowed_roles, true)) {
             wp_send_json_error(array('message' => 'Invalid role'));
             return;
@@ -2425,8 +2450,8 @@ function siloq_run_analyze_batch() {
             || preg_match( '#/(contact|about|privacy|terms|disclaimer)/?$#i', $path_lower );
 
         if ( preg_match( '#^/$#', $path_lower ) ) {
-            $page_type = 'hub';
-        } elseif ( preg_match( '#/(services?|service-areas?)/?$#', $path_lower ) ) {
+            $page_type = 'apex_hub';
+        } elseif ( preg_match( '#/(services?|service-areas?|our-services?)/?$#', $path_lower ) ) {
             $page_type = 'hub';
         } elseif ( $post->post_parent ) {
             $parent_path = wp_parse_url( get_permalink( $post->post_parent ), PHP_URL_PATH );

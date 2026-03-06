@@ -37,7 +37,214 @@ class Siloq_Admin {
     private function __construct() {
         // Initialize admin hooks if needed
     }
-    
+
+    // =========================================================================
+    // Fix 1: SEO title with AIOSEO priority chain
+    // =========================================================================
+
+    public static function siloq_get_page_title( $post_id ) {
+        global $wpdb;
+
+        // 1. AIOSEO table
+        $table = $wpdb->prefix . 'aioseo_posts';
+        if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) === $table ) {
+            $aioseo_title = $wpdb->get_var( $wpdb->prepare(
+                "SELECT title FROM {$table} WHERE post_id = %d LIMIT 1", $post_id
+            ) );
+            if ( ! empty( $aioseo_title ) ) {
+                $post_title = get_the_title( $post_id );
+                // Strip AIOSEO tokens
+                $aioseo_title = str_replace( '%%separator_sa%%', '', $aioseo_title );
+                // Substitute %%post_title%% with actual post_title
+                if ( strpos( $aioseo_title, '%%post_title%%' ) !== false ) {
+                    $aioseo_title = str_replace( '%%post_title%%', $post_title, $aioseo_title );
+                }
+                $aioseo_title = trim( $aioseo_title, ' -–—|' );
+                if ( ! empty( $aioseo_title ) ) {
+                    return $aioseo_title;
+                }
+            }
+        }
+
+        // 2. Yoast
+        $yoast_title = get_post_meta( $post_id, '_yoast_wpseo_title', true );
+        if ( ! empty( $yoast_title ) ) {
+            return $yoast_title;
+        }
+
+        // 3. Fallback: post_title
+        return get_the_title( $post_id );
+    }
+
+    // =========================================================================
+    // Fix 2: Meta description with BROKEN_FALLBACK detection
+    // =========================================================================
+
+    public static function siloq_get_meta_description( $post_id ) {
+        global $wpdb;
+
+        $val = '';
+
+        // 1. AIOSEO table
+        $table = $wpdb->prefix . 'aioseo_posts';
+        if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) === $table ) {
+            $val = $wpdb->get_var( $wpdb->prepare(
+                "SELECT description FROM {$table} WHERE post_id = %d LIMIT 1", $post_id
+            ) );
+        }
+
+        // 2. Yoast
+        if ( empty( $val ) ) {
+            $val = get_post_meta( $post_id, '_yoast_wpseo_metadesc', true );
+        }
+
+        // 3. Genesis
+        if ( empty( $val ) ) {
+            $val = get_post_meta( $post_id, '_genesis_description', true );
+        }
+
+        if ( empty( $val ) ) {
+            return '';
+        }
+
+        // BROKEN_FALLBACK: over 500 chars means full page content dumped
+        if ( strlen( $val ) > 500 ) {
+            return array( 'status' => 'broken_fallback', 'length' => strlen( $val ) );
+        }
+
+        return $val;
+    }
+
+    // =========================================================================
+    // Fix 3: URL pattern auto-classification
+    // =========================================================================
+
+    public static function siloq_classify_page( $post_id, $url = null ) {
+        if ( empty( $url ) ) {
+            $url = get_permalink( $post_id );
+        }
+        $path = strtolower( wp_parse_url( $url, PHP_URL_PATH ) ?: '/' );
+
+        // 1. Homepage
+        $front_id = intval( get_option( 'page_on_front' ) );
+        if ( $post_id === $front_id || $path === '/' || $path === '' ) {
+            return 'apex_hub';
+        }
+
+        // 2. Service hub patterns
+        if ( preg_match( '#/(services?|service-areas?|our-services?)/?$#', $path ) ) {
+            return 'hub';
+        }
+
+        // 3. City / spoke patterns
+        $state_abbrs = 'al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy';
+        if ( preg_match( '#/(' . $state_abbrs . ')/?$#', $path ) ) {
+            return 'spoke';
+        }
+        // City-service combo: /city-name-service/ or known city names
+        if ( preg_match( '#/[a-z]+-[a-z]+-(?:electrician|plumb|hvac|roof|repair|install|service|clean|maint|remodel)#', $path ) ) {
+            return 'spoke';
+        }
+        // Known large US cities
+        $city_pattern = '#/(houston|dallas|austin|san-antonio|fort-worth|arlington|plano|irving|frisco|mckinney|denton|katy|sugar-land|the-woodlands|spring|pearland|league-city|pasadena|beaumont|midland|odessa|lubbock|amarillo|el-paso|corpus-christi|brownsville|killeen|waco|tyler|longview|round-rock|pflugerville|georgetown|cedar-park|new-york|los-angeles|chicago|phoenix|philadelphia|jacksonville|columbus|charlotte|indianapolis|denver|seattle|nashville|oklahoma-city|portland|las-vegas|memphis|louisville|baltimore|milwaukee|albuquerque|tucson|fresno|sacramento|mesa|kansas-city|atlanta|omaha|colorado-springs|raleigh|miami|tampa|orlando|minneapolis|cleveland|pittsburgh|st-louis|cincinnati)/?$#';
+        if ( preg_match( $city_pattern, $path ) ) {
+            return 'spoke';
+        }
+
+        // 4. Supporting URL patterns
+        if ( preg_match( '#/(blog|resources?|faqs?|about|contact)(/|$)#', $path ) ) {
+            return 'supporting';
+        }
+
+        // 5. Orphan: zero inbound internal links
+        global $wpdb;
+        $site_url = home_url();
+        $permalink = get_permalink( $post_id );
+        $like_url = '%' . $wpdb->esc_like( wp_parse_url( $permalink, PHP_URL_PATH ) ) . '%';
+        $has_inbound = $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND ID != %d AND post_content LIKE %s LIMIT 1",
+            $post_id, $like_url
+        ) );
+        if ( intval( $has_inbound ) === 0 ) {
+            // Also check nav menus
+            $in_menu = false;
+            $menus = get_nav_menu_locations();
+            foreach ( $menus as $menu_id ) {
+                $items = wp_get_nav_menu_items( $menu_id );
+                if ( is_array( $items ) ) {
+                    foreach ( $items as $item ) {
+                        if ( intval( $item->object_id ) === $post_id ) {
+                            $in_menu = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if ( ! $in_menu ) {
+                return 'orphan';
+            }
+        }
+
+        // 6. Default
+        return 'supporting';
+    }
+
+    // =========================================================================
+    // Fix 4: Priority action sorting — tier system
+    // =========================================================================
+
+    public static function siloq_sort_actions( &$actions ) {
+        $tier_map = array(
+            // Tier 1 — STRUCTURAL
+            'Missing SEO title'          => 10,
+            'Missing title'              => 10,
+            'missing meta description'   => 11,
+            'Broken'                     => 12,
+            'BROKEN_FALLBACK'            => 12,
+            'Missing H1'                 => 13,
+            'multiple H1'                => 13,
+            'Duplicate title'            => 14,
+            // Tier 2 — CONTENT
+            'Thin content'               => 20,
+            'No internal links'          => 21,
+            'No images'                  => 22,
+            'missing alt'                => 22,
+            // Tier 3 — SCHEMA
+            'schema'                     => 30,
+            'structured data'            => 30,
+            // Tier 4 — CLASSIFICATION
+            'Unclassified'               => 40,
+            'cannibalization'            => 41,
+        );
+
+        $severity_order = array( 'critical' => 0, 'high' => 1, 'warning' => 2, 'important' => 2, 'medium' => 3, 'info' => 4, 'low' => 5 );
+
+        usort( $actions, function( $a, $b ) use ( $tier_map, $severity_order ) {
+            $text_a = strtolower( ( isset( $a['headline'] ) ? $a['headline'] : '' ) . ' ' . ( isset( $a['issue'] ) ? $a['issue'] : '' ) . ' ' . ( isset( $a['detail'] ) ? $a['detail'] : '' ) );
+            $text_b = strtolower( ( isset( $b['headline'] ) ? $b['headline'] : '' ) . ' ' . ( isset( $b['issue'] ) ? $b['issue'] : '' ) . ' ' . ( isset( $b['detail'] ) ? $b['detail'] : '' ) );
+
+            $tier_a = 50;
+            $tier_b = 50;
+            foreach ( $tier_map as $keyword => $tier ) {
+                if ( stripos( $text_a, strtolower( $keyword ) ) !== false && $tier < $tier_a ) {
+                    $tier_a = $tier;
+                }
+                if ( stripos( $text_b, strtolower( $keyword ) ) !== false && $tier < $tier_b ) {
+                    $tier_b = $tier;
+                }
+            }
+
+            if ( $tier_a !== $tier_b ) {
+                return $tier_a - $tier_b;
+            }
+
+            // Within same tier, sort by severity
+            $sev_a = isset( $a['priority'] ) ? strtolower( $a['priority'] ) : ( isset( $a['severity'] ) ? strtolower( $a['severity'] ) : 'low' );
+            $sev_b = isset( $b['priority'] ) ? strtolower( $b['priority'] ) : ( isset( $b['severity'] ) ? strtolower( $b['severity'] ) : 'low' );
+            return ( $severity_order[ $sev_a ] ?? 5 ) - ( $severity_order[ $sev_b ] ?? 5 );
+        } );
+    }
+
     /**
      * Render settings page
      */
@@ -1650,7 +1857,7 @@ foreach ($all_synced_pages as $hp) {
     $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
     $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : '';
     $children = get_posts(array('post_type' => 'any', 'post_parent' => $hp->ID, 'post_status' => 'publish', 'posts_per_page' => -1));
-    $is_hub = ($page_type === 'hub') || (count($children) > 0 && $hp->post_parent == 0);
+    $is_hub = ($page_type === 'hub') || ($page_type === 'apex_hub') || (count($children) > 0 && $hp->post_parent == 0);
     if (!$is_hub) { $non_hub_ids[] = $hp->ID; continue; }
     $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
     $missing_supporting = isset($analysis['missing_supporting']) ? (array)$analysis['missing_supporting'] : array();

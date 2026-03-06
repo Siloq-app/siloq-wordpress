@@ -132,13 +132,15 @@ window.SiloqIntelligenceCore = (function ($) {
     // ── Render analysis results into a panel ─────────────────────────────
 
     function renderResults($container, data, widgetType) {
-        var layerColors = { hub: '#4f46e5', spoke: '#0891b2', supporting: '#059669' };
-        var layerLabels = { hub: 'Hub Page', spoke: 'Spoke Page', supporting: 'Supporting' };
+        var layerColors = { apex_hub: '#7c3aed', hub: '#4f46e5', spoke: '#0891b2', supporting: '#059669' };
+        var layerLabels = { apex_hub: 'Apex Hub', hub: 'Hub Page', spoke: 'Spoke Page', supporting: 'Supporting' };
         var layer = data.layer || 'spoke';
 
+        var lBg = layer === 'apex_hub' ? '#7c3aed' : (layerColors[layer] || '#6b7280') + '20';
+        var lFg = layer === 'apex_hub' ? '#fff' : (layerColors[layer] || '#6b7280');
         $container.find('.siloq-wi-layer-badge').html(
             '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;' +
-            'background:' + (layerColors[layer] || '#6b7280') + '20;color:' + (layerColors[layer] || '#6b7280') + ';">' +
+            'background:' + lBg + ';color:' + lFg + ';">' +
             esc(layerLabels[layer] || layer) + '</span>'
         );
 
