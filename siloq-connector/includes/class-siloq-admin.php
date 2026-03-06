@@ -209,6 +209,16 @@ class Siloq_Admin {
                             <strong><?php _e('Not connected', 'siloq-connector'); ?></strong>
                         </div>
                         <p style="color:#555;margin-bottom:12px;"><?php _e('Connect Google Search Console to see which pages get traffic and need the most attention first.', 'siloq-connector'); ?></p>
+                        <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
+                        <div id="siloq-gsc-property-picker" style="background:#f0f7ff;border:1px solid #2271b1;border-radius:6px;padding:16px;margin-bottom:12px;">
+                            <h3 style="margin:0 0 8px;color:#1d2327;">✅ Google account connected — choose your property</h3>
+                            <p style="color:#555;margin:0 0 12px;">Select which Search Console property to use for <strong><?php echo esc_html(home_url()); ?></strong>:</p>
+                            <div id="siloq-property-list" style="margin-bottom:12px;"><em>Loading properties...</em></div>
+                            <button type="button" id="siloq-confirm-property-btn" class="button button-primary" disabled style="margin-right:8px;">Confirm Connection</button>
+                            <button type="button" id="siloq-cancel-property-btn" class="button">Cancel</button>
+                            <span id="siloq-property-status" style="margin-left:10px;font-size:13px;color:#666;"></span>
+                        </div>
+                        <?php else: ?>
                         <p style="margin:0;">
                             <button type="button" id="siloq-gsc-connect-btn" class="button button-primary">
                                 <?php _e('⚡ Connect Google Search Console', 'siloq-connector'); ?>
@@ -218,6 +228,7 @@ class Siloq_Admin {
                             <span id="siloq-gsc-status-msg" style="margin-left:10px;font-size:13px;color:#666;"></span>
                         </p>
                         <p style="margin-top:8px;color:#888;font-size:12px;"><?php _e('A Google sign-in window will open. Complete authorization, then return here.', 'siloq-connector'); ?></p>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
 
@@ -1162,6 +1173,62 @@ class Siloq_Admin {
                 }
             });
             <?php endif; ?>
+
+            // ── Property Picker JS ──
+            (function() {
+                var $list = $('#siloq-property-list');
+                if (!$list.length) return;
+
+                var nonce2 = '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>';
+                var siteUrl = '<?php echo esc_js(preg_replace("/^www\\./",'',parse_url(home_url(),PHP_URL_HOST))); ?>';
+
+                // Load properties on page load
+                $.post(ajaxUrl, {action: 'siloq_gsc_get_properties', nonce: nonce2}, function(r) {
+                    if (!r.success || !r.data || !r.data.properties) {
+                        $list.html('<span style="color:#dc2626;">Could not load properties: ' + (r.data && r.data.message ? r.data.message : 'unknown error') + '</span>');
+                        return;
+                    }
+                    var props = r.data.properties;
+                    var html = '';
+                    var autoSelected = '';
+                    $.each(props, function(i, p) {
+                        var pHost = p.replace(/^https?:\/\/(www\.)?/,'').replace(/\//g,'');
+                        var isMatch = (pHost === siteUrl || p.indexOf(siteUrl) !== -1);
+                        if (isMatch && !autoSelected) autoSelected = p;
+                        html += '<label style="display:block;padding:6px 0;cursor:pointer;">' +
+                            '<input type="radio" name="siloq_gsc_property" value="' + p + '" style="margin-right:8px;"' + (isMatch ? ' checked' : '') + '> ' +
+                            p + (isMatch ? ' <span style="color:#16a34a;font-size:12px;">(recommended)</span>' : '') + '</label>';
+                    });
+                    $list.html(html || '<em>No properties found in your Google account.</em>');
+                    if (autoSelected || props.length > 0) {
+                        $('#siloq-confirm-property-btn').prop('disabled', false);
+                    }
+                    $list.on('change', 'input[name=siloq_gsc_property]', function() {
+                        $('#siloq-confirm-property-btn').prop('disabled', false);
+                    });
+                }).fail(function() {
+                    $list.html('<span style="color:#dc2626;">Network error loading properties.</span>');
+                });
+
+                $('#siloq-confirm-property-btn').on('click', function() {
+                    var selected = $list.find('input[name=siloq_gsc_property]:checked').val();
+                    if (!selected) { alert('Please select a property.'); return; }
+                    $(this).prop('disabled', true).text('Saving...');
+                    $.post(ajaxUrl, {action: 'siloq_gsc_save_property', nonce: nonce2, property: selected}, function(r) {
+                        if (r.success) {
+                            $('#siloq-property-status').text('Connected! Refreshing...').css('color','#16a34a');
+                            setTimeout(function(){ location.reload(); }, 800);
+                        } else {
+                            $('#siloq-confirm-property-btn').prop('disabled', false).text('Confirm Connection');
+                            $('#siloq-property-status').text(r.data && r.data.message ? r.data.message : 'Save failed.').css('color','#dc2626');
+                        }
+                    });
+                });
+
+                $('#siloq-cancel-property-btn').on('click', function() {
+                    $.post(ajaxUrl, {action: 'siloq_gsc_check_status', nonce: nonce2}, function(){ location.reload(); });
+                });
+            })();
 
             // "Check Connection" after user connects in app.siloq.ai
             $(document).on('click', '#siloq-gsc-check-btn', function() {
