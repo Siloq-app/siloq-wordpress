@@ -355,7 +355,55 @@ class Siloq_Widget_Intelligence {
             }
         }
 
-        // Fallback 2: Try OpenAI directly before falling back to local suggestion
+        // Build shared system prompt for AI fallbacks
+        $ai_system_prompt = 'You are an expert local SEO copywriter. Your task is to rewrite the provided content to improve local SEO performance. '
+            . 'You MUST follow these rules exactly: '
+            . '(1) Return valid HTML that exactly preserves the structural elements of the input — if input contains ul/li lists, output must use ul/li lists. '
+            . '(2) Never strip HTML tags. '
+            . '(3) Rewritten content must be meaningfully different from the input — never return input unchanged. '
+            . '(4) First sentence must contain the primary service keyword. '
+            . '(5) Include the city and state naturally if mentioned in the instructions. '
+            . '(6) Do not add generic marketing filler — include at least one specific, concrete detail. '
+            . 'Return only the improved HTML. No explanation. No preamble. No markdown code fences.';
+
+        // Fallback 2: Try Anthropic Claude Sonnet (primary AI fallback)
+        $anthropic_key = get_option( 'siloq_anthropic_api_key', '' );
+        if ( ! empty( $anthropic_key ) && ! empty( $widget_content ) ) {
+            $ant_response = wp_remote_post(
+                'https://api.anthropic.com/v1/messages',
+                [
+                    'timeout' => 45,
+                    'headers' => [
+                        'x-api-key'         => $anthropic_key,
+                        'anthropic-version' => '2023-06-01',
+                        'content-type'      => 'application/json',
+                    ],
+                    'body' => wp_json_encode( [
+                        'model'      => 'claude-sonnet-4-6',
+                        'max_tokens' => 1024,
+                        'system'     => $ai_system_prompt,
+                        'messages'   => [
+                            [ 'role' => 'user', 'content' => $edit_instruction ],
+                        ],
+                    ] ),
+                ]
+            );
+
+            if ( ! is_wp_error( $ant_response ) && wp_remote_retrieve_response_code( $ant_response ) === 200 ) {
+                $ant_body    = json_decode( wp_remote_retrieve_body( $ant_response ), true );
+                $ant_content = $ant_body['content'][0]['text'] ?? '';
+                if ( ! empty( $ant_content ) ) {
+                    $result = $this->generate_local_suggestion( $payload );
+                    $result['suggested_content'] = $ant_content;
+                    $result['source'] = 'anthropic_fallback';
+                    unset( $result['no_suggestion_reason'] );
+                    wp_send_json_success( $result );
+                    return;
+                }
+            }
+        }
+
+        // Fallback 3: Try OpenAI GPT-4o as secondary AI fallback (DALL-E key reused)
         $openai_key = get_option( 'siloq_openai_api_key', '' );
         if ( ! empty( $openai_key ) && ! empty( $widget_content ) ) {
             $oai_response = wp_remote_post(
@@ -367,23 +415,17 @@ class Siloq_Widget_Intelligence {
                         'Content-Type'  => 'application/json',
                     ],
                     'body' => wp_json_encode( [
-                        'model'    => 'gpt-4o-mini',
+                        'model'    => 'gpt-4o',
                         'messages' => [
-                            [
-                                'role'    => 'system',
-                                'content' => 'You are an SEO copywriter. Rewrite the provided content to improve local SEO. Return only the improved HTML, no explanation, no markdown code fences.',
-                            ],
-                            [
-                                'role'    => 'user',
-                                'content' => $edit_instruction,
-                            ],
+                            [ 'role' => 'system', 'content' => $ai_system_prompt ],
+                            [ 'role' => 'user',   'content' => $edit_instruction ],
                         ],
                     ] ),
                 ]
             );
 
             if ( ! is_wp_error( $oai_response ) && wp_remote_retrieve_response_code( $oai_response ) === 200 ) {
-                $oai_body = json_decode( wp_remote_retrieve_body( $oai_response ), true );
+                $oai_body    = json_decode( wp_remote_retrieve_body( $oai_response ), true );
                 $oai_content = $oai_body['choices'][0]['message']['content'] ?? '';
                 if ( ! empty( $oai_content ) ) {
                     $result = $this->generate_local_suggestion( $payload );
@@ -396,7 +438,7 @@ class Siloq_Widget_Intelligence {
             }
         }
 
-        // Fallback 3: local suggestion with layer/heading analysis
+        // Fallback 4: local rule-based suggestion (no AI key configured)
         wp_send_json_success( $this->generate_local_suggestion( $payload ) );
     }
 

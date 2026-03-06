@@ -274,6 +274,8 @@ class Siloq_Admin {
         $signup_url = get_option('siloq_signup_url', '');
         $use_dummy_scan = get_option('siloq_use_dummy_scan', 'yes');
         $show_advanced = get_option('siloq_show_advanced', 'no');
+        $anthropic_api_key = get_option('siloq_anthropic_api_key', '');
+        $openai_api_key = get_option('siloq_openai_api_key', '');
         
         // Check if connected
         $is_connected = !empty($api_key) && !empty($api_url);
@@ -472,6 +474,50 @@ class Siloq_Admin {
                                         <a href="<?php echo esc_url(self::DASHBOARD_URL . '/dashboard?tab=sites'); ?>" target="_blank">
                                             <?php _e('Get your API key →', 'siloq-connector'); ?>
                                         </a>
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th scope="row">
+                                    <label for="siloq_anthropic_api_key">
+                                        <?php _e('Anthropic API Key', 'siloq-connector'); ?>
+                                    </label>
+                                </th>
+                                <td>
+                                    <input
+                                        type="password"
+                                        id="siloq_anthropic_api_key"
+                                        name="siloq_anthropic_api_key"
+                                        value="<?php echo esc_attr($anthropic_api_key); ?>"
+                                        class="regular-text"
+                                        placeholder="sk-ant-..."
+                                    />
+                                    <p class="description">
+                                        <?php _e('Anthropic API key for Claude Sonnet content suggestions. Used as primary AI fallback when Siloq API is unavailable.', 'siloq-connector'); ?>
+                                        <a href="https://console.anthropic.com/settings/keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
+                                    </p>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th scope="row">
+                                    <label for="siloq_openai_api_key">
+                                        <?php _e('OpenAI API Key', 'siloq-connector'); ?>
+                                    </label>
+                                </th>
+                                <td>
+                                    <input
+                                        type="password"
+                                        id="siloq_openai_api_key"
+                                        name="siloq_openai_api_key"
+                                        value="<?php echo esc_attr($openai_api_key); ?>"
+                                        class="regular-text"
+                                        placeholder="sk-..."
+                                    />
+                                    <p class="description">
+                                        <?php _e('OpenAI API key for DALL-E image generation and secondary content suggestion fallback.', 'siloq-connector'); ?>
+                                        <a href="https://platform.openai.com/api-keys" target="_blank"><?php _e('Get key →', 'siloq-connector'); ?></a>
                                     </p>
                                 </td>
                             </tr>
@@ -1674,6 +1720,11 @@ class Siloq_Admin {
         update_option('siloq_signup_url', $signup_url);
         update_option('siloq_use_dummy_scan', $use_dummy_scan);
         update_option('siloq_show_advanced', $show_advanced);
+        // AI provider keys
+        $anthropic_key = isset($_POST['siloq_anthropic_api_key']) ? sanitize_text_field($_POST['siloq_anthropic_api_key']) : '';
+        if (!empty($anthropic_key)) { update_option('siloq_anthropic_api_key', $anthropic_key); }
+        $openai_key_setting = isset($_POST['siloq_openai_api_key']) ? sanitize_text_field($_POST['siloq_openai_api_key']) : '';
+        if (!empty($openai_key_setting)) { update_option('siloq_openai_api_key', $openai_key_setting); }
 
         // Save content types to sync (Advanced Settings checkboxes)
         if (isset($_POST['siloq_content_types']) && is_array($_POST['siloq_content_types'])) {
