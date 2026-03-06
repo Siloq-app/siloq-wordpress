@@ -2162,6 +2162,21 @@ if ($has_plan && isset($plan_data['issues'])) {
   <?php foreach (array_slice($plan_data['actions'], 0, 4) as $i => $act):
     $prio_cls = $act['priority'] === 'high' ? 'p1' : ($act['priority'] === 'medium' ? 'p2' : 'p3');
     $fix_url = isset($act['elementor_url']) ? $act['elementor_url'] : (isset($act['edit_url']) ? $act['edit_url'] : '');
+    $act_post_id = isset($act['post_id']) ? intval($act['post_id']) : 0;
+    $act_text = strtolower( (isset($act['headline']) ? $act['headline'] : '') . ' ' . (isset($act['detail']) ? $act['detail'] : '') );
+    // Determine fix type from headline/detail text
+    $fix_mode = 'link'; // default: open link
+    if (stripos($act_text, 'missing meta description') !== false || stripos($act_text, 'meta description') !== false) {
+        $fix_mode = 'meta_description';
+    } elseif (stripos($act_text, 'missing seo title') !== false || stripos($act_text, 'missing title') !== false || stripos($act_text, 'set a title tag') !== false) {
+        $fix_mode = 'meta_title';
+    } elseif (stripos($act_text, 'schema') !== false || stripos($act_text, 'structured data') !== false) {
+        $fix_mode = 'schema';
+    } elseif (stripos($act_text, 'missing h1') !== false) {
+        $fix_mode = 'elementor';
+    } elseif (stripos($act_text, 'orphan') !== false || stripos($act_text, 'no internal links') !== false) {
+        $fix_mode = 'internal_links';
+    }
   ?>
   <div class="siloq-action-card" style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:#f8fafc;border-radius:11px;border:1px solid #e5e7eb;margin-bottom:7px">
     <div style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;background:<?php echo $act['priority']==='high'?'#fef2f2':'#fffbeb'; ?>;color:<?php echo $act['priority']==='high'?'#dc2626':'#d97706'; ?>">
@@ -2176,8 +2191,18 @@ if ($has_plan && isset($plan_data['issues'])) {
         <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:<?php echo $act['priority']==='high'?'#fef2f2':'#fffbeb'; ?>;color:<?php echo $act['priority']==='high'?'#dc2626':'#d97706'; ?>"><?php echo ucfirst(esc_html($act['priority'])); ?> priority</span>
       </div>
     </div>
-    <?php if ($fix_url): ?>
-    <a href="<?php echo esc_url($fix_url); ?>" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Fix It &rarr;</a>
+    <?php if ($fix_mode === 'meta_description' && $act_post_id): ?>
+    <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_meta" data-post-id="<?php echo $act_post_id; ?>" data-type="description" style="font-size:11px;padding:6px 12px;white-space:nowrap;cursor:pointer">Fix It</button>
+    <?php elseif ($fix_mode === 'meta_title' && $act_post_id): ?>
+    <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_meta" data-post-id="<?php echo $act_post_id; ?>" data-type="title" style="font-size:11px;padding:6px 12px;white-space:nowrap;cursor:pointer">Fix It</button>
+    <?php elseif ($fix_mode === 'schema' && $act_post_id): ?>
+    <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_schema" data-post-id="<?php echo $act_post_id; ?>" style="font-size:11px;padding:6px 12px;white-space:nowrap;cursor:pointer">Fix It</button>
+    <?php elseif ($fix_mode === 'elementor' && $fix_url): ?>
+    <a href="<?php echo esc_url($fix_url); ?>" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Edit in Elementor</a>
+    <?php elseif ($fix_mode === 'internal_links' && $act_post_id): ?>
+    <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="view_links" data-post-id="<?php echo $act_post_id; ?>" style="font-size:11px;padding:6px 12px;white-space:nowrap;cursor:pointer">View Internal Links</button>
+    <?php elseif ($fix_url): ?>
+    <a href="<?php echo esc_url($fix_url); ?>" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Fix It &rarr;</a>
     <?php endif; ?>
   </div>
   <?php endforeach; ?>
@@ -2320,6 +2345,44 @@ function siloqRunAudit(btn) {
         btn.textContent = 'Run Audit';
     });
 }
+
+// ── One-click Fix It buttons ──
+jQuery(document).on('click', '.siloq-fix-btn', function() {
+    var $btn = jQuery(this);
+    var action = $btn.data('action');
+    var postId = $btn.data('post-id');
+    var type = $btn.data('type') || '';
+
+    if (action === 'view_links') {
+        // Open the post in Elementor with internal links tab
+        window.open(ajaxurl.replace('admin-ajax.php', 'post.php?post=' + postId + '&action=elementor'), '_blank');
+        return;
+    }
+
+    $btn.text('Fixing...').prop('disabled', true);
+
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'siloq_dashboard_fix',
+            nonce: siloqDash.nonce,
+            fix_action: action,
+            post_id: postId,
+            fix_type: type
+        },
+        success: function(resp) {
+            if (resp.success) {
+                $btn.text('Fixed').css('background', '#10b981');
+            } else {
+                $btn.text((resp.data && resp.data.message ? resp.data.message : 'Failed')).prop('disabled', false);
+            }
+        },
+        error: function() {
+            $btn.text('Error').prop('disabled', false);
+        }
+    });
+});
 </script>
 
 <!-- Site Architecture Map -->
@@ -4097,6 +4160,71 @@ function siloqRunAudit(btn) {
     /**
      * Get entity profile field status with fill state and weights.
      */
+    /**
+     * AJAX: One-click dashboard fix — routes to the right handler.
+     */
+    public static function ajax_dashboard_fix() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( [ 'message' => 'Insufficient permissions.' ] );
+            return;
+        }
+
+        $fix_action = sanitize_text_field( $_POST['fix_action'] ?? '' );
+        $post_id    = intval( $_POST['post_id'] ?? 0 );
+        $fix_type   = sanitize_text_field( $_POST['fix_type'] ?? '' );
+
+        if ( ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing post ID.' ] );
+            return;
+        }
+
+        switch ( $fix_action ) {
+            case 'fix_meta':
+                // Generate and apply meta title or description via the page analyzer
+                if ( $fix_type === 'title' ) {
+                    $title = self::siloq_get_page_title( $post_id );
+                    if ( empty( $title ) ) {
+                        $title = get_the_title( $post_id );
+                    }
+                    // Save to common SEO meta locations
+                    update_post_meta( $post_id, '_yoast_wpseo_title', $title );
+                    update_post_meta( $post_id, '_aioseo_title', $title );
+                    wp_send_json_success( [ 'message' => 'Meta title set.', 'value' => $title ] );
+                } elseif ( $fix_type === 'description' ) {
+                    // Generate a meta description from post content
+                    $post = get_post( $post_id );
+                    $content = wp_strip_all_tags( $post->post_content ?? '' );
+                    $desc = wp_trim_words( $content, 25, '...' );
+                    if ( strlen( $desc ) > 160 ) {
+                        $desc = substr( $desc, 0, 157 ) . '...';
+                    }
+                    update_post_meta( $post_id, '_yoast_wpseo_metadesc', $desc );
+                    update_post_meta( $post_id, '_aioseo_description', $desc );
+                    wp_send_json_success( [ 'message' => 'Meta description generated.', 'value' => $desc ] );
+                } else {
+                    wp_send_json_error( [ 'message' => 'Unknown meta fix type.' ] );
+                }
+                break;
+
+            case 'fix_schema':
+                // Delegate to the schema intelligence generator
+                if ( class_exists( 'Siloq_Schema_Intelligence' ) ) {
+                    $_POST['nonce'] = $_POST['nonce']; // already verified
+                    $_POST['post_id'] = $post_id;
+                    Siloq_Schema_Intelligence::ajax_generate_schema();
+                } else {
+                    wp_send_json_error( [ 'message' => 'Schema intelligence module not available.' ] );
+                }
+                break;
+
+            default:
+                wp_send_json_error( [ 'message' => 'Unknown fix action: ' . $fix_action ] );
+                break;
+        }
+    }
+
     public static function get_entity_field_status() {
         $business_name = get_option('siloq_business_name', '');
         $business_type = get_option('siloq_business_type', '');

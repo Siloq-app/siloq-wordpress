@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.111
+* Version: 1.5.112
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.111');
+define('SILOQ_VERSION', '1.5.112');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -323,6 +323,10 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
+        // Dashboard one-click fix buttons
+        add_action('wp_ajax_siloq_dashboard_fix', array('Siloq_Admin', 'ajax_dashboard_fix'));
+        // Image generation (DALL-E via API)
+        add_action('wp_ajax_siloq_generate_and_insert_image', array('Siloq_Widget_Intelligence', 'ajax_generate_and_insert_image'));
         // Site Audit (Track 2)
         add_action('wp_ajax_siloq_run_audit', array($this, 'ajax_run_audit'));
 

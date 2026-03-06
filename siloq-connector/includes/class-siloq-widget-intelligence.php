@@ -59,6 +59,7 @@ class Siloq_Widget_Intelligence {
 
         // AJAX
         add_action( 'wp_ajax_siloq_analyze_widget', [ $this, 'ajax_analyze_widget' ] );
+        add_action( 'wp_ajax_siloq_generate_and_insert_image', [ __CLASS__, 'ajax_generate_and_insert_image' ] );
     }
 
     /**
@@ -488,5 +489,119 @@ class Siloq_Widget_Intelligence {
         }
 
         return $recs;
+    }
+
+    // ── AJAX: Generate image via DALL-E and sideload into media library ──
+
+    public static function ajax_generate_and_insert_image() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'upload_files' ) ) {
+            wp_send_json_error( [ 'message' => 'Insufficient permissions.' ] );
+            return;
+        }
+
+        $prompt   = sanitize_text_field( $_POST['prompt'] ?? '' );
+        $filename = sanitize_file_name( $_POST['filename'] ?? 'generated-image.png' );
+        $alt_text = sanitize_text_field( $_POST['alt_text'] ?? '' );
+        $post_id  = intval( $_POST['post_id'] ?? 0 );
+
+        if ( empty( $prompt ) ) {
+            wp_send_json_error( [ 'message' => 'Prompt is required.' ] );
+            return;
+        }
+
+        $image_url = null;
+
+        // Strategy 1: Call Siloq API generate-image endpoint
+        $api_url  = get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' );
+        $api_key  = get_option( 'siloq_api_key', '' );
+        $site_id  = get_option( 'siloq_site_id', '' );
+
+        if ( ! empty( $api_key ) && ! empty( $site_id ) ) {
+            $api_response = wp_remote_post(
+                rtrim( $api_url, '/' ) . '/sites/' . $site_id . '/generate-image/',
+                [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Content-Type'  => 'application/json',
+                    ],
+                    'body'    => wp_json_encode( [
+                        'prompt'   => $prompt,
+                        'filename' => $filename,
+                        'alt_text' => $alt_text,
+                    ] ),
+                    'timeout' => 60,
+                ]
+            );
+
+            if ( ! is_wp_error( $api_response ) ) {
+                $status = wp_remote_retrieve_response_code( $api_response );
+                $body   = json_decode( wp_remote_retrieve_body( $api_response ), true );
+                if ( $status >= 200 && $status < 300 && ! empty( $body['image_url'] ) ) {
+                    $image_url = $body['image_url'];
+                }
+            }
+        }
+
+        // Strategy 2: Fallback — call OpenAI directly if API returned 404 or failed
+        if ( empty( $image_url ) ) {
+            $openai_key = get_option( 'siloq_openai_api_key', '' );
+            if ( empty( $openai_key ) ) {
+                wp_send_json_error( [ 'message' => 'Image generation is not available. The Siloq API endpoint returned no image and no OpenAI API key is configured (Settings > siloq_openai_api_key).' ] );
+                return;
+            }
+
+            $oai_response = wp_remote_post(
+                'https://api.openai.com/v1/images/generations',
+                [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $openai_key,
+                        'Content-Type'  => 'application/json',
+                    ],
+                    'body'    => wp_json_encode( [
+                        'model'  => 'dall-e-3',
+                        'prompt' => $prompt,
+                        'n'      => 1,
+                        'size'   => '1024x1024',
+                    ] ),
+                    'timeout' => 60,
+                ]
+            );
+
+            if ( is_wp_error( $oai_response ) ) {
+                wp_send_json_error( [ 'message' => 'OpenAI request failed: ' . $oai_response->get_error_message() ] );
+                return;
+            }
+
+            $oai_body = json_decode( wp_remote_retrieve_body( $oai_response ), true );
+            if ( empty( $oai_body['data'][0]['url'] ) ) {
+                $err = isset( $oai_body['error']['message'] ) ? $oai_body['error']['message'] : 'Unknown OpenAI error';
+                wp_send_json_error( [ 'message' => 'DALL-E generation failed: ' . $err ] );
+                return;
+            }
+            $image_url = $oai_body['data'][0]['url'];
+        }
+
+        // Sideload image into WP media library
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+        $attachment_id = media_sideload_image( $image_url, $post_id, $alt_text, 'id' );
+
+        if ( is_wp_error( $attachment_id ) ) {
+            wp_send_json_error( [ 'message' => 'Failed to sideload image: ' . $attachment_id->get_error_message() ] );
+            return;
+        }
+
+        if ( ! empty( $alt_text ) ) {
+            update_post_meta( $attachment_id, '_wp_attachment_image_alt', $alt_text );
+        }
+
+        wp_send_json_success( [
+            'attachment_id' => $attachment_id,
+            'url'           => wp_get_attachment_url( $attachment_id ),
+        ] );
     }
 }

@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.112] — 2026-03-06
+
+### Fixed
+- **Generate Image now calls DALL-E 3 via API** — Replaced Midjourney copy-paste modal with real DALL-E image generation. Routes through Siloq API (`POST /sites/{id}/generate-image/`) so the OpenAI key stays server-side. Falls back to direct OpenAI call using `siloq_openai_api_key` WP option if API endpoint is unavailable. Generated images are sideloaded into WP media library with alt text.
+- **One-click Fix It buttons in dashboard** — Priority Actions cards now execute fixes directly via AJAX instead of linking to Elementor. Missing meta title/description: auto-generates and saves to Yoast/AIOSEO meta fields. Missing schema: triggers schema generation inline. Missing H1: relabeled "Edit in Elementor" (requires content edit). Orphan/no internal links: opens Elementor editor. Settings links open in new tab.
+
+---
+
 ## [1.5.111] — 2026-03-06
 
 ### Fixed

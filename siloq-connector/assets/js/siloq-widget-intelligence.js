@@ -556,44 +556,48 @@
         $(this).closest('.siloq-wi-results').hide();
     });
 
-    // ── Image generation modal ────────────────────────────────────────────
+    // ── Image generation via DALL-E API ─────────────────────────────────
 
-    /**
-     * siloqImageGenerator.generate()
-     * Stub for future AI image API wiring (DALL-E, Midjourney, etc.).
-     * Currently shows a modal with a ready-to-paste prompt.
-     */
     window.siloqImageGenerator = {
         generate: function(prompt, filename, alt, widgetId) {
-            var modal = $(
-                '<div class="siloq-wi-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;' +
-                'background:rgba(0,0,0,0.5);z-index:99999999;display:flex;align-items:center;justify-content:center;">' +
-                '<div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-width:90vw;">' +
-                '<h3 style="margin:0 0 16px;font-size:16px;font-weight:700;">🎨 Generate Image</h3>' +
-                '<p style="font-size:12px;color:#6b7280;margin:0 0 8px;">Copy this prompt into Midjourney, DALL-E, or your preferred image generator:</p>' +
-                '<textarea style="width:100%;height:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-bottom:12px;" readonly>' +
-                esc(prompt) + '</textarea>' +
-                '<p style="font-size:12px;margin:0 0 4px;"><strong>Save as:</strong> ' + esc(filename) + '</p>' +
-                '<p style="font-size:12px;margin:0 0 16px;"><strong>Alt tag:</strong> ' + esc(alt) + '</p>' +
-                '<div style="display:flex;gap:8px;">' +
-                '<button class="siloq-wi-modal-copy" style="flex:1;padding:8px;background:#4f46e5;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">📋 Copy Prompt</button>' +
-                '<button class="siloq-wi-modal-close" style="flex:1;padding:8px;background:#f3f4f6;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:13px;">Close</button>' +
-                '</div></div></div>'
-            );
+            var $genBtn = $('.siloq-wi-gen-image-btn').filter(function() {
+                return $(this).data('prompt') === prompt;
+            }).first();
+            if (!$genBtn.length) $genBtn = $('.siloq-wi-gen-image-btn').first();
 
-            $('body').append(modal);
+            $genBtn.text('Generating...').prop('disabled', true);
 
-            modal.find('.siloq-wi-modal-copy').on('click', function() {
-                if (navigator.clipboard) navigator.clipboard.writeText(prompt);
-                $(this).text('✅ Copied!');
+            $.ajax({
+                url: siloqWI.ajaxUrl,
+                method: 'POST',
+                data: {
+                    action: 'siloq_generate_and_insert_image',
+                    nonce: siloqWI.nonce,
+                    prompt: prompt,
+                    filename: filename,
+                    alt_text: alt,
+                    post_id: siloqWI.postId || 0
+                },
+                timeout: 90000,
+                success: function(resp) {
+                    if (resp.success && resp.data && resp.data.url) {
+                        $genBtn.text('Image Added to Media Library').prop('disabled', true);
+                        var $container = $genBtn.closest('div');
+                        $container.append(
+                            '<div style="margin-top:8px;">' +
+                            '<img src="' + resp.data.url + '" style="max-width:100%;border-radius:6px;border:1px solid #e5e7eb;" />' +
+                            '<p style="font-size:10px;color:#6b7280;margin:4px 0 0;">Added to media library. Insert it from Media Library or use attachment ID: ' + (resp.data.attachment_id || '') + '</p>' +
+                            '</div>'
+                        );
+                    } else {
+                        $genBtn.text((resp.data && resp.data.message ? resp.data.message : 'Generation failed')).prop('disabled', false);
+                    }
+                },
+                error: function() {
+                    $genBtn.text('Request timed out — try again').prop('disabled', false);
+                }
             });
-            modal.find('.siloq-wi-modal-close').on('click', function() {
-                modal.remove();
-            });
-            modal.on('click', function(e) {
-                if ($(e.target).is(modal)) modal.remove();
-            });
-        },
+        }
     };
 
     $(document).on('click', '.siloq-wi-gen-image-btn', function() {
