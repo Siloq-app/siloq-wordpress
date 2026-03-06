@@ -2631,7 +2631,104 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                             <span class="siloq-accordion__arrow">&#9660;</span>
                         </button>
                         <div class="siloq-accordion__content" id="siloq-supporting-content">
-                            <p class="siloq-empty">Generate a plan to see content opportunities.</p>
+                            <?php
+                            // Real gap analysis
+                            $all_pages_q = get_posts( array(
+                                'post_type'      => 'page',
+                                'posts_per_page' => -1,
+                                'post_status'    => 'publish',
+                                'fields'         => 'all',
+                            ) );
+                            $page_data = array();
+                            foreach ( $all_pages_q as $pg ) {
+                                $page_data[] = array(
+                                    'title'     => $pg->post_title,
+                                    'url'       => get_permalink( $pg->ID ),
+                                    'page_role' => get_post_meta( $pg->ID, '_siloq_page_role', true ),
+                                );
+                            }
+                            $categorized = self::categorize_pages( $page_data );
+                            $city_count  = count( $categorized['cities'] );
+                            $has_cards   = false;
+
+                            // --- Card 1: Missing Service Areas Hub ---
+                            if ( $city_count >= 3 && $categorized['service_area_page'] === null ) :
+                                $has_cards = true;
+                            ?>
+                            <div class="siloq-action-card" style="border-left:4px solid #f59e0b;background:#fffbeb;border-radius:6px;padding:16px;margin-bottom:12px;">
+                                <div class="siloq-action-card__body">
+                                    <span style="display:inline-block;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">HIGHEST PRIORITY</span>
+                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;">Create a Service Areas Hub Page</p>
+                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">You have <?php echo intval( $city_count ); ?> city pages with no hub connecting them. They compete instead of reinforcing one authoritative page.</p>
+                                    <p style="color:#999;font-size:12px;margin:0 0 4px;"><strong>Recommended URL:</strong> /service-areas/</p>
+                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Impact:</strong> High &mdash; affects all <?php echo intval( $city_count ); ?> city pages</p>
+                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( 'Service Areas' ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php
+                            // --- Card 2: Content Gaps (missing service pages) ---
+                            $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+                            if ( ! is_array( $primary_services ) ) { $primary_services = array(); }
+
+                            $existing_urls = array_map( function( $p ) { return strtolower( $p['url'] ); }, $page_data );
+
+                            foreach ( $primary_services as $service ) :
+                                $service_slug = sanitize_title( $service );
+                                $found = false;
+                                foreach ( $existing_urls as $eu ) {
+                                    if ( strpos( $eu, $service_slug ) !== false ) { $found = true; break; }
+                                }
+                                if ( $found ) { continue; }
+                                $has_cards = true;
+                                $first_city = ! empty( $categorized['cities'] ) ? $categorized['cities'][0]['title'] : '';
+                                $card_title = $first_city ? esc_html( $service ) . ' in ' . esc_html( $first_city ) : esc_html( $service );
+                            ?>
+                            <div class="siloq-action-card" style="border-left:4px solid #3b82f6;background:#eff6ff;border-radius:6px;padding:16px;margin-bottom:12px;">
+                                <div class="siloq-action-card__body">
+                                    <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">CONTENT GAP</span>
+                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $card_title; ?></p>
+                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $service ); ?>&rdquo; as a primary service. Adding a dedicated page improves topical authority and gives Google a clear ranking signal.</p>
+                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> Sub-page (Transactional)</p>
+                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( $service ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+
+                            <?php
+                            // --- Card 3: Local SEO Gaps (missing city pages) ---
+                            $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
+                            if ( ! is_array( $service_areas ) ) { $service_areas = array(); }
+
+                            $existing_titles = array_map( function( $p ) { return strtolower( $p['title'] ); }, $page_data );
+                            $first_service   = ! empty( $primary_services ) ? $primary_services[0] : '';
+
+                            foreach ( $service_areas as $city_entry ) :
+                                $city_name = is_array( $city_entry ) ? ( isset( $city_entry['city'] ) ? $city_entry['city'] : '' ) : $city_entry;
+                                if ( empty( $city_name ) ) { continue; }
+                                $found = false;
+                                foreach ( $existing_titles as $et ) {
+                                    if ( strpos( $et, strtolower( $city_name ) ) !== false ) { $found = true; break; }
+                                }
+                                if ( $found ) { continue; }
+                                $has_cards = true;
+                                $suggested_title = esc_html( $city_name ) . ( $first_service ? ' ' . esc_html( $first_service ) : '' );
+                            ?>
+                            <div class="siloq-action-card" style="border-left:4px solid #7c3aed;background:#f5f3ff;border-radius:6px;padding:16px;margin-bottom:12px;">
+                                <div class="siloq-action-card__body">
+                                    <span style="display:inline-block;background:#7c3aed;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">LOCAL SEO GAP</span>
+                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $suggested_title; ?></p>
+                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $city_name ); ?>&rdquo;. Adding a dedicated city page helps rank for local searches and strengthens your service area coverage.</p>
+                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> City Landing Page (Local)</p>
+                                    <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=page&post_title=' . rawurlencode( $city_name . ( $first_service ? ' ' . $first_service : '' ) ) ) ); ?>" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</a>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+
+                            <?php if ( ! $has_cards ) : ?>
+                            <p class="siloq-empty">No content gaps detected. Your site covers all configured services and areas.</p>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -4266,5 +4363,83 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
             ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
         ];
+    }
+
+    /**
+     * Check if a title or slug belongs to an internal/system post type.
+     */
+    private static function is_internal_post_type_name( $title, $slug ) {
+        $internal_patterns = array( 'koops', 'grid', 'template', 'listing', 'loop', 'cpt-', 'jet-', 'acf-', 'pods-', 'dynamic-' );
+        $internal_slugs    = array( 'attachment', 'revision', 'nav_menu_item' );
+
+        $lower_title = strtolower( $title );
+        $lower_slug  = strtolower( $slug );
+
+        if ( in_array( $lower_slug, $internal_slugs, true ) ) {
+            return true;
+        }
+        foreach ( $internal_patterns as $pat ) {
+            if ( strpos( $lower_title, $pat ) !== false || strpos( $lower_slug, $pat ) !== false ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Categorize site pages into hubs, cities, spokes, and service_area_page.
+     *
+     * @param array $pages Each element has keys: title, url, page_role.
+     * @return array With keys: hubs, cities, spokes, service_area_page.
+     */
+    private static function categorize_pages( $pages ) {
+        $state_abbrs = array(
+            'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+            'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+            'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+            'VA','WA','WV','WI','WY','DC',
+        );
+        $state_pattern = '/\b(' . implode( '|', $state_abbrs ) . ')\b/';
+
+        $result = array(
+            'hubs'              => array(),
+            'cities'            => array(),
+            'spokes'            => array(),
+            'service_area_page' => null,
+        );
+
+        foreach ( $pages as $page ) {
+            $title = isset( $page['title'] ) ? $page['title'] : '';
+            $url   = isset( $page['url'] )   ? $page['url']   : '';
+            $role  = isset( $page['page_role'] ) ? $page['page_role'] : '';
+            $slug  = basename( untrailingslashit( wp_parse_url( $url, PHP_URL_PATH ) ?: '' ) );
+
+            if ( self::is_internal_post_type_name( $title, $slug ) ) {
+                continue;
+            }
+
+            // Service area page detection
+            if ( preg_match( '/service.?area|areas.?we.?serve|coverage.?area/i', $url . ' ' . $title ) ) {
+                $result['service_area_page'] = $page;
+                continue;
+            }
+
+            // City pages — title contains a US state abbreviation as a word
+            if ( preg_match( $state_pattern, $title ) ) {
+                $result['cities'][] = $page;
+                continue;
+            }
+
+            // Hub pages
+            if ( $role === 'hub' || preg_match( '/service|solution/i', $slug ) ) {
+                $result['hubs'][] = $page;
+                continue;
+            }
+
+            // Everything else is a spoke
+            $result['spokes'][] = $page;
+        }
+
+        return $result;
     }
 }
