@@ -443,8 +443,8 @@ class Siloq_Admin {
                         <h2>
                             <button type="button" class="siloq-toggle-advanced">
                                 <span class="dashicons dashicons-admin-generic"></span>
-                                <?php _e('Advanced Settings', 'siloq-connector'); ?>
-                                <span class="dashicons dashicons-arrow-down-alt2"></span>
+                                <span class="siloq-adv-label"><?php _e('Advanced Settings', 'siloq-connector'); ?></span>
+                                <span class="dashicons dashicons-arrow-down-alt2 siloq-adv-icon"></span>
                             </button>
                         </h2>
                         
@@ -780,8 +780,8 @@ class Siloq_Admin {
             // Enhanced advanced settings toggle with smooth animation
             $('.siloq-toggle-advanced').on('click', function() {
                 var content = $('.siloq-advanced-content');
-                var icon = $(this).find('.dashicons-arrow-down-alt2, .dashicons-arrow-up-alt2');
-                var buttonText = $(this).find('span');
+                var icon = $(this).find('.siloq-adv-icon');
+                var buttonText = $(this).find('.siloq-adv-label');
                 var isExpanded = content.is(':visible');
                 
                 // Smooth toggle animation
@@ -1336,6 +1336,9 @@ class Siloq_Admin {
         $site_id_manual = isset($_POST['siloq_site_id_manual']) ? sanitize_text_field($_POST['siloq_site_id_manual']) : '';
         if (!empty($site_id_manual)) {
             update_option('siloq_site_id', $site_id_manual);
+            // Clear any stale auto-detect transients so everything re-loads fresh
+            delete_transient('siloq_connection_verified');
+            delete_transient('siloq_plan_data');
         }
         $auto_sync = isset($_POST['siloq_auto_sync']) ? 'yes' : 'no';
         $signup_url = isset($_POST['siloq_signup_url']) ? esc_url_raw($_POST['siloq_signup_url']) : '';
@@ -1388,9 +1391,15 @@ class Siloq_Admin {
             delete_transient('siloq_plan_data');
         }
 
-        // Auto-detect site ID — match by THIS WordPress site's URL to avoid grabbing the wrong site
+        // Auto-detect site ID — ONLY if no manual override was just submitted
+        $manual_override_just_set = !empty($site_id_manual);
+        if ($manual_override_just_set) {
+            add_settings_error('siloq_settings', 'siloq_site_id_saved',
+                sprintf(__('Site ID set to <strong>%s</strong>. All plugin data will now use this site.', 'siloq-connector'), esc_html($site_id_manual)),
+                'success');
+        }
         $site_id = get_option('siloq_site_id', '');
-        if (empty($site_id) || $old_api_key !== $api_key) {
+        if (!$manual_override_just_set && (empty($site_id) || $old_api_key !== $api_key)) {
             $this_site_url = trailingslashit(home_url());
             $this_site_host = strtolower(preg_replace('/^www\./', '', parse_url($this_site_url, PHP_URL_HOST) ?? ''));
 
