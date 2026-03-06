@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.5.114] — 2026-03-06��### Fixed�- **Schema "Staged schema data is invalid." error** — Two fixes: (1) `resolve_service_cities()` now JSON-decodes the stored cities array before falling back to explode — prevents `["Kansas City"]` being used as the city name (double-encoding bug). (2) `ajax_apply_schema()` falls back to `_siloq_schema_json` if `_siloq_suggested_schema` is missing or undecodable, and as a last resort re-generates schema on the fly rather than showing an error. Adds `error_log` on JSON decode failure for debugging.�- **Image prompt service label** — page title extraction for DALL-E prompt (from v1.5.113, carried forward).��
+## [1.5.115] — 2026-03-06
+
+### Fixed
+- **OpenAI fallback for content suggestions** — when the Siloq API call to `suggest-widget-edit/` fails (non-200, WP error, or missing suggestion), the plugin now calls OpenAI `gpt-4o-mini` directly as a fallback before falling through to local-only suggestion. The "API unavailable" message only appears when both Siloq and OpenAI are unavailable.
+- **Image prompt realism** — replaced generic stock-photo prompt with documentary-style template specifying male tradesperson aged 35-55, action verb derived from service type, Canon DSLR photojournalism style, and explicit anti-stock-photo directives.
+- **JetEngine / dynamic widget detection** — `ajax_analyze_widget` now detects JetEngine listing grids, ACF fields, Pods, and other dynamic widgets. Returns a structured response with CPT post titles/excerpts instead of running analysis on template markup. JS side shows a dedicated info panel explaining the widget is dynamic and linking to the underlying posts.
+
+## [1.5.114] — 2026-03-06��### Fixed�- **Schema "Staged schema data is invalid." error** — Two fixes: (1) `resolve_service_cities()` now JSON-decodes the stored cities array before falling back to explode — prevents `["Kansas City"]` being used as the city name (double-encoding bug). (2) `ajax_apply_schema()` falls back to `_siloq_schema_json` if `_siloq_suggested_schema` is missing or undecodable, and as a last resort re-generates schema on the fly rather than showing an error. Adds `error_log` on JSON decode failure for debugging.�- **Image prompt service label** — page title extraction for DALL-E prompt (from v1.5.113, carried forward).��
 ## [1.5.113] — 2026-03-06
 
 ### Fixed

@@ -352,6 +352,30 @@
                     return;
                 }
 
+                // Dynamic widget (JetEngine, ACF, etc.) — show info panel instead
+                if (res.data.is_dynamic_widget) {
+                    var source = res.data.listing_source || 'custom post type';
+                    var posts = res.data.cpt_posts || [];
+                    var postsHtml = '';
+                    if (posts.length > 0) {
+                        postsHtml = '<ul style="margin:6px 0;padding-left:16px;font-size:11px;">';
+                        posts.forEach(function(p) {
+                            postsHtml += '<li><strong>' + esc(p.title) + '</strong> — ' + esc(p.excerpt) + '</li>';
+                        });
+                        postsHtml += '</ul>';
+                    }
+                    var $results = $container.find('.siloq-wi-results');
+                    $results.html(
+                        '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;padding:12px;font-size:12px;">' +
+                        '<p style="margin:0 0 6px;font-weight:700;color:#92400e;">⚡ Dynamic Widget Detected</p>' +
+                        '<p style="margin:0 0 6px;color:#78350f;">This is a <strong>' + esc(res.data.widget_type) + '</strong> widget pulling content from <strong>' + esc(source) + '</strong>.</p>' +
+                        '<p style="margin:0 0 6px;color:#78350f;">Siloq cannot rewrite dynamic content directly. To optimize, edit the individual ' + esc(source) + ' posts in the WordPress editor.</p>' +
+                        (postsHtml ? '<p style="margin:0 0 4px;font-weight:600;color:#92400e;">Posts in this listing:</p>' + postsHtml : '') +
+                        '</div>'
+                    ).show();
+                    return;
+                }
+
                 renderResults($container, res.data, activeWidget);
             },
             error: function() {
@@ -473,12 +497,15 @@
                     '<p style="margin:0 0 2px;color:#374151;"><strong>Subject:</strong> ' + esc(rec.subject || '') + '</p>' +
                     '<p style="margin:0 0 2px;color:#374151;"><strong>Filename:</strong> ' + esc(rec.suggested_filename || '') + '</p>' +
                     '<p style="margin:0 0 6px;color:#374151;"><strong>Alt tag:</strong> ' + esc(rec.suggested_alt || '') + '</p>' +
+                    '<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:4px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#92400e;">' +
+                    '<strong>📸 Real photos perform better.</strong> Google E-E-A-T rewards authentic images. If you have job photos, upload them to your Media Library and assign them to this page for best results.' +
+                    '</div>' +
                     '<button class="siloq-wi-gen-image-btn"' +
                     ' data-prompt="'   + esc(rec.ai_prompt          || '') + '"' +
                     ' data-filename="' + esc(rec.suggested_filename  || '') + '"' +
                     ' data-alt="'      + esc(rec.suggested_alt       || '') + '"' +
                     ' style="font-size:11px;padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:5px;cursor:pointer;">' +
-                    '🎨 Generate Image</button>' +
+                    '🎨 Generate Image (AI)</button>' +
                     '</div>'
                 );
             });
@@ -587,6 +614,7 @@
                             '<div style="margin-top:8px;">' +
                             '<img src="' + resp.data.url + '" style="max-width:100%;border-radius:6px;border:1px solid #e5e7eb;" />' +
                             '<p style="font-size:10px;color:#6b7280;margin:4px 0 0;">Added to media library. Insert it from Media Library or use attachment ID: ' + (resp.data.attachment_id || '') + '</p>' +
+                            '<p style="font-size:10px;color:#b45309;background:#fffbeb;padding:4px 6px;border-radius:4px;margin:4px 0 0;">⚠️ AI-generated — consider replacing with a real job photo for stronger Google E-E-A-T trust signals.</p>' +
                             '</div>'
                         );
                     } else {

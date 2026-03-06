@@ -1852,7 +1852,27 @@ $all_synced_pages = get_posts(array(
 ));
 $hub_data = array();
 $non_hub_ids = array();
+
+// Filter: exclude internal post type names and JetEngine/CPT slugs from hub detection
+$internal_name_patterns = array('koops','grid','template','listing','loop','jet-','acf-','pods-','dynamic-','_post_type');
+$non_page_slugs_filter  = array('attachment','revision','nav_menu_item','custom_css','customize_changeset');
+
 foreach ($all_synced_pages as $hp) {
+    // Skip pages whose title or slug looks like a JetEngine CPT or internal post type
+    $hp_slug  = $hp->post_name;
+    $hp_title = strtolower($hp->post_title);
+    $is_cpt_name = false;
+    if (in_array($hp_slug, $non_page_slugs_filter, true)) { $is_cpt_name = true; }
+    if (!$is_cpt_name) {
+        foreach ($internal_name_patterns as $pat) {
+            if (strpos($hp_title, $pat) !== false || strpos($hp_slug, $pat) !== false) {
+                $is_cpt_name = true;
+                break;
+            }
+        }
+    }
+    if ($is_cpt_name) { $non_hub_ids[] = $hp->ID; continue; }
+
     $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
     $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
     $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : '';

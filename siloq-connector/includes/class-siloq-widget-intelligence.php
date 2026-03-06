@@ -212,6 +212,53 @@ class Siloq_Widget_Intelligence {
             $payload = is_array( $raw_payload ) ? $raw_payload : [];
         }
 
+        // Detect dynamic / JetEngine widgets
+        $dynamic_widget_types = [
+            "jet-listing-grid", "jet-engine-listing-grid", "acf-field",
+            "acf", "pods-field", "elementor-theme-post-content",
+            "dynamic-field", "jet-engine",
+        ];
+        $is_dynamic = in_array( $widget_type, $dynamic_widget_types, true );
+
+        // Also detect by CPT source in payload
+        $listing_source = $payload['active_widget']['settings']['jet_cpt']
+            ?? $payload['active_widget']['settings']['_post_type']
+            ?? $payload['active_widget']['settings']['custom_post_type']
+            ?? '';
+        if ( ! empty( $listing_source ) ) {
+            $is_dynamic = true;
+        }
+
+        if ( $is_dynamic ) {
+            // Try to read the CPT content
+            $cpt_posts = [];
+            if ( ! empty( $listing_source ) ) {
+                $raw_posts = get_posts( [
+                    'post_type'      => sanitize_key( $listing_source ),
+                    'posts_per_page' => 20,
+                    'post_status'    => 'publish',
+                ] );
+                foreach ( $raw_posts as $p ) {
+                    $cpt_posts[] = [
+                        'title'   => $p->post_title,
+                        'excerpt' => wp_trim_words( wp_strip_all_tags( $p->post_content ), 20 ),
+                    ];
+                }
+            }
+            wp_send_json_success( [
+                'is_dynamic_widget'    => true,
+                'widget_type'          => $widget_type,
+                'listing_source'       => $listing_source,
+                'cpt_posts'            => $cpt_posts,
+                'no_suggestion_reason' => '',
+                'suggested_content'    => '',
+                'violations'           => [],
+                'layer_notes'          => [],
+                'image_recs'           => [],
+            ] );
+            return;
+        }
+
         // Use correct API base from WP option (not hardcoded wrong domain)
         $api_base_raw = get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' );
         $api_base     = rtrim( $api_base_raw, '/' );
@@ -308,7 +355,48 @@ class Siloq_Widget_Intelligence {
             }
         }
 
-        // Fallback: local suggestion with layer/heading analysis
+        // Fallback 2: Try OpenAI directly before falling back to local suggestion
+        $openai_key = get_option( 'siloq_openai_api_key', '' );
+        if ( ! empty( $openai_key ) && ! empty( $widget_content ) ) {
+            $oai_response = wp_remote_post(
+                'https://api.openai.com/v1/chat/completions',
+                [
+                    'timeout' => 30,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $openai_key,
+                        'Content-Type'  => 'application/json',
+                    ],
+                    'body' => wp_json_encode( [
+                        'model'    => 'gpt-4o-mini',
+                        'messages' => [
+                            [
+                                'role'    => 'system',
+                                'content' => 'You are an SEO copywriter. Rewrite the provided content to improve local SEO. Return only the improved HTML, no explanation, no markdown code fences.',
+                            ],
+                            [
+                                'role'    => 'user',
+                                'content' => $edit_instruction,
+                            ],
+                        ],
+                    ] ),
+                ]
+            );
+
+            if ( ! is_wp_error( $oai_response ) && wp_remote_retrieve_response_code( $oai_response ) === 200 ) {
+                $oai_body = json_decode( wp_remote_retrieve_body( $oai_response ), true );
+                $oai_content = $oai_body['choices'][0]['message']['content'] ?? '';
+                if ( ! empty( $oai_content ) ) {
+                    $result = $this->generate_local_suggestion( $payload );
+                    $result['suggested_content'] = $oai_content;
+                    $result['source'] = 'openai_fallback';
+                    unset( $result['no_suggestion_reason'] );
+                    wp_send_json_success( $result );
+                    return;
+                }
+            }
+        }
+
+        // Fallback 3: local suggestion with layer/heading analysis
         wp_send_json_success( $this->generate_local_suggestion( $payload ) );
     }
 
@@ -499,14 +587,39 @@ class Siloq_Widget_Intelligence {
         $service_slug = sanitize_title( $service_label );
 
         if ( $widget_type === 'text-editor' && strlen( $content ) > 200 ) {
+            // Derive action verb from service label for realistic image prompts
+            $service_lower = strtolower( $service_label );
+            if ( strpos( $service_lower, 'electric' ) !== false ) {
+                $action_verb = 'installing electrical wiring or replacing an electrical panel';
+            } elseif ( strpos( $service_lower, 'plumb' ) !== false ) {
+                $action_verb = 'installing or repairing plumbing under a sink or in a crawlspace';
+            } elseif ( strpos( $service_lower, 'hvac' ) !== false || strpos( $service_lower, 'heat' ) !== false || strpos( $service_lower, 'air' ) !== false ) {
+                $action_verb = 'servicing an HVAC unit or installing ductwork';
+            } elseif ( strpos( $service_lower, 'roof' ) !== false ) {
+                $action_verb = 'installing shingles or inspecting a roof';
+            } elseif ( strpos( $service_lower, 'paint' ) !== false ) {
+                $action_verb = 'painting exterior trim or rolling interior walls';
+            } elseif ( strpos( $service_lower, 'landscap' ) !== false || strpos( $service_lower, 'lawn' ) !== false ) {
+                $action_verb = 'operating a zero-turn mower or installing landscape edging';
+            } else {
+                $action_verb = 'performing skilled trade work on-site';
+            }
+
+            $ai_prompt = "Authentic documentary-style photo of a male {$service_label} aged 35-55, "
+                . "wearing work uniform and tool belt, actively {$action_verb} in {$city}. "
+                . "Natural indoor/outdoor lighting, realistic skin texture, genuine candid expression. "
+                . "Shot on Canon DSLR, photojournalism style, f/2.8 depth of field. "
+                . "Gritty realism, authentic trade work environment. "
+                . "No stock photo aesthetic. No posed smiling. No artificial diversity casting. "
+                . "No text overlays. No logos.";
+
             $recs[] = [
                 'position'           => 'after_intro',
                 'type'               => 'photo',
-                'subject'            => "Professional {$service_label} at work in {$city}",
+                'subject'            => "Male {$service_label} performing service in {$city}",
                 'suggested_filename' => "{$service_slug}-{$city_slug}-service.jpg",
-                'suggested_alt'      => "{$business_name} {$service_label} service in {$city}",
-                // Specific prompt: trade/service is explicit so DALL-E generates the right person
-                'ai_prompt'          => "Professional photo of a {$service_label} technician actively performing work on-site in {$city}. Show realistic trade work — tools, equipment, work environment appropriate for {$service_label}. Real professional appearance, clean and well-lit. No text overlays. No generic office settings.",
+                'suggested_alt'      => "{$business_name} {$service_label} technician working in {$city}",
+                'ai_prompt'          => $ai_prompt,
             ];
         }
 
