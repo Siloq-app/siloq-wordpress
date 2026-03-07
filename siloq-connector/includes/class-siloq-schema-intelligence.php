@@ -948,22 +948,15 @@ class Siloq_Schema_Intelligence {
 
         $entity_profile = self::get_entity_profile( $post_id );
 
-        // Fix 3: Check minimum required fields before generating and surface a
-        // helpful, actionable error that links directly to the settings page.
-        $missing = [];
+        // Collect missing fields for warnings — but do NOT block generation.
+        // Schema is still valuable even without phone/address; validator surfaces gaps.
+        $profile_warnings = [];
         if ( empty( $entity_profile['phone'] ) && empty( $entity_profile['address'] ) ) {
-            $missing[] = 'phone number OR address';
+            $profile_warnings[] = 'Phone number and address are missing — add them in Siloq Settings for richer schema.';
         }
         if ( empty( $entity_profile['business_name'] ) ) {
-            $missing[] = 'business name';
-        }
-        if ( ! empty( $missing ) ) {
-            wp_send_json_error( [
-                'message'        => 'Missing required info: ' . implode( ', ', $missing ) . '. Go to Siloq Settings → Business Profile to add these.',
-                'missing_fields' => $missing,
-                'fix_url'        => admin_url( 'admin.php?page=siloq-settings&tab=business-profile' ),
-            ] );
-            return;
+            // Only truly fatal: fall back to site name so generation still proceeds.
+            $entity_profile['business_name'] = get_bloginfo( 'name' );
         }
 
         // Load page analysis data (contains has_visible_rating, faq_items, etc.).
@@ -1048,13 +1041,14 @@ class Siloq_Schema_Intelligence {
         $validation = self::validate( $schemas, $entity_profile );
 
         wp_send_json_success( [
-            'schemas'       => $schemas,
-            'schema_json'   => $schema_json_encoded,
-            'count'         => count( $schemas ),
-            'schema_types'  => $schema_types,
-            'page_type'     => self::detect_page_type( $post_id, $page_analysis ),
-            'business_type' => self::map_business_type( $entity_profile['business_type'] ?? '' ) ?: ( $entity_profile['business_type'] ?? 'LocalBusiness' ),
-            'validation'    => $validation,
+            'schemas'          => $schemas,
+            'schema_json'      => $schema_json_encoded,
+            'count'            => count( $schemas ),
+            'schema_types'     => $schema_types,
+            'page_type'        => self::detect_page_type( $post_id, $page_analysis ),
+            'business_type'    => self::map_business_type( $entity_profile['business_type'] ?? '' ) ?: ( $entity_profile['business_type'] ?? 'LocalBusiness' ),
+            'validation'       => $validation,
+            'profile_warnings' => $profile_warnings,
         ] );
         } catch ( \Throwable $e ) {
             wp_send_json_error( [

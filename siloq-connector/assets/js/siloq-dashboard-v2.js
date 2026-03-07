@@ -565,29 +565,49 @@
     // Generate schema button
     $(document).on('click', '.siloq-schema-generate-btn', function () {
       var $btn = $(this);
+      var $row = $btn.closest('.siloq-schema-page-row');
       var postId = $btn.data('post-id');
+      var nonce = cfg.nonce || (window.siloqAjax && window.siloqAjax.nonce) || '';
+      var ajaxUrl = cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl || '';
       $btn.prop('disabled', true).text('Generating...');
-      $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
+      // Clear any previous inline error for this row
+      $row.find('.siloq-schema-inline-error').remove();
+      $.post(ajaxUrl, {
         action: 'siloq_generate_schema',
         post_id: postId,
-        nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
+        nonce: nonce
       }, function (res) {
         if (res.success) {
-          $btn.text('Generated!').addClass('siloq-btn--success');
-          // Reload schema status
+          $btn.text('✓ Generated').addClass('siloq-btn--success');
+          // Show profile warnings inline (non-blocking)
+          if (res.data && res.data.profile_warnings && res.data.profile_warnings.length) {
+            var warnHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:4px 8px;margin-top:4px;">'
+              + '⚠️ ' + escHtml(res.data.profile_warnings[0]) + '</div>';
+            $btn.after(warnHtml);
+          }
           schemaLoaded = false;
-          setTimeout(function () { loadSchemaStatus(); }, 500);
+          setTimeout(function () { loadSchemaStatus(); }, 800);
         } else {
+          var msg = (res.data && res.data.message) ? res.data.message : 'Schema generation failed.';
           $btn.text('Error').addClass('siloq-btn--danger');
-          alert(res.data && res.data.message ? res.data.message : 'Schema generation failed.');
+          // Show error inline in the row, not as an alert
+          var errHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;margin-top:4px;">'
+            + '⚠️ ' + escHtml(msg);
+          if (res.data && res.data.fix_url) {
+            errHtml += ' <a href="' + escAttr(res.data.fix_url) + '" target="_blank" style="color:#dc2626;font-weight:600;">Fix now →</a>';
+          }
+          errHtml += '</div>';
+          $btn.after(errHtml);
         }
         setTimeout(function () {
-          $btn.prop('disabled', false).text('Generate Schema')
-            .removeClass('siloq-btn--success siloq-btn--danger');
+          $btn.prop('disabled', false).text('Generate Schema').removeClass('siloq-btn--success siloq-btn--danger');
         }, 3000);
-      }).fail(function () {
+      }).fail(function (xhr) {
+        var rawMsg = 'Server error (HTTP ' + xhr.status + '). Check WP error log for details.';
         $btn.prop('disabled', false).text('Generate Schema');
-        alert('Schema request failed — server returned no response. Check that your Siloq API key is valid and try again. If this persists, contact support.');
+        var errHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;margin-top:4px;">'
+          + '⚠️ ' + escHtml(rawMsg) + '</div>';
+        $btn.after(errHtml);
       });
     });
 
