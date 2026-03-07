@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.127
+* Version: 1.5.128
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.127');
+define('SILOQ_VERSION', '1.5.128');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1510,6 +1510,17 @@ class Siloq_Connector {
         if (is_wp_error($post_id)) {
             wp_send_json_error(array('message' => $post_id->get_error_message()));
             return;
+        }
+        // Mark page as Elementor-built so Siloq's builder detection initialises
+        // the Schema panel when the editor opens. Without this, new drafts
+        // created by Siloq have no _elementor_edit_mode and the schema button
+        // never appears.
+        if (class_exists('\Elementor\Plugin')) {
+            update_post_meta($post_id, '_elementor_edit_mode', 'builder');
+            // Elementor requires _elementor_data to be a valid JSON array
+            if (empty(get_post_meta($post_id, '_elementor_data', true))) {
+                update_post_meta($post_id, '_elementor_data', '[]');
+            }
         }
         wp_send_json_success(array(
             'post_id'  => $post_id,
