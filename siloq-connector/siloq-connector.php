@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.129
+* Version: 1.5.130
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.129');
+define('SILOQ_VERSION', '1.5.130');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -323,6 +323,7 @@ class Siloq_Connector {
         // Schema tab handlers
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
+        add_action('wp_ajax_siloq_repair_elementor_meta', array($this, 'ajax_repair_elementor_meta'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
         // Dashboard one-click fix buttons
@@ -1822,6 +1823,11 @@ class Siloq_Connector {
             $score = isset($analysis['score']) ? intval($analysis['score']) : (isset($analysis['seo_score']['overall']) ? intval($analysis['seo_score']['overall']) : 0);
             $primary_keyword = isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : (isset($analysis['seo_score']['primary_keyword']) ? $analysis['seo_score']['primary_keyword'] : '');
 
+            // Schema status for page card button
+            $applied_schema = get_post_meta($post->ID, '_siloq_applied_types', true);
+            $schema_applied_flag = get_post_meta($post->ID, '_siloq_schema_applied', true);
+            $has_schema = ! empty( $applied_schema ) || ! empty( $schema_applied_flag );
+
             $pages[] = array(
                 'id'              => $post->ID,
                 'title'           => $post->post_title,
@@ -1833,6 +1839,7 @@ class Siloq_Connector {
                 'primary_keyword' => $primary_keyword,
                 'issues'          => array_slice($issues, 0, 10),
                 'issue_count'     => count($issues),
+                'has_schema'      => (bool) $has_schema,
             );
         }
 
@@ -2560,6 +2567,72 @@ class Siloq_Connector {
         }
 
         wp_send_json_success($body);
+    }
+
+    /**
+     * AJAX: Repair missing _elementor_edit_mode meta on all published pages/posts.
+     *
+     * Elementor only initializes its panel (and Siloq's schema button) when
+     * _elementor_edit_mode = 'builder' is set on the post. Pages created before
+     * v1.5.128 may be missing this meta. This batch-repair sets it on all
+     * published posts/pages that are already using Elementor data but are missing
+     * the meta flag, so the schema panel shows up immediately on next editor open.
+     *
+     * Safe to run multiple times (idempotent).
+     */
+    public function ajax_repair_elementor_meta() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+        }
+
+        if (!defined('ELEMENTOR_VERSION')) {
+            wp_send_json_error(array('message' => 'Elementor is not active — no repair needed.'));
+        }
+
+        // Find all published pages/posts that have Elementor data but no edit mode flag
+        $args = array(
+            'post_type'   => array('page', 'post'),
+            'post_status' => 'any',
+            'numberposts' => -1,
+            'meta_query'  => array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_elementor_data',
+                    'compare' => 'EXISTS',
+                ),
+                array(
+                    'key'     => '_elementor_edit_mode',
+                    'compare' => 'NOT EXISTS',
+                ),
+            ),
+        );
+
+        $posts   = get_posts($args);
+        $fixed   = 0;
+        $skipped = 0;
+
+        foreach ($posts as $post) {
+            $el_data = get_post_meta($post->ID, '_elementor_data', true);
+            // Only set builder mode if there's actual Elementor JSON (not empty/null/[])
+            if (!empty($el_data) && $el_data !== '[]' && $el_data !== 'null') {
+                update_post_meta($post->ID, '_elementor_edit_mode', 'builder');
+                $fixed++;
+            } else {
+                // Page has _elementor_data key but it's empty — set it anyway so Siloq can use it
+                update_post_meta($post->ID, '_elementor_edit_mode', 'builder');
+                update_post_meta($post->ID, '_elementor_data', '[]');
+                $fixed++;
+            }
+        }
+
+        wp_send_json_success(array(
+            'fixed'   => $fixed,
+            'skipped' => $skipped,
+            'message' => $fixed > 0
+                ? "Repaired {$fixed} page" . ($fixed > 1 ? 's' : '') . ". The Siloq schema panel will now appear in the Elementor editor for all pages."
+                : "All pages already have Elementor edit mode set — no repair needed.",
+        ));
     }
 }
 

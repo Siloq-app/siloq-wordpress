@@ -3000,10 +3000,16 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                 <div class="siloq-card siloq-schema-pages">
                     <div class="siloq-card-header">
                         <h3 class="siloq-card-title">Schema Applied Per Page</h3>
-                        <button type="button" id="siloq-schema-refresh" class="siloq-btn siloq-btn--outline siloq-btn--sm">
-                            <span class="dashicons dashicons-update"></span> Refresh
-                        </button>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <button type="button" id="siloq-schema-repair-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" title="Fix pages where the Siloq schema panel is missing in Elementor editor">
+                                🔧 Repair Schema Panels
+                            </button>
+                            <button type="button" id="siloq-schema-refresh" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+                                <span class="dashicons dashicons-update"></span> Refresh
+                            </button>
+                        </div>
                     </div>
+                    <div id="siloq-schema-repair-msg" style="display:none;font-size:12px;padding:8px 12px;border-radius:6px;margin-bottom:8px;"></div>
                     <div id="siloq-schema-pages-list" class="siloq-schema-pages__list">
                         <div class="siloq-pages-loading">
                             <span class="siloq-spinner"></span>

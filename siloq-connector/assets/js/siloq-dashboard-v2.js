@@ -1,6 +1,6 @@
 /**
  * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence, pages tab
- * Version: 1.5.72
+ * Version: 1.5.130
  */
 (function ($) {
   'use strict';
@@ -341,6 +341,45 @@
       $(this).text($list.hasClass('is-open') ? 'Hide Issues' : 'View Issues');
     });
 
+    // Schema button on page cards (Pages tab)
+    $(document).on('click', '.siloq-page-schema-btn', function () {
+      var $btn = $(this);
+      var postId = $btn.data('post-id');
+      var $feedback = $('.siloq-page-schema-feedback-' + postId);
+      $btn.prop('disabled', true).text('Generating...');
+      $feedback.hide().removeClass('siloq-schema-fb--ok siloq-schema-fb--err');
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_generate_schema',
+        post_id: postId,
+        nonce: cfg.nonce
+      }, function (res) {
+        if (res.success) {
+          $btn.text('✅ Schema').prop('disabled', false);
+          var warn = res.data && res.data.profile_warnings && res.data.profile_warnings.length
+            ? '⚠️ ' + res.data.profile_warnings[0]
+            : '✅ Schema generated — apply it in the editor or Schema tab.';
+          $feedback.text(warn)
+            .css({'background': warn.indexOf('⚠️') === 0 ? '#fef3c7' : '#f0fdf4',
+                  'color': warn.indexOf('⚠️') === 0 ? '#92400e' : '#166534',
+                  'border': '1px solid ' + (warn.indexOf('⚠️') === 0 ? '#fcd34d' : '#86efac')})
+            .show();
+        } else {
+          var msg = (res.data && res.data.message) ? res.data.message : 'Schema generation failed.';
+          $btn.text('⚡ Schema').prop('disabled', false);
+          $feedback.text('⚠️ ' + msg)
+            .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
+            .show();
+        }
+        setTimeout(function () { $feedback.hide(); }, 6000);
+      }).fail(function (xhr) {
+        $btn.text('⚡ Schema').prop('disabled', false);
+        $feedback.text('⚠️ Server error (HTTP ' + xhr.status + '). Check WP error log.')
+          .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
+          .show();
+        setTimeout(function () { $feedback.hide(); }, 6000);
+      });
+    });
+
     // Role dropdown change
     $(document).on('change', '.siloq-role-select', function () {
       var $sel = $(this);
@@ -519,8 +558,11 @@
       + '<div class="siloq-page-card__actions">'
       + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Analyze</a>'
       + (issues.length > 0 ? '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-view-issues-btn">View Issues</button>' : '')
+      + '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-page-schema-btn" data-post-id="' + page.id + '" title="Generate schema markup for this page">'
+      + (page.has_schema ? '✅ Schema' : '⚡ Schema') + '</button>'
       + '</div>'
       + (issues.length > 0 ? '<div class="siloq-page-card__issue-list">' + issueListHtml + '</div>' : '')
+      + '<div class="siloq-page-schema-feedback-' + page.id + '" style="display:none;font-size:11px;padding:4px 8px;border-radius:4px;margin-top:4px;"></div>'
       + '</div>';
   }
 
@@ -560,6 +602,36 @@
     $(document).on('click', '#siloq-schema-refresh', function () {
       schemaLoaded = false;
       loadSchemaStatus();
+    });
+
+    // Repair schema panels (fix missing _elementor_edit_mode on existing pages)
+    $(document).on('click', '#siloq-schema-repair-btn', function () {
+      var $btn = $(this);
+      var $msg = $('#siloq-schema-repair-msg');
+      $btn.prop('disabled', true).text('Repairing...');
+      $msg.hide();
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_repair_elementor_meta',
+        nonce: cfg.nonce
+      }, function (res) {
+        $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
+        var ok = res.success;
+        var text = (res.data && res.data.message) ? res.data.message : (ok ? 'Repair complete.' : 'Repair failed.');
+        $msg.text(text)
+            .css({
+              'background': ok ? '#f0fdf4' : '#fef2f2',
+              'color': ok ? '#166534' : '#991b1b',
+              'border': '1px solid ' + (ok ? '#86efac' : '#fca5a5')
+            })
+            .show();
+        setTimeout(function () { $msg.hide(); }, 8000);
+      }).fail(function () {
+        $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
+        $msg.text('Request failed — check WP error log.')
+            .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
+            .show();
+        setTimeout(function () { $msg.hide(); }, 6000);
+      });
     });
 
     // Generate schema button
