@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.131
+* Version: 1.5.132
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.131');
+define('SILOQ_VERSION', '1.5.132');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -324,10 +324,25 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
         add_action('wp_ajax_siloq_repair_elementor_meta', array($this, 'ajax_repair_elementor_meta'));
+
+        // Redirect manager AJAX
+        add_action('wp_ajax_siloq_get_redirects',        array($this, 'ajax_get_redirects'));
+        add_action('wp_ajax_siloq_add_redirect',         array($this, 'ajax_add_redirect'));
+        add_action('wp_ajax_siloq_delete_redirect',      array($this, 'ajax_delete_redirect'));
+        add_action('wp_ajax_siloq_toggle_redirect',      array($this, 'ajax_toggle_redirect'));
+        add_action('wp_ajax_siloq_bulk_add_redirects',   array($this, 'ajax_bulk_add_redirects'));
+        add_action('wp_ajax_siloq_preview_city_redirects', array($this, 'ajax_preview_city_redirects'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
         // Dashboard one-click fix buttons
         add_action('wp_ajax_siloq_dashboard_fix', array('Siloq_Admin', 'ajax_dashboard_fix'));
+
+        // Redirect manager AJAX
+        add_action('wp_ajax_siloq_get_redirects',        array('Siloq_Admin', 'ajax_get_redirects'));
+        add_action('wp_ajax_siloq_add_redirect',         array('Siloq_Admin', 'ajax_add_redirect'));
+        add_action('wp_ajax_siloq_delete_redirect',      array('Siloq_Admin', 'ajax_delete_redirect'));
+        add_action('wp_ajax_siloq_bulk_add_redirects',   array('Siloq_Admin', 'ajax_bulk_add_redirects'));
+        add_action('wp_ajax_siloq_preview_city_redirects', array('Siloq_Admin', 'ajax_preview_city_redirects'));
         // Image generation (DALL-E via API)
         add_action('wp_ajax_siloq_generate_and_insert_image', array('Siloq_Widget_Intelligence', 'ajax_generate_and_insert_image'));
         // Image Audit

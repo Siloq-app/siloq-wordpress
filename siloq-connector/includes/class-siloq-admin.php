@@ -1910,6 +1910,7 @@ class Siloq_Admin {
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Schema</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
             </ul>
 
@@ -3119,6 +3120,57 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                     <a href="<?php echo admin_url('admin.php?page=siloq-settings'); ?>" class="siloq-btn siloq-btn--outline">Go to Full Settings &rarr;</a>
                 </div>
             </div><!-- /settings tab -->
+
+            <!-- ═══════ REDIRECTS TAB ═══════ -->
+            <div id="siloq-tab-redirects" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+
+                <!-- Smart Bulk Wizard -->
+                <div class="siloq-card" style="margin-bottom:16px;">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">🏙️ City Pages → /service-area/ Wizard</h3>
+                    </div>
+                    <p style="font-size:13px;color:#4b5563;margin:0 0 12px;">Siloq detected your city/spoke pages. Preview the 301 redirects that will move them from <code>/city-slug/</code> to <code>/service-area/city-slug/</code>, then apply with one click.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                        <button type="button" id="siloq-redir-preview-btn" class="siloq-btn siloq-btn--primary">Preview City Page Redirects</button>
+                        <button type="button" id="siloq-redir-apply-btn" class="siloq-btn siloq-btn--outline" style="display:none;">✅ Apply All Redirects</button>
+                        <button type="button" id="siloq-redir-clear-preview-btn" class="siloq-btn siloq-btn--outline" style="display:none;">✕ Cancel</button>
+                    </div>
+                    <div id="siloq-redir-preview-area" style="display:none;"></div>
+                </div>
+
+                <!-- Manual Add -->
+                <div class="siloq-card" style="margin-bottom:16px;">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Add 301 Redirect</h3>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">From (old URL or path)</label>
+                            <input type="text" id="siloq-redir-from" class="regular-text" placeholder="/old-page-slug/" style="width:100%;font-size:12px;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">To (new URL or path)</label>
+                            <input type="text" id="siloq-redir-to" class="regular-text" placeholder="/service-area/old-page-slug/" style="width:100%;font-size:12px;">
+                        </div>
+                        <button type="button" id="siloq-redir-add-btn" class="siloq-btn siloq-btn--primary" style="white-space:nowrap;">Add Redirect</button>
+                    </div>
+                    <div id="siloq-redir-add-msg" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:5px;"></div>
+                </div>
+
+                <!-- Existing Redirects List -->
+                <div class="siloq-card">
+                    <div class="siloq-card-header">
+                        <h3 class="siloq-card-title">Active Redirects</h3>
+                        <button type="button" id="siloq-redir-refresh-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+                            <span class="dashicons dashicons-update"></span> Refresh
+                        </button>
+                    </div>
+                    <div id="siloq-redir-list">
+                        <div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading redirects...</span></div>
+                    </div>
+                </div>
+
+            </div><!-- /redirects tab -->
 
             <script>
                 // Pass roadmap progress to JS
@@ -4621,5 +4673,198 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
         }
 
         return $result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REDIRECT MANAGER AJAX HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * AJAX: Get all redirects.
+     */
+    public static function ajax_get_redirects() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        if ( ! class_exists( 'Siloq_Redirect_Manager' ) ) {
+            wp_send_json_error( [ 'message' => 'Redirect manager not available.' ] );
+        }
+
+        $redirects = Siloq_Redirect_Manager::get_instance()->get_all_redirects();
+        wp_send_json_success( [ 'redirects' => $redirects ] );
+    }
+
+    /**
+     * AJAX: Add a single redirect.
+     */
+    public static function ajax_add_redirect() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $from = sanitize_text_field( $_POST['from'] ?? '' );
+        $to   = sanitize_text_field( $_POST['to']   ?? '' );
+
+        if ( ! $from || ! $to ) {
+            wp_send_json_error( [ 'message' => 'Both From and To URLs are required.' ] );
+        }
+
+        if ( $from === $to ) {
+            wp_send_json_error( [ 'message' => 'From and To URLs cannot be the same.' ] );
+        }
+
+        $ok = Siloq_Redirect_Manager::get_instance()->add_redirect( $from, $to, 301 );
+        if ( $ok ) {
+            wp_send_json_success( [ 'message' => 'Redirect added.' ] );
+        } else {
+            wp_send_json_error( [ 'message' => 'Failed to add redirect. It may already exist.' ] );
+        }
+    }
+
+    /**
+     * AJAX: Delete a redirect by ID.
+     */
+    public static function ajax_delete_redirect() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $id = intval( $_POST['redirect_id'] ?? 0 );
+        if ( ! $id ) {
+            wp_send_json_error( [ 'message' => 'Missing redirect ID.' ] );
+        }
+
+        $ok = Siloq_Redirect_Manager::get_instance()->delete_redirect( $id );
+        wp_send_json_success( [ 'message' => $ok ? 'Redirect deleted.' : 'Nothing to delete.' ] );
+    }
+
+    /**
+     * AJAX: Bulk-add redirects (array of {from, to} pairs).
+     */
+    public static function ajax_bulk_add_redirects() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $pairs_raw = $_POST['redirects'] ?? '';
+        $pairs     = is_array( $pairs_raw ) ? $pairs_raw : json_decode( stripslashes( $pairs_raw ), true );
+
+        if ( ! is_array( $pairs ) || empty( $pairs ) ) {
+            wp_send_json_error( [ 'message' => 'No redirect pairs provided.' ] );
+        }
+
+        $mgr     = Siloq_Redirect_Manager::get_instance();
+        $added   = 0;
+        $skipped = 0;
+
+        foreach ( $pairs as $pair ) {
+            $from = sanitize_text_field( $pair['from'] ?? '' );
+            $to   = sanitize_text_field( $pair['to']   ?? '' );
+            if ( ! $from || ! $to || $from === $to ) { $skipped++; continue; }
+            $mgr->add_redirect( $from, $to, 301 ) ? $added++ : $skipped++;
+        }
+
+        wp_send_json_success( [
+            'added'   => $added,
+            'skipped' => $skipped,
+            'message' => "Added {$added} redirect" . ( $added !== 1 ? 's' : '' )
+                       . ( $skipped ? ", skipped {$skipped} (duplicates or invalid)." : '.' ),
+        ] );
+    }
+
+    /**
+     * AJAX: Preview city-page → /service-area/ redirects.
+     *
+     * Scans all synced pages classified as spoke/supporting whose slug does NOT
+     * already start with a known hub parent slug. Suggests moving them under
+     * the detected service-area hub page.
+     */
+    public static function ajax_preview_city_redirects() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        // Optional: caller can pass a custom target prefix (default: /service-area/)
+        $target_prefix = sanitize_text_field( $_POST['target_prefix'] ?? '/service-area/' );
+        $target_prefix = '/' . trim( $target_prefix, '/' ) . '/';
+
+        // Detect the service-area hub page (page whose slug is 'service-area' or 'service-areas')
+        $hub_page = get_page_by_path( 'service-area' ) ?: get_page_by_path( 'service-areas' );
+        $hub_slug = $hub_page ? get_page_uri( $hub_page ) : ltrim( $target_prefix, '/' );
+
+        // Get all synced published pages
+        $posts = get_posts( [
+            'post_type'   => function_exists( 'get_siloq_crawlable_post_types' )
+                ? get_siloq_crawlable_post_types()
+                : [ 'page', 'post' ],
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'meta_query'  => [ [ 'key' => '_siloq_synced', 'compare' => 'EXISTS' ] ],
+        ] );
+
+        $mgr        = Siloq_Redirect_Manager::get_instance();
+        $suggestions = [];
+        $skipped     = [];
+
+        foreach ( $posts as $post ) {
+            $slug      = get_page_uri( $post );   // e.g. 'excelsior-springs-mo-electrician'
+            $permalink = get_permalink( $post->ID );
+
+            // Skip if it's already under the target prefix
+            if ( strpos( $slug, ltrim( $target_prefix, '/' ) ) === 0 ) {
+                $skipped[] = [ 'title' => $post->post_title, 'reason' => 'Already under ' . $target_prefix ];
+                continue;
+            }
+
+            // Skip hub / apex-hub pages — only move spoke/supporting/orphan
+            $page_type = '';
+            $manual    = get_post_meta( $post->ID, '_siloq_page_role', true );
+            if ( $manual ) {
+                $page_type = $manual;
+            } elseif ( class_exists( 'Siloq_Admin' ) ) {
+                $page_type = Siloq_Admin::siloq_classify_page( $post->ID, $permalink );
+            } else {
+                $analysis = json_decode( get_post_meta( $post->ID, '_siloq_analysis_data', true ), true ) ?: [];
+                $page_type = $analysis['page_type'] ?? 'supporting';
+            }
+
+            if ( in_array( $page_type, [ 'hub', 'apex_hub' ], true ) ) {
+                $skipped[] = [ 'title' => $post->post_title, 'reason' => 'Hub page — not moved' ];
+                continue;
+            }
+
+            // Build new slug by prepending target prefix
+            $new_slug      = ltrim( $target_prefix, '/' ) . $slug;
+            $site_url      = get_site_url();
+            $from_url      = '/' . $slug . '/';
+            $to_url        = $target_prefix . $slug . '/';
+
+            // Check if redirect already exists
+            $already_exists = $mgr->get_redirect( $from_url );
+
+            $suggestions[] = [
+                'post_id'        => $post->ID,
+                'title'          => $post->post_title,
+                'page_type'      => $page_type,
+                'from'           => $from_url,
+                'to'             => $to_url,
+                'from_full'      => $site_url . $from_url,
+                'to_full'        => $site_url . $to_url,
+                'already_exists' => ! empty( $already_exists ),
+            ];
+        }
+
+        wp_send_json_success( [
+            'suggestions'   => $suggestions,
+            'skipped'       => $skipped,
+            'target_prefix' => $target_prefix,
+            'hub_slug'      => $hub_slug,
+        ] );
     }
 }
