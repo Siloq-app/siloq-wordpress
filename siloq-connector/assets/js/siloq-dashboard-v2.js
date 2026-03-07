@@ -604,6 +604,82 @@
       loadSchemaStatus();
     });
 
+    // Apply Schema to All — sequential bulk processor
+    $(document).on('click', '#siloq-schema-apply-all-btn', function () {
+      var $btn      = $(this);
+      var $progress = $('#siloq-schema-bulk-progress');
+      var $bar      = $('#siloq-schema-bulk-bar');
+      var $msg      = $('#siloq-schema-bulk-msg');
+      var $summary  = $('#siloq-schema-bulk-summary');
+
+      // Collect all page IDs that have no schema (class siloq-schema-none-badge or data attribute)
+      var pageIds = [];
+      $('#siloq-schema-pages-list tr[data-post-id]').each(function () {
+        var hasSchema = $(this).data('has-schema');
+        if (!hasSchema || hasSchema === 'false' || hasSchema === false || hasSchema === '0') {
+          pageIds.push($(this).data('post-id'));
+        }
+      });
+      // Fallback: if no schema list rendered yet, ask user to refresh first
+      if (!pageIds.length) {
+        $summary.text('No pages without schema found. Click Refresh first to load the list, then try again.')
+                .css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fcd34d'}).show();
+        return;
+      }
+
+      $btn.prop('disabled', true).text('Running...');
+      $progress.show();
+      $summary.hide();
+      var applied = [], failed = [], total = pageIds.length, done = 0;
+
+      function applyNext() {
+        if (!pageIds.length) {
+          // All done
+          $progress.hide();
+          $bar.css('width', '100%');
+          $btn.prop('disabled', false).text('⚡ Apply Schema to All');
+          var summaryHtml = '<strong>✅ Done!</strong> Applied: ' + applied.length + ', Failed: ' + failed.length + ' of ' + total + '<br>';
+          if (failed.length) {
+            summaryHtml += '<span style="color:#991b1b">Failed: ' + failed.map(function(f){return f.title;}).join(', ') + '</span>';
+          }
+          $summary.html(summaryHtml)
+                  .css({'background': failed.length ? '#fef2f2' : '#f0fdf4',
+                        'color': failed.length ? '#991b1b' : '#166534',
+                        'border': '1px solid ' + (failed.length ? '#fca5a5' : '#86efac')})
+                  .show();
+          // Reload schema list to show updated status
+          schemaLoaded = false;
+          loadSchemaStatus();
+          return;
+        }
+
+        var postId = pageIds.shift();
+        done++;
+        var pct = Math.round((done / total) * 100);
+        $bar.css('width', pct + '%');
+        $msg.text('Applying schema to page ' + done + ' of ' + total + '...');
+
+        $.post(cfg.ajaxUrl, {
+          action:  'siloq_bulk_apply_schema',
+          nonce:   cfg.nonce,
+          post_id: postId
+        }, function (res) {
+          if (res.success) {
+            applied.push({id: postId, title: res.data.title});
+          } else {
+            failed.push({id: postId, title: res.data.title || ('Page ' + postId), error: res.data.message});
+          }
+          // 1-second delay between pages to avoid server overload
+          setTimeout(applyNext, 1000);
+        }).fail(function () {
+          failed.push({id: postId, title: 'Page ' + postId, error: 'Network error'});
+          setTimeout(applyNext, 1000);
+        });
+      }
+
+      applyNext();
+    });
+
     // Repair schema panels (fix missing _elementor_edit_mode on existing pages)
     $(document).on('click', '#siloq-schema-repair-btn', function () {
       var $btn = $(this);
@@ -762,7 +838,8 @@
         }
       }
 
-      html += '<div class="siloq-schema-page-row">';
+      var hasSchemaData = (p.applied_types && p.applied_types.length) || p.status === 'applied';
+      html += '<div class="siloq-schema-page-row" data-post-id="' + p.id + '" data-has-schema="' + (hasSchemaData ? 'true' : 'false') + '">';
       html += '<div class="siloq-schema-page-row__title"><a href="' + escAttr(p.edit_url || '#') + '" target="_blank">' + escHtml(p.title) + '</a></div>';
       html += '<div class="siloq-schema-page-row__types">' + appliedBadges + recBadges + '</div>';
       html += '<div class="siloq-schema-page-row__status">' + statusLabel + '</div>';
