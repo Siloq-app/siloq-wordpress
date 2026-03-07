@@ -138,7 +138,7 @@ class Siloq_Elementor_Panel {
                 <div class="siloq-ep-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin:-0px;padding:0 12px;">
                     <button class="siloq-ep-tab siloq-ep-tab--active" data-siloq-tab="schema" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #4f46e5;color:#4f46e5;">⚡ Schema</button>
                     <button class="siloq-ep-tab" data-siloq-tab="edit-content" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">✏️ Edit Content</button>
-                    <button class="siloq-ep-tab" data-siloq-tab="links" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">🔗 Links</button>
+                    <!-- Links tab removed: link map is now in the Siloq Intelligence left panel (⚡ Analyze section) -->
                 </div>
                 <button type="button"
                         id="siloq-schema-el-close"

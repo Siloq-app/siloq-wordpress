@@ -638,6 +638,93 @@
         );
     });
 
+    // ── Internal Links in Intelligence Panel ─────────────────────────────
+
+    $(document).on('click', '.siloq-wi-links-load-btn', function() {
+        var $btn      = $(this);
+        var $section  = $btn.closest('.siloq-wi-links-section');
+        var $loading  = $section.find('.siloq-wi-links-loading');
+        var $content  = $section.find('.siloq-wi-links-content');
+        var $status   = $section.find('.siloq-wi-links-status');
+        var postId    = cfg.postId;
+
+        $btn.prop('disabled', true).text('Loading...');
+        $loading.show();
+        $content.hide().empty();
+        $status.hide();
+
+        $.ajax({
+            url:  cfg.ajaxUrl,
+            type: 'POST',
+            data: {
+                action:  'siloq_get_internal_links',
+                nonce:   cfg.nonce,
+                post_id: postId,
+            },
+            success: function(res) {
+                $loading.hide();
+                $btn.prop('disabled', false).text('Refresh');
+
+                if (!res.success || !res.data) {
+                    $status.text('⚠️ ' + ((res.data && res.data.message) || 'Could not load link data'))
+                           .css({'background':'#fef2f2','color':'#991b1b'}).show();
+                    return;
+                }
+
+                var linkTo   = res.data.should_link_to   || [];
+                var linkFrom = res.data.should_link_from || [];
+
+                if (!linkTo.length && !linkFrom.length) {
+                    $content.html('<p style="font-size:11px;color:#6b7280;padding:4px 0;margin:0;">No silo structure detected. Sync pages first.</p>').show();
+                    return;
+                }
+
+                var html = '';
+
+                if (linkTo.length) {
+                    html += '<div style="margin-bottom:10px;">';
+                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#4f46e5;margin:0 0 5px;">This page should link to:</p>';
+                    linkTo.forEach(function(p) {
+                        html += renderWILinkRow(p);
+                    });
+                    html += '</div>';
+                }
+
+                if (linkFrom.length) {
+                    html += '<div>';
+                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#4f46e5;margin:0 0 5px;">Should link to this page:</p>';
+                    linkFrom.forEach(function(p) {
+                        html += renderWILinkRow(p);
+                    });
+                    html += '</div>';
+                }
+
+                $content.html(html).show();
+            },
+            error: function() {
+                $loading.hide();
+                $btn.prop('disabled', false).text('Retry');
+                $status.text('⚠️ Network error — check your connection.')
+                       .css({'background':'#fef2f2','color':'#991b1b'}).show();
+            }
+        });
+    });
+
+    function renderWILinkRow(page) {
+        var linked = page.already_linked;
+        var typeColors = {apex_hub:'#7c3aed', hub:'#4f46e5', spoke:'#0891b2', supporting:'#059669', orphan:'#9ca3af'};
+        var tColor = typeColors[page.page_type] || '#6b7280';
+        return '<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px solid #f3f4f6;">'
+            + '<span style="margin-top:2px;font-size:10px;">' + (linked ? '✅' : '⬜') + '</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<a href="' + esc(page.url || '#') + '" target="_blank" style="font-size:11px;font-weight:600;color:#1e40af;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+            + esc(page.title) + '</a>'
+            + '<span style="font-size:10px;color:' + tColor + ';font-weight:600;">' + esc(page.page_type || '') + '</span>'
+            + (!linked && page.anchor_text ? '<span style="font-size:10px;color:#6b7280;"> · anchor: "' + esc(page.anchor_text) + '"</span>' : '')
+            + '</div>'
+            + '</div>';
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     function esc(s) {

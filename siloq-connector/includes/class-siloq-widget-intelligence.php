@@ -124,6 +124,8 @@ class Siloq_Widget_Intelligence {
      */
     private function get_panel_html( $widget_type ) {
         return '<div class="siloq-wi-container" data-widget-type="' . esc_attr( $widget_type ) . '">
+
+            <!-- ── Widget Analysis ───────────────────────────── -->
             <div class="siloq-wi-actions">
                 <button type="button" class="siloq-wi-analyze-btn">
                     ⚡ Analyze This Widget
@@ -153,6 +155,20 @@ class Siloq_Widget_Intelligence {
                     <div class="siloq-wi-image-recs"></div>
                 </div>
             </div>
+
+            <!-- ── Internal Links ─────────────────────────────── -->
+            <div class="siloq-wi-links-section" style="margin-top:12px;border-top:1px solid #e5e7eb;padding-top:10px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <p class="siloq-wi-label" style="margin:0;">🔗 INTERNAL LINKS</p>
+                    <button type="button" class="siloq-wi-links-load-btn" style="font-size:10px;padding:2px 8px;border:1px solid #d1d5db;border-radius:4px;background:#f9fafb;cursor:pointer;color:#374151;">Load</button>
+                </div>
+                <div class="siloq-wi-links-loading" style="display:none;font-size:11px;color:#6b7280;padding:4px 0;">
+                    <span class="spinner is-active" style="float:none;vertical-align:middle;margin:0 4px 0 0;width:14px;height:14px;"></span> Loading link map...
+                </div>
+                <div class="siloq-wi-links-content" style="display:none;"></div>
+                <div class="siloq-wi-links-status" style="display:none;font-size:11px;padding:4px 6px;border-radius:4px;margin-top:4px;"></div>
+            </div>
+
         </div>';
     }
 

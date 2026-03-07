@@ -199,42 +199,185 @@ class Siloq_Content_Editor {
             return;
         }
 
-        $post_id  = intval( $_POST['post_id'] ?? 0 );
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing post_id' ] );
+            return;
+        }
+
+        // ── Try API first (URL bug fix: siloq_api_url already contains /api/v1, do NOT re-add it) ──
         $site_id  = get_option( 'siloq_site_id', '' );
         $api_key  = get_option( 'siloq_api_key', '' );
-        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.app' ), '/' );
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
-        if ( ! $site_id || ! $api_key || ! $post_id ) {
-            wp_send_json_error( [ 'message' => 'Missing configuration' ] );
-            return;
+        if ( $site_id && $api_key ) {
+            // Get page's API-side ID from sync data if available
+            $sync_data  = get_post_meta( $post_id, '_siloq_sync_data', true );
+            $api_page_id = ( is_array( $sync_data ) && ! empty( $sync_data['id'] ) ) ? $sync_data['id'] : $post_id;
+
+            $response = wp_remote_get(
+                // Fix: $api_base already has /api/v1 — do NOT add it again
+                "$api_base/sites/$site_id/pages/$api_page_id/related-pages/",
+                [
+                    'timeout' => 10,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $api_key,
+                        'Accept'        => 'application/json',
+                        'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                    ],
+                ]
+            );
+
+            if ( ! is_wp_error( $response ) ) {
+                $code = wp_remote_retrieve_response_code( $response );
+                $body = json_decode( wp_remote_retrieve_body( $response ), true );
+                if ( $code === 200 && is_array( $body ) ) {
+                    wp_send_json_success( $body );
+                    return;
+                }
+            }
         }
 
-        $response = wp_remote_get(
-            "$api_base/api/v1/sites/$site_id/pages/$post_id/related-pages/",
-            [
-                'timeout' => 15,
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $api_key,
-                    'Accept'        => 'application/json',
-                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
-                ],
-            ]
-        );
+        // ── Local WP fallback — works without API, no dependencies ──
+        // Derives link recommendations entirely from WP post meta already stored by Siloq.
+        $result = self::build_local_link_map( $post_id );
+        wp_send_json_success( $result );
+    }
 
-        if ( is_wp_error( $response ) ) {
-            wp_send_json_error( [ 'message' => 'API unavailable' ] );
-            return;
+    /**
+     * Build internal link recommendations from local WordPress data.
+     *
+     * Uses: _siloq_synced, _siloq_page_type_classification, _siloq_page_role,
+     *       _siloq_analysis_data, post permalink, and _elementor_data for existing links.
+     *
+     * Returns the same shape as the API: { should_link_to: [], should_link_from: [] }
+     *
+     * @param int $post_id
+     * @return array
+     */
+    private static function build_local_link_map( $post_id ) {
+        $current_url  = get_permalink( $post_id );
+        $current_type = self::get_page_type( $post_id );
+
+        // Collect all other synced pages
+        $all_posts = get_posts( [
+            'post_type'      => function_exists( 'get_siloq_crawlable_post_types' )
+                ? get_siloq_crawlable_post_types()
+                : [ 'page', 'post' ],
+            'post_status'    => 'publish',
+            'numberposts'    => -1,
+            'meta_query'     => [ [ 'key' => '_siloq_synced', 'compare' => 'EXISTS' ] ],
+            'exclude'        => [ $post_id ],
+        ] );
+
+        // Detect which URLs the current page already links to
+        $existing_links = self::get_outbound_links( $post_id );
+
+        // Hierarchy: apex_hub → hub → spoke → supporting → orphan
+        $hierarchy = [ 'apex_hub' => 5, 'hub' => 4, 'spoke' => 3, 'supporting' => 2, 'orphan' => 1 ];
+        $current_rank = $hierarchy[ $current_type ] ?? 2;
+
+        $should_link_to   = [];  // Pages THIS page should link TO (higher → lower)
+        $should_link_from = [];  // Pages that should link TO this page (lower ranks link up)
+
+        foreach ( $all_posts as $page ) {
+            $page_type  = self::get_page_type( $page->ID );
+            $page_rank  = $hierarchy[ $page_type ] ?? 2;
+            $page_url   = get_permalink( $page->ID );
+            $already_linked = in_array( $page_url, $existing_links, true );
+
+            $analysis_raw = get_post_meta( $page->ID, '_siloq_analysis_data', true );
+            $analysis     = is_array( $analysis_raw ) ? $analysis_raw : ( is_string( $analysis_raw ) ? json_decode( $analysis_raw, true ) : [] );
+            if ( ! is_array( $analysis ) ) $analysis = [];
+
+            $anchor = isset( $analysis['primary_keyword'] ) && $analysis['primary_keyword']
+                ? $analysis['primary_keyword']
+                : $page->post_title;
+
+            $entry = [
+                'id'             => $page->ID,
+                'title'          => $page->post_title,
+                'url'            => $page_url,
+                'page_type'      => $page_type,
+                'anchor_text'    => $anchor,
+                'already_linked' => $already_linked,
+            ];
+
+            // This page (hub/apex) should link DOWN to lower-rank pages
+            if ( $current_rank > $page_rank && $current_rank >= 3 ) {
+                $should_link_to[] = $entry;
+            }
+            // Higher-rank pages should link TO this page
+            if ( $page_rank > $current_rank ) {
+                $should_link_from[] = $entry;
+            }
         }
 
-        $code = wp_remote_retrieve_response_code( $response );
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        // Sort: unlinked first, then by title
+        usort( $should_link_to, function( $a, $b ) {
+            if ( $a['already_linked'] !== $b['already_linked'] ) return $a['already_linked'] ? 1 : -1;
+            return strcmp( $a['title'], $b['title'] );
+        } );
+        usort( $should_link_from, function( $a, $b ) {
+            if ( $a['already_linked'] !== $b['already_linked'] ) return $a['already_linked'] ? 1 : -1;
+            return strcmp( $a['title'], $b['title'] );
+        } );
 
-        if ( $code !== 200 || ! $body ) {
-            wp_send_json_error( [ 'message' => 'Could not load link data' ] );
-            return;
+        return [
+            'should_link_to'   => array_slice( $should_link_to, 0, 15 ),
+            'should_link_from' => array_slice( $should_link_from, 0, 15 ),
+            'source'           => 'local',
+        ];
+    }
+
+    /**
+     * Get the page type classification for a post.
+     */
+    private static function get_page_type( $post_id ) {
+        $manual = get_post_meta( $post_id, '_siloq_page_role', true );
+        if ( $manual ) return $manual;
+
+        $from_meta = get_post_meta( $post_id, '_siloq_page_type_classification', true );
+        if ( $from_meta ) return $from_meta;
+
+        if ( class_exists( 'Siloq_Admin' ) ) {
+            return Siloq_Admin::siloq_classify_page( $post_id, get_permalink( $post_id ) );
         }
 
-        wp_send_json_success( $body );
+        $analysis_raw = get_post_meta( $post_id, '_siloq_analysis_data', true );
+        $analysis     = is_array( $analysis_raw ) ? $analysis_raw : json_decode( $analysis_raw, true );
+        if ( is_array( $analysis ) && ! empty( $analysis['page_type'] ) ) {
+            return $analysis['page_type'];
+        }
+
+        return 'supporting';
+    }
+
+    /**
+     * Get URLs this page already links to from _elementor_data.
+     */
+    private static function get_outbound_links( $post_id ) {
+        $urls = [];
+
+        // Scan _elementor_data for href values
+        $el_data = get_post_meta( $post_id, '_elementor_data', true );
+        if ( $el_data ) {
+            preg_match_all( '/"url"\s*:\s*"(https?:[^"]+)"/', $el_data, $matches );
+            if ( ! empty( $matches[1] ) ) {
+                $urls = array_merge( $urls, $matches[1] );
+            }
+        }
+
+        // Also scan post_content for classic editor links
+        $post = get_post( $post_id );
+        if ( $post && $post->post_content ) {
+            preg_match_all( '/href=["\']([^"\']+)["\']/', $post->post_content, $matches );
+            if ( ! empty( $matches[1] ) ) {
+                $urls = array_merge( $urls, $matches[1] );
+            }
+        }
+
+        return array_unique( array_filter( $urls ) );
     }
 
     // ── AJAX: suggest_widget_edit ─────────────────────────────────────────────
