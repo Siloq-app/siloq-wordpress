@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.132
+* Version: 1.5.133
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.132');
+define('SILOQ_VERSION', '1.5.133');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -275,6 +275,8 @@ class Siloq_Connector {
         
         // Schema injection
         add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'));
+        // Native meta tag injection for sites with no SEO plugin (priority 1 = before theme)
+        add_action('wp_head', array('Siloq_Admin', 'inject_siloq_meta_tags'), 1);
         Siloq_Schema_Architect::init();
         
         // Page editor assets
@@ -323,7 +325,9 @@ class Siloq_Connector {
         // Schema tab handlers
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
-        add_action('wp_ajax_siloq_repair_elementor_meta', array($this, 'ajax_repair_elementor_meta'));
+        add_action('wp_ajax_siloq_repair_elementor_meta',  array($this, 'ajax_repair_elementor_meta'));
+        add_action('wp_ajax_siloq_bulk_apply_schema',         array('Siloq_Admin', 'ajax_bulk_apply_schema'));
+        add_action('wp_ajax_siloq_detect_service_hub',        array($this, 'ajax_detect_service_hub'));
 
         // Redirect manager AJAX
         add_action('wp_ajax_siloq_get_redirects',        array($this, 'ajax_get_redirects'));
@@ -350,7 +354,11 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_apply_image_seo', array('Siloq_Image_Audit', 'ajax_apply_image_seo'));
 
         // Site Audit (Track 2)
-        add_action('wp_ajax_siloq_run_audit', array($this, 'ajax_run_audit'));
+        add_action('wp_ajax_siloq_run_audit',            array($this, 'ajax_run_audit'));
+        add_action('wp_ajax_siloq_run_audit_background', array($this, 'ajax_run_audit_background'));
+        add_action('wp_ajax_nopriv_siloq_run_audit_background', array($this, 'ajax_run_audit_background'));
+        add_action('wp_ajax_siloq_audit_status',         array($this, 'ajax_audit_status'));
+        add_action('siloq_audit_cron_job',               array($this, 'run_audit_cron_job'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
@@ -674,6 +682,11 @@ class Siloq_Connector {
                     'posts_per_page' => -1,
                     'post_status'    => 'publish',
                 ) ) );
+            }
+
+            // Retroactive service-area hub detection — runs silently on every full sync
+            if ( ! $result['has_more'] ) {
+                $this->run_service_hub_detection();
             }
 
             wp_send_json_success($result);
@@ -1361,29 +1374,55 @@ class Siloq_Connector {
                 }
             }
 
-            // Build actions — include links so Fix It buttons actually work
-            if (!$has_analysis) {
+            // ── Specific fixable actions (render Fix It buttons in Priority Actions) ──
+            // Headline strings are intentionally chosen to match fix_mode pattern detection.
+            if (empty($meta_title)) {
+                $actions[] = array(
+                    'headline'  => 'Add SEO title to "' . $title . '"',
+                    'detail'    => 'Missing SEO title tag. Siloq will write one from your primary keyword.',
+                    'priority'  => 'high',
+                    'post_id'   => $post_id,
+                    'edit_url'  => $edit_url,
+                    'elementor_url' => $elementor_url,
+                );
+            }
+            if (empty($meta_desc) || $meta_desc_broken) {
+                $actions[] = array(
+                    'headline'  => 'Add meta description to "' . $title . '"',
+                    'detail'    => $meta_desc_broken
+                        ? 'Meta description contains full page content (' . (is_array($meta_desc_result) ? $meta_desc_result['length'] : '?') . ' chars). Siloq will generate a proper 150-char summary.'
+                        : 'Missing meta description reduces click-through rate. Siloq will generate one.',
+                    'priority'  => 'high',
+                    'post_id'   => $post_id,
+                    'edit_url'  => $edit_url,
+                    'elementor_url' => $elementor_url,
+                );
+            }
+            if (!$has_schema) {
+                $actions[] = array(
+                    'headline'  => 'Add schema markup to "' . $title . '"',
+                    'detail'    => 'No structured data found. Schema helps AI tools cite this page and improves rich results.',
+                    'priority'  => 'high',
+                    'post_id'   => $post_id,
+                    'edit_url'  => $edit_url,
+                    'elementor_url' => $elementor_url,
+                );
+            }
+
+            // ── Generic quality actions (only if no specific fixable issues above) ──
+            if (!$has_analysis && empty($meta_title) === false && !empty($meta_desc) && $has_schema) {
                 $actions[] = array(
                     'headline'      => 'Analyze "' . $title . '" in Widget Intelligence',
                     'detail'        => 'Open this page in Elementor and click Analyze to get SEO recommendations.',
-                    'priority'      => 'high',
+                    'priority'      => 'medium',
                     'post_id'       => $post_id,
                     'edit_url'      => $edit_url,
                     'elementor_url' => $elementor_url,
                 );
-            } elseif ($score < 50) {
+            } elseif ($has_analysis && $score < 50 && !empty($meta_title) && !empty($meta_desc)) {
                 $actions[] = array(
                     'headline'      => 'Improve content quality on "' . $title . '"',
                     'detail'        => 'Score: ' . $score . '/100. Open in Widget Intelligence to see specific recommendations.',
-                    'priority'      => 'high',
-                    'post_id'       => $post_id,
-                    'edit_url'      => $edit_url,
-                    'elementor_url' => $elementor_url,
-                );
-            } elseif ($score < 75) {
-                $actions[] = array(
-                    'headline'      => 'Optimize "' . $title . '" for better rankings',
-                    'detail'        => 'Score: ' . $score . '/100. Minor improvements available.',
                     'priority'      => 'medium',
                     'post_id'       => $post_id,
                     'edit_url'      => $edit_url,
@@ -1514,6 +1553,21 @@ class Siloq_Connector {
             return;
         }
 
+        // ── Cannibalization guard ─────────────────────────────────────────
+        // Before creating, check if any synced page already targets the same
+        // city/keyword. Prevents duplicate pages competing for the same terms.
+        $cannibal_check = $this->check_draft_cannibalization($title, $draft_type);
+        if ($cannibal_check) {
+            wp_send_json_error(array(
+                'message'       => $cannibal_check['message'],
+                'existing_page' => $cannibal_check['existing_page'],
+                'existing_url'  => $cannibal_check['existing_url'],
+                'edit_url'      => $cannibal_check['edit_url'],
+                'cannibal'      => true,
+            ));
+            return;
+        }
+
         // Generate content based on draft type
         $content = $this->generate_draft_content($title, $draft_type);
 
@@ -1542,6 +1596,186 @@ class Siloq_Connector {
             'post_id'  => $post_id,
             'edit_url' => admin_url('post.php?post=' . $post_id . '&action=elementor'),
         ));
+    }
+
+    /**
+     * Check if creating a draft for $title would cannibalize an existing synced page.
+     *
+     * For city pages: extract the city name and check if any existing page
+     * title or slug contains that city. Prevents duplicate city pages that
+     * would split rankings.
+     *
+     * @return array|null  null = safe to proceed. array = conflict found.
+     */
+    private function check_draft_cannibalization($title, $draft_type) {
+        // Only check city and service draft types
+        if (!in_array($draft_type, array('city', 'service', 'generic'), true)) return null;
+
+        // Extract the meaningful part of the title for comparison
+        // e.g. "Grandview, MO Electrician" → "grandview"
+        $title_lower = strtolower($title);
+        // Strip common service suffixes to isolate location/service keyword
+        $strip = array(' electrician', ' plumber', ' hvac', ' roofer', ' roofing',
+                       ' contractor', ' services', ' service', ', mo', ', ks',
+                       ' mo', ' ks', ' electricians', 'electrician ');
+        $core_kw = str_replace($strip, '', $title_lower);
+        $core_kw = preg_replace('/\s+/', ' ', trim($core_kw));
+
+        if (strlen($core_kw) < 3) return null;
+
+        // Find all synced published pages
+        $existing = get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'post_status'    => array('publish', 'draft'),
+            'posts_per_page' => -1,
+            'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+        ));
+
+        foreach ($existing as $post) {
+            $existing_title = strtolower($post->post_title);
+            $existing_slug  = $post->post_name;
+
+            // Compare stripped title and slug
+            $existing_core = str_replace($strip, '', $existing_title);
+            $existing_core = preg_replace('/\s+/', ' ', trim($existing_core));
+
+            if (
+                ( strlen($core_kw) >= 4 && strpos($existing_core, $core_kw) !== false ) ||
+                ( strlen($core_kw) >= 4 && strpos($existing_slug, $core_kw) !== false ) ||
+                similar_text($core_kw, $existing_core, $pct) && $pct > 75
+            ) {
+                return array(
+                    'message'       => 'A page targeting "' . $post->post_title . '" already exists. Improve the existing page instead of creating a duplicate.',
+                    'existing_page' => $post->post_title,
+                    'existing_url'  => get_permalink($post->ID),
+                    'edit_url'      => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
+                );
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * AJAX: Detect service-area hub pages and retroactively assign city spoke pages.
+     *
+     * Scans all synced pages for one matching "service-area" or "service-areas" in
+     * its slug or title. If found and it has zero spoke pages assigned to it, scans
+     * all other spoke/supporting pages and sets _siloq_service_area_hub_id on them
+     * pointing to the hub. Adds Priority Action items to link each city page to the hub.
+     *
+     * Runs automatically: called after every sync completion + on-demand via button.
+     */
+    public function ajax_detect_service_hub() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+        }
+
+        $result = $this->run_service_hub_detection();
+        wp_send_json_success($result);
+    }
+
+    public function run_service_hub_detection() {
+        // Find service-area hub page
+        $hub = null;
+        $candidates = get_posts(array(
+            'post_type'      => array('page', 'post'),
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+        ));
+
+        foreach ($candidates as $p) {
+            $slug  = $p->post_name;
+            $title = strtolower($p->post_title);
+            if (
+                strpos($slug,  'service-area') !== false ||
+                strpos($slug,  'service-areas') !== false ||
+                strpos($title, 'service area') !== false ||
+                strpos($title, 'service areas') !== false ||
+                get_post_meta($p->ID, '_siloq_page_role', true) === 'hub' ||
+                get_post_meta($p->ID, '_siloq_page_role', true) === 'apex_hub'
+            ) {
+                $hub = $p;
+                break;
+            }
+        }
+
+        if (!$hub) {
+            return array('status' => 'no_hub', 'message' => 'No service areas hub page found. Create one first.');
+        }
+
+        // Check if already connected (has spoke pages assigned)
+        $already_connected = (int) get_post_meta($hub->ID, '_siloq_spoke_count', true);
+        $force = isset($_POST['force']) && $_POST['force'] === '1';
+        if ($already_connected > 0 && !$force) {
+            return array(
+                'status'  => 'already_connected',
+                'hub_id'  => $hub->ID,
+                'hub_title' => $hub->post_title,
+                'count'   => $already_connected,
+                'message' => $hub->post_title . ' already has ' . $already_connected . ' city pages connected.',
+            );
+        }
+
+        // Mark hub
+        update_post_meta($hub->ID, '_siloq_page_role', 'hub');
+
+        // Find city spoke pages — pages classified as spoke/supporting/orphan that aren't the hub
+        $spoke_patterns = array('electrician', 'plumber', 'hvac', 'roofer', 'roofing',
+                                'contractor', 'service', 'repair', 'install');
+        $state_patterns = array(' mo', ', mo', ' ks', ', ks', '-mo-', '-ks-');
+        $connected = 0;
+        $skipped   = 0;
+
+        foreach ($candidates as $p) {
+            if ($p->ID === $hub->ID) continue;
+
+            $role = get_post_meta($p->ID, '_siloq_page_role', true);
+            $slug = $p->post_name;
+            $title_lower = strtolower($p->post_title);
+
+            // Skip hub-type pages
+            if (in_array($role, array('hub', 'apex_hub'), true)) { $skipped++; continue; }
+
+            // Detect city pages: slug contains state abbreviation OR common service keyword
+            $is_city_page = false;
+            foreach ($state_patterns as $sp) {
+                if (strpos($slug, trim($sp, ' ,-')) !== false || strpos($title_lower, $sp) !== false) {
+                    $is_city_page = true; break;
+                }
+            }
+            if (!$is_city_page) {
+                foreach ($spoke_patterns as $kw) {
+                    if (strpos($slug, $kw) !== false || strpos($title_lower, $kw) !== false) {
+                        $is_city_page = true; break;
+                    }
+                }
+            }
+
+            if ($is_city_page) {
+                update_post_meta($p->ID, '_siloq_page_role', 'spoke');
+                update_post_meta($p->ID, '_siloq_service_area_hub_id', $hub->ID);
+                $connected++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        update_post_meta($hub->ID, '_siloq_spoke_count', $connected);
+
+        // Invalidate plan cache so next load reflects new silo structure
+        delete_transient('siloq_plan_data');
+
+        return array(
+            'status'     => 'connected',
+            'hub_id'     => $hub->ID,
+            'hub_title'  => $hub->post_title,
+            'connected'  => $connected,
+            'skipped'    => $skipped,
+            'message'    => 'Connected ' . $connected . ' city pages to "' . $hub->post_title . '" hub. Plan refreshed.',
+        );
     }
 
     /**
@@ -1938,15 +2172,104 @@ class Siloq_Connector {
             return;
         }
 
-        $result = Siloq_Admin::run_site_audit();
+        // Generate a unique job key for this audit run
+        $job_key = 'siloq_audit_' . uniqid();
 
-        if (!empty($result['success'])) {
-            wp_send_json_success($result['data']);
+        // Store running status
+        set_transient('siloq_audit_status', array(
+            'status'     => 'running',
+            'job_key'    => $job_key,
+            'started_at' => time(),
+            'progress'   => 0,
+            'message'    => 'Audit started...',
+        ), HOUR_IN_SECONDS);
+
+        // Schedule as background WP-Cron event
+        wp_schedule_single_event(time(), 'siloq_audit_cron_job', array($job_key));
+
+        // Trigger WP-Cron immediately via non-blocking HTTP request (don't wait for next page load)
+        wp_remote_post(
+            admin_url('admin-ajax.php'),
+            array(
+                'blocking'  => false,
+                'timeout'   => 0.01,
+                'sslverify' => apply_filters('https_local_ssl_verify', false),
+                'body'      => array(
+                    'action'  => 'siloq_run_audit_background',
+                    'nonce'   => wp_create_nonce('siloq_audit_bg_' . $job_key),
+                    'job_key' => $job_key,
+                ),
+            )
+        );
+
+        wp_send_json_success(array(
+            'status'  => 'started',
+            'job_key' => $job_key,
+            'message' => 'Audit running in the background. This usually takes 10-20 seconds.',
+        ));
+    }
+
+    /**
+     * Background AJAX handler — runs the actual audit (called via non-blocking HTTP).
+     */
+    public function ajax_run_audit_background() {
+        $job_key = sanitize_text_field($_POST['job_key'] ?? '');
+        $nonce   = sanitize_text_field($_POST['nonce']   ?? '');
+
+        // Verify nonce scoped to this specific job
+        if (!$job_key || !wp_verify_nonce($nonce, 'siloq_audit_bg_' . $job_key)) {
+            wp_die('Unauthorized');
+        }
+
+        // Only run if we're the expected job
+        $status = get_transient('siloq_audit_status');
+        if (!$status || $status['job_key'] !== $job_key) {
+            wp_die();
+        }
+
+        $this->run_audit_cron_job($job_key);
+        wp_die();
+    }
+
+    /**
+     * WP-Cron callback — runs audit locally (no synchronous API call, never times out).
+     */
+    public function run_audit_cron_job($job_key = '') {
+        $result = Siloq_Admin::run_site_audit_local();
+
+        if ($result) {
+            set_transient('siloq_audit_results', $result, 6 * HOUR_IN_SECONDS);
+            update_option('siloq_last_audit_time', current_time('mysql'));
+            if (isset($result['site_score'])) {
+                update_option('siloq_site_score', intval($result['site_score']));
+            }
+            set_transient('siloq_audit_status', array(
+                'status'       => 'complete',
+                'job_key'      => $job_key,
+                'completed_at' => time(),
+                'message'      => 'Audit complete.',
+                'site_score'   => $result['site_score'] ?? 0,
+                'page_count'   => $result['page_count'] ?? 0,
+            ), 6 * HOUR_IN_SECONDS);
         } else {
-            wp_send_json_error(array(
-                'message' => $result['message'] ?? 'Audit failed.',
-                'data'    => $result['data'] ?? null,
-            ));
+            set_transient('siloq_audit_status', array(
+                'status'  => 'failed',
+                'job_key' => $job_key,
+                'message' => 'Audit failed — no pages found or plugin not configured.',
+            ), HOUR_IN_SECONDS);
+        }
+    }
+
+    /**
+     * AJAX: Poll for current audit status.
+     */
+    public function ajax_audit_status() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        $status = get_transient('siloq_audit_status');
+        if (!$status) {
+            wp_send_json_success(array('status' => 'idle', 'message' => 'No audit in progress.'));
+        } else {
+            wp_send_json_success($status);
         }
     }
 

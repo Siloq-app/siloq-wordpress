@@ -2315,15 +2315,29 @@ $img_audit_items = $img_audit_raw ? json_decode($img_audit_raw, true) : array();
     $fix_url = isset($act['elementor_url']) ? $act['elementor_url'] : (isset($act['edit_url']) ? $act['edit_url'] : '');
     $act_post_id = isset($act['post_id']) ? intval($act['post_id']) : 0;
     $act_text = strtolower( (isset($act['headline']) ? $act['headline'] : '') . ' ' . (isset($act['detail']) ? $act['detail'] : '') );
-    // Determine fix type from headline/detail text
+    // Determine fix type from headline/detail text — intentionally broad to catch all variants
     $fix_mode = 'link'; // default: open link
-    if (stripos($act_text, 'missing meta description') !== false || stripos($act_text, 'meta description') !== false) {
+    if (
+        stripos($act_text, 'meta description') !== false ||
+        stripos($act_text, 'meta desc') !== false ||
+        stripos($act_text, 'add description') !== false
+    ) {
         $fix_mode = 'meta_description';
-    } elseif (stripos($act_text, 'missing seo title') !== false || stripos($act_text, 'missing title') !== false || stripos($act_text, 'set a title tag') !== false) {
+    } elseif (
+        stripos($act_text, 'seo title') !== false ||
+        stripos($act_text, 'title tag') !== false ||
+        stripos($act_text, 'missing title') !== false ||
+        stripos($act_text, 'add title') !== false ||
+        stripos($act_text, 'set a title') !== false
+    ) {
         $fix_mode = 'meta_title';
-    } elseif (stripos($act_text, 'schema') !== false || stripos($act_text, 'structured data') !== false) {
+    } elseif (
+        stripos($act_text, 'schema') !== false ||
+        stripos($act_text, 'structured data') !== false ||
+        stripos($act_text, 'schema markup') !== false
+    ) {
         $fix_mode = 'schema';
-    } elseif (stripos($act_text, 'missing h1') !== false) {
+    } elseif (stripos($act_text, 'missing h1') !== false || stripos($act_text, 'add h1') !== false) {
         $fix_mode = 'elementor';
     } elseif (stripos($act_text, 'orphan') !== false || stripos($act_text, 'no internal links') !== false) {
         $fix_mode = 'internal_links';
@@ -2474,18 +2488,18 @@ $audit_fresh = !empty($audit_results);
 <script>
 function siloqRunAudit(btn) {
     btn.disabled = true;
-    btn.textContent = 'Running...';
+    btn.textContent = 'Starting...';
+
     jQuery.post(ajaxurl, {
         action: 'siloq_run_audit',
         nonce: siloqDash.nonce
     }, function(resp) {
         if (resp.success) {
-            location.reload();
+            // Async audit started — poll for status
+            btn.textContent = 'Auditing...';
+            siloqPollAuditStatus(btn, 0);
         } else {
-            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Audit failed.';
-            if (resp.data && resp.data.data && resp.data.data.error === 'upgrade_required') {
-                msg = 'Page limit reached (' + resp.data.data.limit + ' pages). Upgrade your plan to audit more pages.';
-            }
+            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Audit failed to start.';
             alert(msg);
             btn.disabled = false;
             btn.textContent = 'Run Audit';
@@ -2495,6 +2509,36 @@ function siloqRunAudit(btn) {
         btn.disabled = false;
         btn.textContent = 'Run Audit';
     });
+}
+
+function siloqPollAuditStatus(btn, attempts) {
+    if (attempts > 60) { // 5 min max
+        btn.disabled = false;
+        btn.textContent = 'Run Audit';
+        alert('Audit is taking longer than expected. Try refreshing the page.');
+        return;
+    }
+    setTimeout(function() {
+        jQuery.post(ajaxurl, {
+            action: 'siloq_audit_status',
+            nonce: siloqDash.nonce
+        }, function(resp) {
+            var s = resp.success && resp.data ? resp.data : {};
+            if (s.status === 'complete') {
+                location.reload();
+            } else if (s.status === 'failed') {
+                btn.disabled = false;
+                btn.textContent = 'Run Audit';
+                alert('Audit failed: ' + (s.message || 'Unknown error'));
+            } else {
+                // Still running — show progress message
+                if (s.message) btn.textContent = s.message.substring(0, 20) + '...';
+                siloqPollAuditStatus(btn, attempts + 1);
+            }
+        }).fail(function() {
+            siloqPollAuditStatus(btn, attempts + 1);
+        });
+    }, 5000); // poll every 5 seconds
 }
 
 // ── One-click Fix It buttons ──
@@ -3002,6 +3046,9 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                     <div class="siloq-card-header">
                         <h3 class="siloq-card-title">Schema Applied Per Page</h3>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <button type="button" id="siloq-schema-apply-all-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" title="Generate and apply schema to every page that shows None">
+                                ⚡ Apply Schema to All
+                            </button>
                             <button type="button" id="siloq-schema-repair-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" title="Fix pages where the Siloq schema panel is missing in Elementor editor">
                                 🔧 Repair Schema Panels
                             </button>
@@ -3009,6 +3056,13 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                                 <span class="dashicons dashicons-update"></span> Refresh
                             </button>
                         </div>
+                        <div id="siloq-schema-bulk-progress" style="display:none;margin-top:10px;">
+                            <div style="font-size:12px;color:#4f46e5;font-weight:600;margin-bottom:6px;" id="siloq-schema-bulk-msg">Preparing...</div>
+                            <div style="background:#e0e7ff;border-radius:999px;height:8px;overflow:hidden;">
+                                <div id="siloq-schema-bulk-bar" style="height:100%;background:#4f46e5;border-radius:999px;transition:width 0.3s;width:0%;"></div>
+                            </div>
+                        </div>
+                        <div id="siloq-schema-bulk-summary" style="display:none;margin-top:10px;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
                     </div>
                     <div id="siloq-schema-repair-msg" style="display:none;font-size:12px;padding:8px 12px;border-radius:6px;margin-bottom:8px;"></div>
                     <div id="siloq-schema-pages-list" class="siloq-schema-pages__list">
@@ -3200,6 +3254,20 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
                             setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
+                        } else if (r.data && r.data.cannibal) {
+                            // Cannibalization warning — show inline instead of creating
+                            btn.textContent = '⚠ Page exists';
+                            btn.style.background = '#fef3c7';
+                            btn.style.color = '#92400e';
+                            btn.disabled = false;
+                            var card = btn.closest('.siloq-gap-card, .siloq-spoke-card, li, div');
+                            if (card) {
+                                var warn = document.createElement('div');
+                                warn.style.cssText = 'font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-top:6px;';
+                                warn.innerHTML = '⚠ <strong>' + r.data.existing_page + '</strong> already targets this keyword. '
+                                    + '<a href="' + r.data.edit_url + '" target="_blank" style="color:#1d4ed8;text-decoration:underline">Improve that page instead &rarr;</a>';
+                                card.appendChild(warn);
+                            }
                         } else {
                             btn.textContent = 'Error — retry';
                             btn.disabled = false;
@@ -3224,6 +3292,15 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                             var spoke = btn.closest('.siloq-spoke-card');
                             if (spoke) { spoke.style.borderColor = '#22c55e'; spoke.style.borderStyle = 'solid'; }
                             setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
+                        } else if (r.data && r.data.cannibal) {
+                            btn.textContent = '⚠ Already exists';
+                            btn.style.background = '#fef3c7';
+                            btn.style.color = '#92400e';
+                            btn.disabled = false;
+                            var info = document.createElement('div');
+                            info.style.cssText = 'font-size:11px;color:#92400e;margin-top:4px;';
+                            info.innerHTML = '<a href="' + r.data.edit_url + '" target="_blank">Edit: ' + r.data.existing_page + ' &rarr;</a>';
+                            btn.parentNode.insertBefore(info, btn.nextSibling);
                         } else {
                             btn.textContent = 'Error — retry';
                             btn.disabled = false;
@@ -4342,6 +4419,98 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
     // Track 2: Site Audit — collect page data, POST to API, cache results
     // =========================================================================
 
+    /**
+     * Fast local audit — runs entirely in WP without any API call.
+     * Used by the async audit job. Returns the same shape as run_site_audit().
+     * Never times out. Generates specific fixable action items.
+     */
+    public static function run_site_audit_local() {
+        $post_types = function_exists('get_siloq_crawlable_post_types')
+            ? get_siloq_crawlable_post_types()
+            : array('page', 'post');
+
+        $posts = get_posts(array(
+            'post_type'      => $post_types,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+        ));
+
+        if (empty($posts)) return null;
+
+        $actions  = array();
+        $issues   = array('critical' => array(), 'important' => array(), 'opportunity' => array());
+        $scores   = array();
+        $seo_plugin = get_option('siloq_active_seo_plugin', 'siloq_native');
+
+        foreach ($posts as $p) {
+            $post_id     = $p->ID;
+            $title       = get_the_title($post_id);
+            $edit_url    = get_edit_post_link($post_id, 'raw');
+            $el_url      = admin_url('post.php?post=' . $post_id . '&action=elementor');
+            $score       = 100;
+
+            // ── Meta title ──────────────────────────────────────────────────
+            $seo_title = self::siloq_get_page_title($post_id);
+            $has_seo_title = ($seo_title !== get_the_title($post_id) && !empty($seo_title));
+            if (!$has_seo_title) {
+                $score -= 10;
+                $actions[] = array('headline' => 'Add SEO title to "' . $title . '"',
+                    'detail' => 'Missing SEO title tag. Siloq will write one from your primary keyword.',
+                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $issues['important'][] = array('title' => $title, 'issue' => 'Missing SEO title', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+            }
+
+            // ── Meta description ────────────────────────────────────────────
+            $meta_result = self::siloq_get_meta_description($post_id);
+            $meta_desc   = is_string($meta_result) ? $meta_result : '';
+            $broken      = is_array($meta_result) && isset($meta_result['status']) && $meta_result['status'] === 'broken_fallback';
+            if (empty($meta_desc) || $broken) {
+                $score -= 15;
+                $actions[] = array('headline' => 'Add meta description to "' . $title . '"',
+                    'detail' => $broken ? 'Meta description contains full page content. Siloq will generate a proper summary.' : 'Missing meta description reduces CTR. Siloq will generate one.',
+                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $issues['important'][] = array('title' => $title, 'issue' => 'Missing meta description', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+            }
+
+            // ── Schema ──────────────────────────────────────────────────────
+            $schema = get_post_meta($post_id, '_siloq_applied_types', true);
+            if (empty($schema)) {
+                $score -= 20;
+                $actions[] = array('headline' => 'Add schema markup to "' . $title . '"',
+                    'detail' => 'No structured data. Schema helps AI cite this page and improves rich results.',
+                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $issues['opportunity'][] = array('title' => $title, 'issue' => 'No schema markup', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+            }
+
+            // ── Thin content ────────────────────────────────────────────────
+            $wc = str_word_count(wp_strip_all_tags($p->post_content));
+            if ($wc < 300 && $wc > 0) {
+                $score -= 15;
+                $issues['important'][] = array('title' => $title, 'issue' => 'Thin content — only ' . $wc . ' words. Aim for 500+.', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+            }
+
+            $scores[] = max(0, $score);
+        }
+
+        $site_score = !empty($scores) ? round(array_sum($scores) / count($scores)) : 0;
+
+        // Sort actions by priority
+        usort($actions, function($a, $b) {
+            $p = array('high' => 0, 'medium' => 1, 'low' => 2);
+            return ($p[$a['priority']] ?? 2) - ($p[$b['priority']] ?? 2);
+        });
+
+        return array(
+            'success'    => true,
+            'site_score' => $site_score,
+            'page_count' => count($posts),
+            'actions'    => $actions,
+            'issues'     => $issues,
+            'audit_id'   => 'local_' . time(),
+            'source'     => 'local',
+        );
+    }
+
     public static function run_site_audit() {
         $site_id = get_option('siloq_site_id', '');
         if (empty($site_id)) {
@@ -4531,27 +4700,84 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
 
         switch ( $fix_action ) {
             case 'fix_meta':
-                // Generate and apply meta title or description via the page analyzer
+                // Detect active SEO plugin (checked once, cached in option)
+                $seo_plugin = get_option( 'siloq_active_seo_plugin', '' );
+                if ( empty( $seo_plugin ) ) {
+                    if ( defined( 'AIOSEO_VERSION' ) || class_exists( 'AIOSEO\Plugin\AIOSEO' ) ) {
+                        $seo_plugin = 'aioseo';
+                    } elseif ( defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Options' ) ) {
+                        $seo_plugin = 'yoast';
+                    } elseif ( defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) ) {
+                        $seo_plugin = 'rankmath';
+                    } elseif ( defined( 'SEOPRESS_VERSION' ) || class_exists( 'SEOPRESS_ADMIN' ) ) {
+                        $seo_plugin = 'seopress';
+                    } else {
+                        $seo_plugin = 'siloq_native'; // No SEO plugin — Siloq handles it
+                    }
+                    update_option( 'siloq_active_seo_plugin', $seo_plugin );
+                }
+
                 if ( $fix_type === 'title' ) {
-                    $title = self::siloq_get_page_title( $post_id );
-                    if ( empty( $title ) ) {
-                        $title = get_the_title( $post_id );
+                    // Build the best available SEO title
+                    $post_obj   = get_post( $post_id );
+                    $post_title = $post_obj ? $post_obj->post_title : '';
+                    $analysis   = json_decode( get_post_meta( $post_id, '_siloq_analysis_data', true ), true ) ?: [];
+                    $primary_kw = $analysis['primary_keyword'] ?? '';
+                    $biz_name   = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+
+                    // Build SEO title: "Primary Keyword | Business Name" or fallback to post title
+                    if ( $primary_kw ) {
+                        $seo_title = $primary_kw . ' | ' . $biz_name;
+                    } else {
+                        $seo_title = $post_title . ' | ' . $biz_name;
                     }
-                    // Save to common SEO meta locations
-                    update_post_meta( $post_id, '_yoast_wpseo_title', $title );
-                    update_post_meta( $post_id, '_aioseo_title', $title );
-                    wp_send_json_success( [ 'message' => 'Meta title set.', 'value' => $title ] );
+                    // Cap at 60 chars
+                    if ( strlen( $seo_title ) > 60 ) {
+                        $seo_title = substr( $seo_title, 0, 57 ) . '...';
+                    }
+
+                    self::write_seo_title( $post_id, $seo_title, $seo_plugin );
+                    wp_send_json_success( [ 'message' => 'SEO title applied via ' . $seo_plugin . '.', 'value' => $seo_title ] );
+
                 } elseif ( $fix_type === 'description' ) {
-                    // Generate a meta description from post content
-                    $post = get_post( $post_id );
-                    $content = wp_strip_all_tags( $post->post_content ?? '' );
-                    $desc = wp_trim_words( $content, 25, '...' );
-                    if ( strlen( $desc ) > 160 ) {
-                        $desc = substr( $desc, 0, 157 ) . '...';
+                    // Generate meta description from analysis excerpt or content
+                    $analysis = json_decode( get_post_meta( $post_id, '_siloq_analysis_data', true ), true ) ?: [];
+                    $desc = '';
+
+                    // Prefer analysis-generated excerpt
+                    if ( ! empty( $analysis['meta_description'] ) ) {
+                        $desc = $analysis['meta_description'];
+                    } elseif ( ! empty( $analysis['excerpt'] ) ) {
+                        $desc = $analysis['excerpt'];
+                    } else {
+                        // Fall back to post content snippet
+                        $post_obj = get_post( $post_id );
+                        $content  = $post_obj ? wp_strip_all_tags( $post_obj->post_content ) : '';
+                        if ( empty( $content ) ) {
+                            // Try Elementor data
+                            $el_data = get_post_meta( $post_id, '_elementor_data', true );
+                            if ( $el_data ) {
+                                preg_match_all( '/"editor_content"\s*:\s*"([^"]{20,})"/', $el_data, $m );
+                                $content = ! empty( $m[1] ) ? html_entity_decode( $m[1][0] ) : '';
+                            }
+                        }
+                        $desc = wp_trim_words( $content, 28, '' );
                     }
-                    update_post_meta( $post_id, '_yoast_wpseo_metadesc', $desc );
-                    update_post_meta( $post_id, '_aioseo_description', $desc );
-                    wp_send_json_success( [ 'message' => 'Meta description generated.', 'value' => $desc ] );
+
+                    // Trim to ≤160 chars at word boundary
+                    if ( mb_strlen( $desc ) > 160 ) {
+                        $desc = mb_substr( $desc, 0, 157 ) . '...';
+                    }
+                    $desc = trim( $desc );
+
+                    if ( empty( $desc ) ) {
+                        wp_send_json_error( [ 'message' => 'Could not generate description — run Widget Intelligence on this page first.' ] );
+                        return;
+                    }
+
+                    self::write_seo_description( $post_id, $desc, $seo_plugin );
+                    wp_send_json_success( [ 'message' => 'Meta description applied via ' . $seo_plugin . '.', 'value' => $desc ] );
+
                 } else {
                     wp_send_json_error( [ 'message' => 'Unknown meta fix type.' ] );
                 }
@@ -4673,6 +4899,159 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
         }
 
         return $result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // BULK SCHEMA APPLY
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * AJAX: Apply schema to a single page — called sequentially by the JS bulk processor.
+     * The JS calls this once per page with a 1-second delay between calls.
+     */
+    public static function ajax_bulk_apply_schema() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing post_id' ] );
+        }
+
+        if ( ! class_exists( 'Siloq_Schema_Intelligence' ) ) {
+            wp_send_json_error( [ 'message' => 'Schema Intelligence module not loaded.' ] );
+        }
+
+        // Temporarily inject post_id into POST for ajax_generate_schema()
+        $_POST['post_id'] = $post_id;
+
+        // Capture the JSON output instead of sending it
+        ob_start();
+        Siloq_Schema_Intelligence::ajax_generate_schema();
+        $output = ob_get_clean();
+
+        // ajax_generate_schema calls wp_send_json_* which exits — we captured it
+        $result = json_decode( $output, true );
+
+        if ( ! empty( $result['success'] ) ) {
+            $title = get_the_title( $post_id );
+            $types = $result['data']['schema_types'] ?? [];
+            wp_send_json_success( [
+                'post_id' => $post_id,
+                'title'   => $title,
+                'types'   => $types,
+                'message' => 'Schema applied to "' . $title . '"',
+            ] );
+        } else {
+            $msg = $result['data']['message'] ?? 'Schema generation failed.';
+            wp_send_json_error( [
+                'post_id' => $post_id,
+                'title'   => get_the_title( $post_id ),
+                'message' => $msg,
+            ] );
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SEO META WRITE HELPERS (multi-plugin + native fallback)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Write an SEO title to the correct SEO plugin's storage.
+     * Falls back to _siloq_meta_title (injected via wp_head).
+     */
+    public static function write_seo_title( $post_id, $title, $plugin = '' ) {
+        if ( ! $plugin ) {
+            $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
+        }
+        switch ( $plugin ) {
+            case 'yoast':
+                update_post_meta( $post_id, '_yoast_wpseo_title', $title );
+                break;
+            case 'rankmath':
+                update_post_meta( $post_id, 'rank_math_title', $title );
+                break;
+            case 'seopress':
+                update_post_meta( $post_id, '_seopress_titles_title', $title );
+                break;
+            case 'aioseo':
+                // AIOSEO 4.x uses wp_aioseo_posts table primarily
+                self::aioseo_upsert( $post_id, [ 'title' => $title ] );
+                // Also write to post_meta as fallback (AIOSEO reads both)
+                update_post_meta( $post_id, '_aioseo_title', $title );
+                break;
+            default: // siloq_native — injected via wp_head
+                update_post_meta( $post_id, '_siloq_meta_title', $title );
+                break;
+        }
+    }
+
+    /**
+     * Write a meta description to the correct SEO plugin's storage.
+     */
+    public static function write_seo_description( $post_id, $desc, $plugin = '' ) {
+        if ( ! $plugin ) {
+            $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
+        }
+        switch ( $plugin ) {
+            case 'yoast':
+                update_post_meta( $post_id, '_yoast_wpseo_metadesc', $desc );
+                break;
+            case 'rankmath':
+                update_post_meta( $post_id, 'rank_math_description', $desc );
+                break;
+            case 'seopress':
+                update_post_meta( $post_id, '_seopress_titles_desc', $desc );
+                break;
+            case 'aioseo':
+                self::aioseo_upsert( $post_id, [ 'description' => $desc ] );
+                update_post_meta( $post_id, '_aioseo_description', $desc );
+                break;
+            default:
+                update_post_meta( $post_id, '_siloq_meta_description', $desc );
+                break;
+        }
+    }
+
+    /**
+     * INSERT or UPDATE a row in wp_aioseo_posts for AIOSEO 4.x.
+     */
+    private static function aioseo_upsert( $post_id, $data ) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'aioseo_posts';
+        if ( ! $wpdb->get_var( "SHOW TABLES LIKE '$table'" ) ) {
+            return; // AIOSEO table doesn't exist — fall through to post_meta
+        }
+        $existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table WHERE post_id = %d", $post_id ) );
+        if ( $existing ) {
+            $wpdb->update( $table, $data, [ 'post_id' => $post_id ] );
+        } else {
+            $wpdb->insert( $table, array_merge( [ 'post_id' => $post_id ], $data ) );
+        }
+    }
+
+    /**
+     * wp_head injection for sites with no SEO plugin.
+     * Hooked via Siloq_Connector constructor.
+     */
+    public static function inject_siloq_meta_tags() {
+        if ( is_admin() || ! is_singular() ) return;
+        $post_id = get_the_ID();
+        if ( ! $post_id ) return;
+
+        $title = get_post_meta( $post_id, '_siloq_meta_title', true );
+        $desc  = get_post_meta( $post_id, '_siloq_meta_description', true );
+
+        if ( $title ) {
+            echo '<title>' . esc_html( $title ) . '</title>' . "\n";
+            echo '<meta name="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+        }
+        if ( $desc ) {
+            echo '<meta name="description" content="' . esc_attr( $desc ) . '">' . "\n";
+            echo '<meta name="og:description" content="' . esc_attr( $desc ) . '">' . "\n";
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
