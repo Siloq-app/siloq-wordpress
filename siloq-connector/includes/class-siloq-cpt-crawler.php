@@ -63,6 +63,11 @@ function get_siloq_crawlable_post_types() {
         'rev_slider',          // Revolution Slider
         'ml-slider',           // MetaSlider
         'soliloquy',           // Soliloquy Slider
+        // Code snippet CPTs — PHP/JS snippets stored as posts, never real pages
+        'wpcode_snippet',      // WPCode (formerly Code Snippets)
+        'code_snippet',        // Code Snippets plugin
+        'cs_snippet',          // another Code Snippets variant
+        'wpcode',
         // Form / popup CPTs
         'wpcf7_contact_form',  // CF7
         'popup',

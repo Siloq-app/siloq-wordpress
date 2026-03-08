@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.133
+* Version: 1.5.134
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.133');
+define('SILOQ_VERSION', '1.5.134');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -248,6 +248,8 @@ class Siloq_Connector {
         }
 
         // Initialize redirect manager
+        // Ensure redirects table exists on every load (safe — dbDelta is idempotent)
+        Siloq_Redirect_Manager::create_table();
         Siloq_Redirect_Manager::get_instance();
 
         // Initialize Schema Intelligence (AJAX handlers + wp_head output).
@@ -327,7 +329,8 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
         add_action('wp_ajax_siloq_repair_elementor_meta',  array($this, 'ajax_repair_elementor_meta'));
         add_action('wp_ajax_siloq_bulk_apply_schema',         array('Siloq_Admin', 'ajax_bulk_apply_schema'));
-        add_action('wp_ajax_siloq_detect_service_hub',        array($this, 'ajax_detect_service_hub'));
+        add_action('wp_ajax_siloq_detect_service_hub',         array($this, 'ajax_detect_service_hub'));
+        add_action('wp_ajax_siloq_toggle_redirect',            array('Siloq_Admin', 'ajax_toggle_redirect'));
 
         // Redirect manager AJAX
         add_action('wp_ajax_siloq_get_redirects',        array($this, 'ajax_get_redirects'));
@@ -1571,10 +1574,14 @@ class Siloq_Connector {
         // Generate content based on draft type
         $content = $this->generate_draft_content($title, $draft_type);
 
+        // Service area hub pages go live immediately; all other types start as draft
+        $auto_publish_types = array('service-areas');
+        $post_status = in_array($draft_type, $auto_publish_types, true) ? 'publish' : 'draft';
+
         $post_id = wp_insert_post(array(
             'post_title'   => $title,
             'post_content' => $content,
-            'post_status'  => 'draft',
+            'post_status'  => $post_status,
             'post_type'    => 'page',
         ));
         if (is_wp_error($post_id)) {
@@ -2028,7 +2035,7 @@ class Siloq_Connector {
         $args = array(
             'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'numberposts'    => -1, // BUG 4 FIX: fetch ALL synced pages, no limit
-            'post_status'    => 'publish',
+            'post_status'    => array('publish', 'draft'), // Include drafts so Siloq-created pages appear
             'orderby'        => 'modified',
             'order'          => 'DESC',
             'meta_query'     => array(

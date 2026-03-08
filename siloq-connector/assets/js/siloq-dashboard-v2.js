@@ -923,6 +923,7 @@
   function initRedirectsTab() {
 
     var redirectsLoaded = false;
+    var allRedirects = []; // cached for filtering/search
 
     // Lazy-load when tab is clicked
     $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-redirects"]', function () {
@@ -942,49 +943,122 @@
       $.post(cfg.ajaxUrl, { action: 'siloq_get_redirects', nonce: cfg.nonce }, function (res) {
         redirectsLoaded = true;
         if (!res.success) {
-          $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Failed to load redirects.</p>');
+          $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Failed to load redirects. The redirects table may not exist yet — try deactivating and reactivating the Siloq plugin.</p>');
           return;
         }
-        var rows = res.data.redirects || [];
-        if (!rows.length) {
-          $list.html('<p style="font-size:13px;color:#6b7280;padding:12px;">No redirects yet. Add one above or use the City Pages wizard.</p>');
-          return;
-        }
-        var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
-          + '<thead><tr style="border-bottom:2px solid #e5e7eb;">'
-          + '<th style="text-align:left;padding:6px 8px;font-weight:700;">From</th>'
-          + '<th style="text-align:left;padding:6px 8px;font-weight:700;">To</th>'
-          + '<th style="padding:6px 8px;font-weight:700;text-align:center;">Code</th>'
-          + '<th style="padding:6px 8px;"></th>'
-          + '</tr></thead><tbody>';
-        rows.forEach(function (r) {
-          html += '<tr style="border-bottom:1px solid #f3f4f6;" data-redir-id="' + r.id + '">'
-            + '<td style="padding:6px 8px;color:#4b5563;word-break:break-all;">' + escHtml(r.source_url) + '</td>'
-            + '<td style="padding:6px 8px;color:#4b5563;word-break:break-all;">' + escHtml(r.target_url) + '</td>'
-            + '<td style="padding:6px 8px;text-align:center;"><span style="background:#dcfce7;color:#166534;border-radius:4px;padding:1px 6px;font-weight:700;">' + r.status_code + '</span></td>'
-            + '<td style="padding:6px 8px;text-align:right;">'
-            + '<button type="button" class="siloq-redir-delete-btn siloq-btn siloq-btn--xs" data-id="' + r.id + '" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2;">Delete</button>'
-            + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        $list.html(html);
+        allRedirects = res.data.redirects || [];
+        updateRedirectCounts();
+        renderRedirectList(allRedirects);
       }).fail(function () {
-        $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Request failed.</p>');
+        $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Request failed — check your connection and try again.</p>');
       });
     }
+
+    function updateRedirectCounts() {
+      var enabled  = allRedirects.filter(function(r){ return r.enabled == 1; }).length;
+      var disabled = allRedirects.length - enabled;
+      $('#siloq-redir-count-all').text(allRedirects.length + ' redirect' + (allRedirects.length !== 1 ? 's' : ''));
+      $('#siloq-redir-count-pill-all').text(allRedirects.length);
+      $('#siloq-redir-count-pill-enabled').text(enabled);
+      $('#siloq-redir-count-pill-disabled').text(disabled);
+    }
+
+    function renderRedirectList(rows) {
+      var $list = $('#siloq-redir-list');
+      if (!rows.length) {
+        $list.html('<div style="text-align:center;padding:32px 16px;color:#9ca3af;">'
+          + '<div style="font-size:28px;margin-bottom:8px;">🔀</div>'
+          + '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">No redirects yet</p>'
+          + '<p style="font-size:12px;color:#9ca3af;margin:0;">Add your first redirect above to start managing URL changes.</p>'
+          + '</div>');
+        return;
+      }
+      var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        + '<thead><tr style="border-bottom:2px solid #e5e7eb;">'
+        + '<th style="text-align:left;padding:8px 10px;font-weight:700;color:#374151;">Source URL</th>'
+        + '<th style="text-align:left;padding:8px 10px;font-weight:700;color:#374151;">Target URL</th>'
+        + '<th style="padding:8px 10px;font-weight:700;text-align:center;color:#374151;">Hits</th>'
+        + '<th style="padding:8px 10px;font-weight:700;text-align:center;color:#374151;">Type</th>'
+        + '<th style="padding:8px 10px;font-weight:700;text-align:center;color:#374151;">Enabled</th>'
+        + '<th style="padding:8px 10px;"></th>'
+        + '</tr></thead><tbody>';
+      rows.forEach(function (r) {
+        var isEnabled = r.enabled == 1;
+        var rowOpacity = isEnabled ? '1' : '0.55';
+        var codeColor = r.status_code == 301 ? '#166534' : (r.status_code == 302 || r.status_code == 307 ? '#92400e' : '#991b1b');
+        var codeBg    = r.status_code == 301 ? '#dcfce7' : (r.status_code == 302 || r.status_code == 307 ? '#fef3c7' : '#fef2f2');
+        html += '<tr style="border-bottom:1px solid #f3f4f6;opacity:' + rowOpacity + ';" data-redir-id="' + r.id + '">'
+          + '<td style="padding:8px 10px;color:#1d4ed8;word-break:break-all;font-family:monospace;font-size:11px;">' + escHtml(r.source_url) + '</td>'
+          + '<td style="padding:8px 10px;color:#4b5563;word-break:break-all;font-family:monospace;font-size:11px;">' + escHtml(r.target_url) + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;font-weight:600;color:#6b7280;">' + (r.hits || 0) + '</td>'
+          + '<td style="padding:8px 10px;text-align:center;"><span style="background:' + codeBg + ';color:' + codeColor + ';border-radius:4px;padding:2px 8px;font-weight:700;font-size:11px;">' + r.status_code + '</span></td>'
+          + '<td style="padding:8px 10px;text-align:center;">'
+          + '<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">'
+          + '<input type="checkbox" class="siloq-redir-toggle" data-id="' + r.id + '" ' + (isEnabled ? 'checked' : '') + ' style="opacity:0;width:0;height:0;">'
+          + '<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:' + (isEnabled ? '#4f46e5' : '#d1d5db') + ';border-radius:20px;transition:0.2s;"></span>'
+          + '<span style="position:absolute;height:16px;width:16px;left:' + (isEnabled ? '18px' : '2px') + ';bottom:2px;background:#fff;border-radius:50%;transition:0.2s;"></span>'
+          + '</label>'
+          + '</td>'
+          + '<td style="padding:8px 10px;text-align:right;">'
+          + '<button type="button" class="siloq-redir-delete-btn" data-id="' + r.id + '" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:4px 8px;" title="Delete redirect">🗑️</button>'
+          + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      $list.html(html);
+    }
+
+    // ── Filter pills ─────────────────────────────────────────────────────
+
+    $(document).on('click', '.siloq-redir-filter', function () {
+      $('.siloq-redir-filter').removeClass('siloq-redir-filter--active').css({'background':'#fff','color':'#374151','font-weight':'400'});
+      $(this).addClass('siloq-redir-filter--active').css({'background':'#4f46e5','color':'#fff','font-weight':'600'});
+      var filter = $(this).data('filter');
+      var filtered = allRedirects;
+      if (filter === 'enabled')  filtered = allRedirects.filter(function(r){ return r.enabled == 1; });
+      if (filter === 'disabled') filtered = allRedirects.filter(function(r){ return r.enabled != 1; });
+      renderRedirectList(filtered);
+    });
+
+    // ── Search ───────────────────────────────────────────────────────────
+
+    $(document).on('input', '#siloq-redir-search', function () {
+      var q = $(this).val().toLowerCase().trim();
+      if (!q) { renderRedirectList(allRedirects); return; }
+      var filtered = allRedirects.filter(function(r) {
+        return (r.source_url && r.source_url.toLowerCase().indexOf(q) !== -1)
+            || (r.target_url && r.target_url.toLowerCase().indexOf(q) !== -1);
+      });
+      renderRedirectList(filtered);
+    });
+
+    // ── Toggle redirect enabled/disabled ─────────────────────────────────
+
+    $(document).on('change', '.siloq-redir-toggle', function () {
+      var $cb = $(this);
+      var id  = $cb.data('id');
+      $.post(cfg.ajaxUrl, { action: 'siloq_toggle_redirect', nonce: cfg.nonce, redirect_id: id }, function (res) {
+        if (res.success) {
+          // Refresh the list to show updated state
+          redirectsLoaded = false;
+          loadRedirects();
+        }
+      });
+    });
 
     // ── Delete redirect ──────────────────────────────────────────────────
 
     $(document).on('click', '.siloq-redir-delete-btn', function () {
       var $btn = $(this);
       var id   = $btn.data('id');
-      if (!confirm('Delete this redirect?')) return;
-      $btn.prop('disabled', true).text('Deleting...');
+      if (!confirm('Delete this redirect? This cannot be undone.')) return;
+      $btn.text('...').prop('disabled', true);
       $.post(cfg.ajaxUrl, { action: 'siloq_delete_redirect', nonce: cfg.nonce, redirect_id: id }, function (res) {
         if (res.success) {
           $btn.closest('tr').fadeOut(300, function () { $(this).remove(); });
+          allRedirects = allRedirects.filter(function(r){ return r.id != id; });
+          updateRedirectCounts();
         } else {
-          $btn.prop('disabled', false).text('Delete');
+          $btn.text('🗑️').prop('disabled', false);
           alert(res.data && res.data.message ? res.data.message : 'Delete failed.');
         }
       });
@@ -993,18 +1067,25 @@
     // ── Add single redirect ──────────────────────────────────────────────
 
     $(document).on('click', '#siloq-redir-add-btn', function () {
-      var $btn = $(this);
-      var from = $('#siloq-redir-from').val().trim();
-      var to   = $('#siloq-redir-to').val().trim();
-      var $msg = $('#siloq-redir-add-msg');
+      var $btn  = $(this);
+      var from  = $('#siloq-redir-from').val().trim();
+      var to    = $('#siloq-redir-to').val().trim();
+      var type  = $('#siloq-redir-type').val() || '301';
+      var $msg  = $('#siloq-redir-add-msg');
 
       if (!from || !to) {
-        $msg.text('Both From and To fields are required.').css({'background':'#fef2f2','color':'#991b1b','border':'1px solid #fca5a5'}).show();
+        $msg.text('Both Source URL and Target URL are required.').css({'background':'#fef2f2','color':'#991b1b','border':'1px solid #fca5a5'}).show();
         return;
       }
 
       $btn.prop('disabled', true).text('Adding...');
-      $.post(cfg.ajaxUrl, { action: 'siloq_add_redirect', nonce: cfg.nonce, from: from, to: to }, function (res) {
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_add_redirect',
+        nonce: cfg.nonce,
+        from: from,
+        to: to,
+        status_code: type
+      }, function (res) {
         $btn.prop('disabled', false).text('Add Redirect');
         if (res.success) {
           $('#siloq-redir-from').val('');
@@ -1015,134 +1096,8 @@
         } else {
           $msg.text('⚠️ ' + (res.data && res.data.message ? res.data.message : 'Failed.')).css({'background':'#fef2f2','color':'#991b1b','border':'1px solid #fca5a5'}).show();
         }
-        setTimeout(function () { $msg.hide(); }, 5000);
+        setTimeout(function () { $msg.fadeOut(); }, 5000);
       });
-    });
-
-    // ── City Pages Wizard ────────────────────────────────────────────────
-
-    var cityPreviewData = [];
-
-    $(document).on('click', '#siloq-redir-preview-btn', function () {
-      var $btn      = $(this);
-      var $area     = $('#siloq-redir-preview-area');
-      var $applyBtn = $('#siloq-redir-apply-btn');
-      var $clearBtn = $('#siloq-redir-clear-preview-btn');
-
-      $btn.prop('disabled', true).text('Scanning pages...');
-      $area.hide().empty();
-      $applyBtn.hide();
-      $clearBtn.hide();
-
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_preview_city_redirects',
-        nonce:  cfg.nonce,
-        target_prefix: '/service-area/'
-      }, function (res) {
-        $btn.prop('disabled', false).text('Preview City Page Redirects');
-        if (!res.success) {
-          $area.html('<p style="color:#991b1b;font-size:12px;">⚠️ ' + escHtml((res.data && res.data.message) || 'Preview failed.') + '</p>').show();
-          return;
-        }
-
-        cityPreviewData = res.data.suggestions || [];
-        var skipped     = res.data.skipped     || [];
-
-        if (!cityPreviewData.length) {
-          $area.html('<p style="font-size:13px;color:#6b7280;">No city spoke/supporting pages found to redirect — they may already be under /service-area/ or none are synced yet.</p>').show();
-          return;
-        }
-
-        var newCount      = cityPreviewData.filter(function(r){ return !r.already_exists; }).length;
-        var existingCount = cityPreviewData.length - newCount;
-
-        var html = '<p style="font-size:13px;font-weight:600;margin:0 0 8px;">'
-          + 'Found <strong>' + cityPreviewData.length + '</strong> page' + (cityPreviewData.length !== 1 ? 's' : '') + ' to redirect'
-          + (newCount < cityPreviewData.length ? ' (' + existingCount + ' already set up)' : '') + ':</p>'
-          + '<div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px;">'
-          + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
-          + '<thead style="position:sticky;top:0;background:#f9fafb;"><tr>'
-          + '<th style="text-align:left;padding:6px 8px;font-weight:700;border-bottom:1px solid #e5e7eb;">Page</th>'
-          + '<th style="text-align:left;padding:6px 8px;font-weight:700;border-bottom:1px solid #e5e7eb;">From</th>'
-          + '<th style="text-align:left;padding:6px 8px;font-weight:700;border-bottom:1px solid #e5e7eb;">To</th>'
-          + '<th style="text-align:center;padding:6px 8px;font-weight:700;border-bottom:1px solid #e5e7eb;">Status</th>'
-          + '</tr></thead><tbody>';
-
-        cityPreviewData.forEach(function (r) {
-          var typeColor = r.page_type === 'spoke' ? '#0891b2' : '#059669';
-          html += '<tr style="border-bottom:1px solid #f3f4f6;">'
-            + '<td style="padding:5px 8px;"><strong style="font-size:11px;">' + escHtml(r.title) + '</strong><br>'
-            + '<span style="font-size:10px;color:' + typeColor + ';font-weight:600;">' + escHtml(r.page_type) + '</span></td>'
-            + '<td style="padding:5px 8px;color:#6b7280;font-family:monospace;">' + escHtml(r.from) + '</td>'
-            + '<td style="padding:5px 8px;color:#4f46e5;font-family:monospace;">' + escHtml(r.to) + '</td>'
-            + '<td style="padding:5px 8px;text-align:center;">'
-            + (r.already_exists
-                ? '<span style="color:#92400e;background:#fef3c7;border-radius:3px;padding:1px 5px;font-size:10px;">exists</span>'
-                : '<span style="color:#166534;background:#dcfce7;border-radius:3px;padding:1px 5px;font-size:10px;">new</span>')
-            + '</td></tr>';
-        });
-
-        html += '</tbody></table></div>';
-
-        if (skipped.length) {
-          html += '<p style="font-size:11px;color:#6b7280;">Skipped ' + skipped.length + ' hub/already-moved page(s).</p>';
-        }
-
-        $area.html(html).show();
-
-        if (newCount > 0) {
-          $applyBtn.text('✅ Apply ' + newCount + ' New Redirect' + (newCount !== 1 ? 's' : '')).show();
-        } else {
-          $area.append('<p style="font-size:13px;color:#166534;font-weight:600;">All redirects already exist — nothing new to add.</p>');
-        }
-        $clearBtn.show();
-      }).fail(function () {
-        $btn.prop('disabled', false).text('Preview City Page Redirects');
-        $area.html('<p style="color:#991b1b;font-size:12px;">⚠️ Request failed.</p>').show();
-      });
-    });
-
-    // Apply all previewed redirects
-    $(document).on('click', '#siloq-redir-apply-btn', function () {
-      var $btn  = $(this);
-      var pairs = cityPreviewData
-        .filter(function (r) { return !r.already_exists; })
-        .map(function (r)    { return { from: r.from, to: r.to }; });
-
-      if (!pairs.length) return;
-
-      $btn.prop('disabled', true).text('Applying...');
-
-      $.post(cfg.ajaxUrl, {
-        action:    'siloq_bulk_add_redirects',
-        nonce:     cfg.nonce,
-        redirects: JSON.stringify(pairs)
-      }, function (res) {
-        $btn.prop('disabled', false);
-        if (res.success) {
-          var msg = res.data.message || 'Done.';
-          $btn.text('✅ ' + msg);
-          redirectsLoaded = false;
-          loadRedirects();
-          // Mark all as existing in preview
-          cityPreviewData.forEach(function (r) { r.already_exists = true; });
-          // Update status cells in preview table
-          $('#siloq-redir-preview-area table tbody tr td:last-child span').each(function () {
-            $(this).text('active').css({'color':'#166534','background':'#dcfce7'});
-          });
-        } else {
-          $btn.text('Preview City Page Redirects');
-          alert((res.data && res.data.message) ? res.data.message : 'Bulk add failed.');
-        }
-      });
-    });
-
-    // Clear preview
-    $(document).on('click', '#siloq-redir-clear-preview-btn', function () {
-      $('#siloq-redir-preview-area').hide().empty();
-      $('#siloq-redir-apply-btn').hide();
-      $(this).hide();
-      cityPreviewData = [];
     });
 
   } // end initRedirectsTab

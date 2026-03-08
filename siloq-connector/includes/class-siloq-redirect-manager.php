@@ -52,10 +52,12 @@ class Siloq_Redirect_Manager {
             target_url varchar(500) NOT NULL,
             status_code int(3) DEFAULT 301,
             enabled tinyint(1) DEFAULT 1,
+            hits bigint(20) unsigned DEFAULT 0,
+            redirect_type varchar(20) DEFAULT 'manual',
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            UNIQUE KEY source_url (source_url),
+            UNIQUE KEY source_url (source_url(191)),
             KEY enabled (enabled)
         ) $charset_collate;";
         
@@ -84,6 +86,11 @@ class Siloq_Redirect_Manager {
         $redirect = $this->get_redirect($current_url);
         
         if ($redirect && $redirect->enabled) {
+            // Increment hit counter
+            $wpdb->query( $wpdb->prepare(
+                "UPDATE {$wpdb->prefix}" . self::TABLE_NAME . " SET hits = hits + 1 WHERE id = %d",
+                $redirect->id
+            ) );
             wp_redirect($redirect->target_url, $redirect->status_code);
             exit;
         }

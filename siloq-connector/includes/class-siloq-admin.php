@@ -3178,47 +3178,64 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             <!-- ═══════ REDIRECTS TAB ═══════ -->
             <div id="siloq-tab-redirects" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
 
-                <!-- Smart Bulk Wizard -->
+                <!-- Add New Redirect -->
                 <div class="siloq-card" style="margin-bottom:16px;">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">🏙️ City Pages → /service-area/ Wizard</h3>
+                    <div class="siloq-card-header" style="margin-bottom:14px;">
+                        <h3 class="siloq-card-title" style="font-size:15px;font-weight:700;">Add New Redirect</h3>
                     </div>
-                    <p style="font-size:13px;color:#4b5563;margin:0 0 12px;">Siloq detected your city/spoke pages. Preview the 301 redirects that will move them from <code>/city-slug/</code> to <code>/service-area/city-slug/</code>, then apply with one click.</p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                        <button type="button" id="siloq-redir-preview-btn" class="siloq-btn siloq-btn--primary">Preview City Page Redirects</button>
-                        <button type="button" id="siloq-redir-apply-btn" class="siloq-btn siloq-btn--outline" style="display:none;">✅ Apply All Redirects</button>
-                        <button type="button" id="siloq-redir-clear-preview-btn" class="siloq-btn siloq-btn--outline" style="display:none;">✕ Cancel</button>
-                    </div>
-                    <div id="siloq-redir-preview-area" style="display:none;"></div>
-                </div>
-
-                <!-- Manual Add -->
-                <div class="siloq-card" style="margin-bottom:16px;">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Add 301 Redirect</h3>
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
+                    <div style="display:grid;grid-template-columns:1fr 36px 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
                         <div>
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">From (old URL or path)</label>
-                            <input type="text" id="siloq-redir-from" class="regular-text" placeholder="/old-page-slug/" style="width:100%;font-size:12px;">
+                            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Source URL</label>
+                            <input type="text" id="siloq-redir-from" class="regular-text" placeholder="/source-page/" style="width:100%;font-size:13px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;">
+                            <p style="font-size:11px;color:#6b7280;margin:4px 0 0;">Enter a relative URL or start typing a page title, slug, or ID.</p>
+                        </div>
+                        <div style="text-align:center;padding-bottom:28px;">
+                            <span style="font-size:18px;color:#9ca3af;">→</span>
                         </div>
                         <div>
-                            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">To (new URL or path)</label>
-                            <input type="text" id="siloq-redir-to" class="regular-text" placeholder="/service-area/old-page-slug/" style="width:100%;font-size:12px;">
+                            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">Target URL</label>
+                            <input type="text" id="siloq-redir-to" class="regular-text" placeholder="/target-page/" style="width:100%;font-size:13px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;">
+                            <p style="font-size:11px;color:#6b7280;margin:4px 0 0;">Enter a URL or start by typing a page or post title, slug or ID.</p>
                         </div>
-                        <button type="button" id="siloq-redir-add-btn" class="siloq-btn siloq-btn--primary" style="white-space:nowrap;">Add Redirect</button>
+                        <div style="padding-bottom:28px;">
+                            <button type="button" id="siloq-redir-add-btn" class="siloq-btn siloq-btn--primary" style="white-space:nowrap;padding:8px 16px;">Add Redirect</button>
+                        </div>
                     </div>
-                    <div id="siloq-redir-add-msg" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:5px;"></div>
+                    <!-- Redirect type selector -->
+                    <div style="display:flex;gap:16px;align-items:center;padding:10px 0 4px;border-top:1px solid #f3f4f6;">
+                        <label style="font-size:12px;font-weight:600;color:#374151;">Redirect Type:</label>
+                        <select id="siloq-redir-type" style="font-size:12px;padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;">
+                            <option value="301">301 — Permanent Redirect (Recommended)</option>
+                            <option value="302">302 — Temporary Redirect</option>
+                            <option value="307">307 — Temporary Redirect (Preserve Method)</option>
+                            <option value="410">410 — Content Deleted (No Target)</option>
+                            <option value="451">451 — Content Unavailable for Legal Reasons</option>
+                        </select>
+                    </div>
+                    <div id="siloq-redir-add-msg" style="display:none;margin-top:10px;font-size:12px;padding:7px 12px;border-radius:6px;"></div>
                 </div>
 
-                <!-- Existing Redirects List -->
+                <!-- Redirects Table -->
                 <div class="siloq-card">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Active Redirects</h3>
-                        <button type="button" id="siloq-redir-refresh-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm">
-                            <span class="dashicons dashicons-update"></span> Refresh
-                        </button>
+                    <div class="siloq-card-header" style="margin-bottom:10px;">
+                        <div style="display:flex;gap:12px;align-items:center;">
+                            <h3 class="siloq-card-title" style="font-size:15px;font-weight:700;margin:0;">Redirects</h3>
+                            <span id="siloq-redir-count-all" style="font-size:12px;color:#6b7280;"></span>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="text" id="siloq-redir-search" placeholder="Search URLs..." style="font-size:12px;padding:5px 10px;border:1px solid #d1d5db;border-radius:5px;width:180px;">
+                            <button type="button" id="siloq-redir-refresh-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+                                <span class="dashicons dashicons-update"></span> Refresh
+                            </button>
+                        </div>
                     </div>
+                    <!-- Filter pills -->
+                    <div style="display:flex;gap:6px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">
+                        <button type="button" class="siloq-redir-filter siloq-redir-filter--active" data-filter="all" style="font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid #d1d5db;background:#fff;cursor:pointer;">All <span id="siloq-redir-count-pill-all">0</span></button>
+                        <button type="button" class="siloq-redir-filter" data-filter="enabled" style="font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid #d1d5db;background:#fff;cursor:pointer;">Enabled <span id="siloq-redir-count-pill-enabled">0</span></button>
+                        <button type="button" class="siloq-redir-filter" data-filter="disabled" style="font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid #d1d5db;background:#fff;cursor:pointer;">Disabled <span id="siloq-redir-count-pill-disabled">0</span></button>
+                    </div>
+                    <!-- Redirects list -->
                     <div id="siloq-redir-list">
                         <div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading redirects...</span></div>
                     </div>
@@ -5054,6 +5071,25 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
         }
     }
 
+    /**
+     * AJAX: Toggle redirect enabled/disabled.
+     */
+    public static function ajax_toggle_redirect() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+        $id = intval( $_POST['redirect_id'] ?? 0 );
+        if ( ! $id ) {
+            wp_send_json_error( [ 'message' => 'Missing redirect ID.' ] );
+        }
+        if ( ! class_exists( 'Siloq_Redirect_Manager' ) ) {
+            wp_send_json_error( [ 'message' => 'Redirect manager not available.' ] );
+        }
+        $ok = Siloq_Redirect_Manager::get_instance()->toggle_redirect( $id );
+        wp_send_json_success( [ 'toggled' => $ok ] );
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // REDIRECT MANAGER AJAX HANDLERS
     // ═══════════════════════════════════════════════════════════════
@@ -5084,18 +5120,24 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             wp_send_json_error( [ 'message' => 'Unauthorized' ] );
         }
 
-        $from = sanitize_text_field( $_POST['from'] ?? '' );
-        $to   = sanitize_text_field( $_POST['to']   ?? '' );
+        $from        = sanitize_text_field( $_POST['from']        ?? '' );
+        $to          = sanitize_text_field( $_POST['to']          ?? '' );
+        $status_code = intval( $_POST['status_code'] ?? 301 );
+
+        // Validate allowed codes
+        if ( ! in_array( $status_code, [ 301, 302, 307, 410, 451 ], true ) ) {
+            $status_code = 301;
+        }
 
         if ( ! $from || ! $to ) {
-            wp_send_json_error( [ 'message' => 'Both From and To URLs are required.' ] );
+            wp_send_json_error( [ 'message' => 'Both Source and Target URLs are required.' ] );
         }
 
         if ( $from === $to ) {
-            wp_send_json_error( [ 'message' => 'From and To URLs cannot be the same.' ] );
+            wp_send_json_error( [ 'message' => 'Source and Target URLs cannot be the same.' ] );
         }
 
-        $ok = Siloq_Redirect_Manager::get_instance()->add_redirect( $from, $to, 301 );
+        $ok = Siloq_Redirect_Manager::get_instance()->add_redirect( $from, $to, $status_code );
         if ( $ok ) {
             wp_send_json_success( [ 'message' => 'Redirect added.' ] );
         } else {
