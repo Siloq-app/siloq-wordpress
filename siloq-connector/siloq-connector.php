@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.135
+* Version: 1.5.136
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.135');
+define('SILOQ_VERSION', '1.5.136');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -342,7 +342,10 @@ class Siloq_Connector {
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
         // Dashboard one-click fix buttons
-        add_action('wp_ajax_siloq_dashboard_fix', array('Siloq_Admin', 'ajax_dashboard_fix'));
+        add_action('wp_ajax_siloq_dashboard_fix',          array('Siloq_Admin', 'ajax_dashboard_fix'));
+        add_action('wp_ajax_siloq_generate_meta_suggestion', array('Siloq_Admin', 'ajax_generate_meta_suggestion'));
+        add_action('wp_ajax_siloq_fix_all_seo',             array('Siloq_Admin', 'ajax_fix_all_seo'));
+        add_action('wp_ajax_siloq_save_quick_win',          array('Siloq_Admin', 'ajax_save_quick_win'));
 
         // Redirect manager AJAX
         add_action('wp_ajax_siloq_get_redirects',        array('Siloq_Admin', 'ajax_get_redirects'));
@@ -508,11 +511,17 @@ class Siloq_Connector {
                 SILOQ_VERSION,
                 true
             );
+            // Pass Quick Wins completed state + AI key presence to dashboard JS
+            $qw_completed = get_option( 'siloq_quick_wins_completed', [] );
+            if ( ! is_array( $qw_completed ) ) $qw_completed = [];
+
             wp_localize_script('siloq-dashboard-v2', 'siloqDash', array(
-                'ajaxUrl'   => admin_url('admin-ajax.php'),
-                'nonce'     => wp_create_nonce('siloq_ajax_nonce'),
-                'siteScore' => intval(get_option('siloq_site_score', 42)),
-                'siteId'    => get_option('siloq_site_id', ''),
+                'ajaxUrl'         => admin_url('admin-ajax.php'),
+                'nonce'           => wp_create_nonce('siloq_ajax_nonce'),
+                'siteScore'       => intval(get_option('siloq_site_score', 42)),
+                'siteId'          => get_option('siloq_site_id', ''),
+                'hasAnthropicKey' => ! empty( get_option('siloq_anthropic_api_key', '') ) ? '1' : '',
+                'qwCompleted'     => $qw_completed,
             ));
         }
 
@@ -1284,49 +1293,67 @@ class Siloq_Connector {
             $page_content = get_post_field('post_content', $post_id);
             $word_count = str_word_count(strip_tags($page_content));
 
+            // Pre-generate formula suggestions (used by Quick Wins + Priority Actions)
+            $formula_title = class_exists('Siloq_Admin') ? Siloq_Admin::siloq_formula_seo_title($post_id) : '';
+            $formula_desc  = class_exists('Siloq_Admin') ? Siloq_Admin::siloq_formula_meta_desc($post_id)  : '';
+
             // Build issues from checks
             if (empty($meta_title)) {
                 $issues['important'][] = array(
-                    'title'        => $title,
-                    'issue'        => 'Missing SEO title — set a title tag with your primary keyword',
-                    'post_id'      => $post_id,
-                    'edit_url'     => $edit_url,
-                    'elementor_url'=> $elementor_url,
+                    'title'            => $title,
+                    'issue'            => 'Missing SEO title',
+                    'fix_category'     => 'auto',
+                    'fix_type'         => 'meta_title',
+                    'formula'          => $formula_title,
+                    'post_id'          => $post_id,
+                    'edit_url'         => $edit_url,
+                    'elementor_url'    => $edit_url, // Always WP editor for meta, never Elementor
                 );
             }
             if ($meta_desc_broken) {
                 $issues['critical'][] = array(
-                    'title'        => $title,
-                    'issue'        => 'BROKEN_FALLBACK meta description (' . $meta_desc_result['length'] . ' chars) — full page content dumped into meta field',
-                    'post_id'      => $post_id,
-                    'edit_url'     => $edit_url,
-                    'elementor_url'=> $elementor_url,
+                    'title'            => $title,
+                    'issue'            => 'Meta description contains full page content (' . (is_array($meta_desc_result) ? $meta_desc_result['length'] : '?') . ' chars) — needs a proper 150-char summary',
+                    'fix_category'     => 'auto',
+                    'fix_type'         => 'meta_description',
+                    'formula'          => $formula_desc,
+                    'post_id'          => $post_id,
+                    'edit_url'         => $edit_url,
+                    'elementor_url'    => $edit_url,
                 );
             } elseif (empty($meta_desc)) {
                 $issues['important'][] = array(
-                    'title'        => $title,
-                    'issue'        => 'Missing meta description — write a compelling 150-character summary',
-                    'post_id'      => $post_id,
-                    'edit_url'     => $edit_url,
-                    'elementor_url'=> $elementor_url,
+                    'title'            => $title,
+                    'issue'            => 'Missing meta description',
+                    'fix_category'     => 'auto',
+                    'fix_type'         => 'meta_description',
+                    'formula'          => $formula_desc,
+                    'post_id'          => $post_id,
+                    'edit_url'         => $edit_url,
+                    'elementor_url'    => $edit_url,
                 );
             }
             if (!$has_schema) {
                 $issues['opportunity'][] = array(
-                    'title'        => $title,
-                    'issue'        => 'No structured data — AI tools can\'t reliably cite this page without schema',
-                    'post_id'      => $post_id,
-                    'edit_url'     => $edit_url,
-                    'elementor_url'=> $elementor_url,
+                    'title'            => $title,
+                    'issue'            => 'No schema markup — AI tools can\'t reliably cite this page without structured data',
+                    'fix_category'     => 'auto',
+                    'fix_type'         => 'schema',
+                    'post_id'          => $post_id,
+                    'edit_url'         => $edit_url,
+                    'elementor_url'    => $elementor_url,
                 );
             }
             if ($word_count < 300 && $word_count > 0) {
                 $issues['important'][] = array(
-                    'title'        => $title,
-                    'issue'        => 'Thin content — only ' . $word_count . ' words. Aim for 500+ for better rankings.',
-                    'post_id'      => $post_id,
-                    'edit_url'     => $edit_url,
-                    'elementor_url'=> $elementor_url,
+                    'title'            => $title,
+                    'issue'            => 'Thin content — only ' . $word_count . ' words. Aim for 500+ to rank well.',
+                    'fix_category'     => 'content',
+                    'fix_type'         => 'content',
+                    'post_id'          => $post_id,
+                    'edit_url'         => $elementor_url, // Thin content DOES need Elementor
+                    'elementor_url'    => $elementor_url,
+                    'instructions'     => 'Open this page in your editor, add more detail about this service or location.',
                 );
             }
             // Check silo relationship FIRST, then add to architecture once only
@@ -1399,59 +1426,58 @@ class Siloq_Connector {
                 }
             }
 
-            // ── Specific fixable actions (render Fix It buttons in Priority Actions) ──
-            // Headline strings are intentionally chosen to match fix_mode pattern detection.
+            // ── Priority Actions — classified by effort ──────────────────────────
             if (empty($meta_title)) {
                 $actions[] = array(
-                    'headline'  => 'Add SEO title to "' . $title . '"',
-                    'detail'    => 'Missing SEO title tag. Siloq will write one from your primary keyword.',
-                    'priority'  => 'high',
-                    'post_id'   => $post_id,
-                    'edit_url'  => $edit_url,
-                    'elementor_url' => $elementor_url,
+                    'headline'      => 'Add SEO title to "' . $title . '"',
+                    'detail'        => 'Siloq will write one instantly using your page type and business name.',
+                    'priority'      => 'high',
+                    'fix_category'  => 'auto',
+                    'fix_type'      => 'meta_title',
+                    'formula'       => $formula_title,
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
+                    'elementor_url' => $edit_url, // always WP editor, never Elementor
                 );
             }
             if (empty($meta_desc) || $meta_desc_broken) {
                 $actions[] = array(
-                    'headline'  => 'Add meta description to "' . $title . '"',
-                    'detail'    => $meta_desc_broken
-                        ? 'Meta description contains full page content (' . (is_array($meta_desc_result) ? $meta_desc_result['length'] : '?') . ' chars). Siloq will generate a proper 150-char summary.'
-                        : 'Missing meta description reduces click-through rate. Siloq will generate one.',
-                    'priority'  => 'high',
-                    'post_id'   => $post_id,
-                    'edit_url'  => $edit_url,
-                    'elementor_url' => $elementor_url,
+                    'headline'      => 'Add meta description to "' . $title . '"',
+                    'detail'        => $meta_desc_broken
+                        ? 'Your description contains full page content. Siloq will generate a proper 150-char summary.'
+                        : 'Missing description reduces clicks from search results. Siloq will write one.',
+                    'priority'      => 'high',
+                    'fix_category'  => 'auto',
+                    'fix_type'      => 'meta_description',
+                    'formula'       => $formula_desc,
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
+                    'elementor_url' => $edit_url,
                 );
             }
             if (!$has_schema) {
                 $actions[] = array(
-                    'headline'  => 'Add schema markup to "' . $title . '"',
-                    'detail'    => 'No structured data found. Schema helps AI tools cite this page and improves rich results.',
-                    'priority'  => 'high',
-                    'post_id'   => $post_id,
-                    'edit_url'  => $edit_url,
+                    'headline'      => 'Add schema markup to "' . $title . '"',
+                    'detail'        => 'Schema helps AI tools cite this page and enables rich results in Google.',
+                    'priority'      => 'high',
+                    'fix_category'  => 'auto',
+                    'fix_type'      => 'schema',
+                    'post_id'       => $post_id,
+                    'edit_url'      => $edit_url,
                     'elementor_url' => $elementor_url,
                 );
             }
-
-            // ── Generic quality actions (only if no specific fixable issues above) ──
-            if (!$has_analysis && empty($meta_title) === false && !empty($meta_desc) && $has_schema) {
+            if ($word_count > 0 && $word_count < 300) {
                 $actions[] = array(
-                    'headline'      => 'Analyze "' . $title . '" in Widget Intelligence',
-                    'detail'        => 'Open this page in Elementor and click Analyze to get SEO recommendations.',
+                    'headline'      => 'Expand content on "' . $title . '"',
+                    'detail'        => 'Only ' . $word_count . ' words. Pages with 500+ words rank significantly better for local searches.',
                     'priority'      => 'medium',
+                    'fix_category'  => 'content',
+                    'fix_type'      => 'content',
                     'post_id'       => $post_id,
-                    'edit_url'      => $edit_url,
+                    'edit_url'      => $elementor_url,
                     'elementor_url' => $elementor_url,
-                );
-            } elseif ($has_analysis && $score < 50 && !empty($meta_title) && !empty($meta_desc)) {
-                $actions[] = array(
-                    'headline'      => 'Improve content quality on "' . $title . '"',
-                    'detail'        => 'Score: ' . $score . '/100. Open in Widget Intelligence to see specific recommendations.',
-                    'priority'      => 'medium',
-                    'post_id'       => $post_id,
-                    'edit_url'      => $edit_url,
-                    'elementor_url' => $elementor_url,
+                    'instructions'  => 'Open this page in Elementor and add more detail — describe this service, mention nearby areas, add an FAQ section.',
                 );
             }
 
@@ -1515,16 +1541,43 @@ class Siloq_Connector {
             ),
         );
 
+        // Score breakdown counters
+        $missing_titles = count( array_filter( $issues['important'] ?? [], function($i) { return ($i['fix_type'] ?? '') === 'meta_title'; } ) );
+        $missing_descs  = count( array_filter( $issues['important'] ?? [], function($i) { return ($i['fix_type'] ?? '') === 'meta_description'; } ) );
+        $missing_schema = count( array_filter( $issues['opportunity'] ?? [], function($i) { return ($i['fix_type'] ?? '') === 'schema'; } ) );
+        $thin_content   = count( array_filter( $issues['important'] ?? [], function($i) { return ($i['fix_type'] ?? '') === 'content'; } ) );
+
+        // Collect post_ids that need fix-all
+        $fix_all_pages = array_merge(
+            array_column( array_filter( $issues['important'] ?? [], function($i) { return in_array($i['fix_type'] ?? '', ['meta_title','meta_description']); } ), 'post_id' ),
+            array_column( array_filter( $issues['critical']  ?? [], function($i) { return in_array($i['fix_type'] ?? '', ['meta_title','meta_description']); } ), 'post_id' )
+        );
+        $fix_all_pages = array_values( array_unique( $fix_all_pages ) );
+
+        // Compute site health score (100 - deductions per page)
+        $total_pages = count( $architecture );
+        $deductions  = ($missing_titles * 10) + ($missing_descs * 8) + ($missing_schema * 5) + ($thin_content * 5) + ($orphan_count * 3);
+        $site_score  = $total_pages > 0 ? max( 0, min( 100, 100 - intval( $deductions / max(1, $total_pages) * 2 ) ) ) : 0;
+
         $plan = array(
-            'architecture' => $architecture,
-            'actions'      => $actions,
-            'issues'       => $issues,
-            'supporting'   => $supporting,
-            'roadmap'      => $roadmap,
-            'hub_count'    => $hub_count,
-            'orphan_count' => $orphan_count,
-            'missing_count' => $missing_count,
-            'generated_at' => current_time('mysql'),
+            'architecture'   => $architecture,
+            'actions'        => $actions,
+            'issues'         => $issues,
+            'supporting'     => $supporting,
+            'roadmap'        => $roadmap,
+            'hub_count'      => $hub_count,
+            'orphan_count'   => $orphan_count,
+            'missing_count'  => $missing_count,
+            'site_score'     => $site_score,
+            'score_breakdown' => array(
+                'missing_titles' => $missing_titles,
+                'missing_descs'  => $missing_descs,
+                'missing_schema' => $missing_schema,
+                'thin_content'   => $thin_content,
+                'orphan_count'   => $orphan_count,
+            ),
+            'fix_all_pages'  => $fix_all_pages,
+            'generated_at'   => current_time('mysql'),
         );
 
         // Cache for 60 minutes

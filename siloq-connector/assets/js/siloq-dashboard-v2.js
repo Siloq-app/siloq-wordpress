@@ -6,6 +6,8 @@
   'use strict';
 
   var cfg = window.siloqDash || {};
+  // Seed Quick Wins completed state from PHP (persisted across sessions)
+  window.siloqQwCompleted = cfg.qwCompleted || {};
 
   /* ─── Tab Switching (aria) ───────────────────── */
   function initTabs() {
@@ -130,8 +132,10 @@
     }
   }
 
+  // Quick Wins completed state (loaded once, managed in memory)
+  var qwCompleted = window.siloqQwCompleted || {};
+
   function renderPlanData(data) {
-    console.log('Plan data:', data);
 
     // Architecture tree
     var $archContent = $('#siloq-architecture-content');
@@ -195,74 +199,409 @@
       $archContent.html('<p class="siloq-empty-hint">All pages are orphans &mdash; sync pages and assign page types to build your structure.</p>');
     }
 
-    // Priority actions
+    // ── Site Health Score ring ────────────────────────────────────────
+    var score = data.site_score || 0;
+    var arc   = document.getElementById('siloq-health-arc');
+    var numEl = document.getElementById('siloq-health-score-num');
+    var lblEl = document.getElementById('siloq-health-label');
+    if (arc && numEl) {
+      var circumference = 2 * Math.PI * 34; // 213.6
+      var offset = circumference - (score / 100) * circumference;
+      arc.style.strokeDashoffset = offset;
+      arc.style.stroke = score >= 80 ? '#0d9488' : score >= 60 ? '#4f46e5' : score >= 40 ? '#f59e0b' : '#dc2626';
+      numEl.textContent = score;
+      if (lblEl) {
+        var label = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Needs work' : 'Critical issues';
+        lblEl.textContent = 'Site Health: ' + label;
+        lblEl.style.color = arc.style.stroke;
+      }
+    }
+
+    // Score breakdown
+    var breakdown = data.score_breakdown || {};
+    var bdHtml = '';
+    if (breakdown.missing_titles > 0)   bdHtml += '<div style="font-size:11px;color:#dc2626;">● ' + breakdown.missing_titles + ' missing SEO titles</div>';
+    if (breakdown.missing_descs > 0)    bdHtml += '<div style="font-size:11px;color:#dc2626;">● ' + breakdown.missing_descs + ' missing descriptions</div>';
+    if (breakdown.missing_schema > 0)   bdHtml += '<div style="font-size:11px;color:#f59e0b;">● ' + breakdown.missing_schema + ' pages without schema</div>';
+    if (breakdown.thin_content > 0)     bdHtml += '<div style="font-size:11px;color:#f59e0b;">● ' + breakdown.thin_content + ' thin content pages</div>';
+    if (breakdown.orphan_count > 0)     bdHtml += '<div style="font-size:11px;color:#9ca3af;">● ' + breakdown.orphan_count + ' orphan pages</div>';
+    if (!bdHtml) bdHtml = '<div style="font-size:12px;color:#059669;">No major issues found.</div>';
+    $('#siloq-score-breakdown').html(bdHtml);
+
+    // Fix All banner
+    var missingCount = (breakdown.missing_titles || 0) + (breakdown.missing_descs || 0);
+    var fixAllPages  = data.fix_all_pages || []; // array of post_ids with missing title or desc
+    if (missingCount > 0) {
+      $('#siloq-fix-all-bar').show();
+      $('#siloq-fix-all-desc').text(missingCount + ' pages are missing titles or descriptions.');
+    }
+
+    // ── Priority Actions — grouped by fix_category ────────────────────────
     if (data.actions && data.actions.length) {
+      var autoActs    = data.actions.filter(function(a) { return a.fix_category === 'auto'; });
+      var quickActs   = data.actions.filter(function(a) { return a.fix_category === 'quick'; });
+      var contentActs = data.actions.filter(function(a) { return !a.fix_category || a.fix_category === 'content'; });
+
+      $('#siloq-actions-count').text(data.actions.length + ' action' + (data.actions.length !== 1 ? 's' : ''));
       var actHtml = '';
-      data.actions.forEach(function (act, i) {
-        var prioClass = act.priority === 'high' ? 'red' : (act.priority === 'medium' ? 'amber' : 'blue');
-        var fixBtn = act.elementor_url
-          ? '<a href="' + escAttr(act.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Fix in Elementor &rarr;</a>'
-          : (act.edit_url ? '<a href="' + escAttr(act.edit_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Edit Page &rarr;</a>' : '');
-        actHtml += '<div class="siloq-action-card">'
-          + '<span class="siloq-action-card__number">' + (i + 1) + '</span>'
-          + '<div class="siloq-action-card__body">'
-          + '<p class="siloq-action-card__headline">' + escHtml(act.headline) + '</p>'
-          + (act.detail ? '<p style="color:#666;font-size:13px;margin:4px 0 8px">' + escHtml(act.detail) + '</p>' : '')
-          + '<div class="siloq-action-card__meta">'
-          + '<span class="siloq-badge siloq-badge--' + prioClass + '">' + escHtml(act.priority) + ' priority</span>'
-          + '</div>'
-          + (fixBtn ? '<div class="siloq-action-card__actions" style="margin-top:8px">' + fixBtn + '</div>' : '')
-          + '</div></div>';
-      });
-      $('#siloq-actions-content').html(actHtml);
-    } else {
-      $('#siloq-actions-content').html('<p class="siloq-empty-hint">No priority actions found. Analyze your pages to get recommendations.</p>');
-    }
+      var globalIdx = 0;
 
-    // Content issues
-    if (data.issues) {
-      var issueHtml = '';
-      ['critical', 'important', 'opportunity'].forEach(function (level) {
-        var items = data.issues[level] || [];
-        if (!items.length) return;
-        issueHtml += '<div class="siloq-issues-group">'
-          + '<h4 class="siloq-issues-group__title siloq-issues-group__title--' + level + '">'
-          + level.charAt(0).toUpperCase() + level.slice(1) + '</h4>';
-        items.forEach(function (iss) {
-          var fixLink = iss.elementor_url
-            ? '<a href="' + escAttr(iss.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline">Fix It &rarr;</a>'
-            : (iss.edit_url ? '<a href="' + escAttr(iss.edit_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--outline">Edit &rarr;</a>' : '');
-          issueHtml += '<div class="siloq-issue-row"><span>' + escHtml(iss.title) + ' &mdash; ' + escHtml(iss.issue) + '</span>'
-            + fixLink + '</div>';
+      function renderActionGroup(acts, groupLabel, groupColor, groupBg, groupBadgeStyle) {
+        if (!acts.length) return '';
+        var h = '<div style="margin-bottom:16px;">'
+          + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+          + '<span style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;' + groupBadgeStyle + '">' + groupLabel + '</span>'
+          + '</div>';
+        acts.forEach(function(act) {
+          globalIdx++;
+          var isAutoFix = act.fix_category === 'auto' && (act.fix_type === 'meta_title' || act.fix_type === 'meta_description');
+          var isSchema  = act.fix_category === 'auto' && act.fix_type === 'schema';
+          var actionBtn = '';
+
+          if (isAutoFix) {
+            // Inline fix flow — never opens Elementor
+            actionBtn = '<button class="siloq-action-apply-btn siloq-btn siloq-btn--sm siloq-btn--primary" '
+              + 'data-post-id="' + escAttr(String(act.post_id || '')) + '" '
+              + 'data-fix-type="' + escAttr(act.fix_type || '') + '" '
+              + 'data-formula="' + escAttr(act.formula || '') + '" '
+              + 'style="background:#059669;border-color:#059669;">Apply Fix &rarr;</button>';
+          } else if (isSchema) {
+            actionBtn = '<button class="siloq-schema-fix-btn siloq-btn siloq-btn--sm siloq-btn--primary" '
+              + 'data-post-id="' + escAttr(String(act.post_id || '')) + '" '
+              + 'style="background:#4f46e5;">Generate Schema &rarr;</button>';
+          } else if (act.fix_category === 'content' && act.elementor_url) {
+            actionBtn = '<a href="' + escAttr(act.elementor_url) + '" target="_blank" class="siloq-btn siloq-btn--sm siloq-btn--outline">'
+              + 'Open in Elementor &rarr;</a>';
+            if (act.instructions) {
+              actionBtn += '<p style="font-size:11px;color:#6b7280;margin:6px 0 0;font-style:italic;">' + escHtml(act.instructions) + '</p>';
+            }
+          } else if (act.edit_url) {
+            actionBtn = '<a href="' + escAttr(act.edit_url) + '" target="_blank" class="siloq-btn siloq-btn--sm siloq-btn--outline">Edit in WordPress &rarr;</a>';
+          }
+
+          h += '<div class="siloq-action-card" style="border:1px solid ' + groupColor + ';background:' + groupBg + ';border-radius:8px;padding:14px 16px;margin-bottom:8px;">'
+            + '<div style="display:flex;align-items:flex-start;gap:10px;">'
+            + '<span style="font-size:13px;font-weight:800;color:' + groupColor + ';min-width:22px;padding-top:1px;">' + globalIdx + '.</span>'
+            + '<div style="flex:1;">'
+            + '<p style="font-size:13px;font-weight:600;color:#111827;margin:0 0 4px;">' + escHtml(act.headline) + '</p>'
+            + (act.detail ? '<p style="font-size:12px;color:#6b7280;margin:0 0 8px;line-height:1.5;">' + escHtml(act.detail) + '</p>' : '')
+            + '<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">' + actionBtn
+            + '</div>'
+            // Inline fix panel (hidden until "Apply Fix" clicked)
+            + (isAutoFix ? '<div class="siloq-inline-fix-panel" style="display:none;margin-top:10px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px;"></div>' : '')
+            + '</div></div></div>';
         });
-        issueHtml += '</div>';
-      });
-      $('#siloq-issues-content').html(issueHtml);
+        return h + '</div>';
+      }
+
+      actHtml += renderActionGroup(autoActs,    'Siloq fixes this automatically', '#059669', '#f0fdf4', 'background:#dcfce7;color:#166534;');
+      actHtml += renderActionGroup(quickActs,   'Takes 2 minutes',                '#d97706', '#fffbeb', 'background:#fef3c7;color:#92400e;');
+      actHtml += renderActionGroup(contentActs, 'Requires content work',          '#6b7280', '#f9fafb', 'background:#f3f4f6;color:#374151;');
+
+      $('#siloq-actions-content').html(actHtml || '<p style="color:#9ca3af;font-size:13px;">No priority actions found.</p>');
+    } else {
+      $('#siloq-actions-content').html('<p style="color:#9ca3af;font-size:13px;padding:12px 0;">✅ No priority actions — your pages look good. Sync more pages to analyze them.</p>');
     }
 
-    // Supporting content
-    if (data.supporting && data.supporting.length) {
-      var supHtml = '';
-      data.supporting.forEach(function (s) {
-        var bClass = s.type === 'sub-page' ? 'blue' : 'purple';
-        supHtml += '<div class="siloq-action-card"><div class="siloq-action-card__body">'
-          + '<p class="siloq-action-card__headline">' + escHtml(s.title) + '</p>'
-          + (s.detail ? '<p style="color:#666;font-size:13px;margin:4px 0 8px">' + escHtml(s.detail) + '</p>' : '')
-          + (s.parent ? '<p style="color:#999;font-size:12px;margin:0 0 8px">Under: ' + escHtml(s.parent) + '</p>' : '')
-          + '</div></div>';
+    // ── Quick Wins checklist ──────────────────────────────────────────────
+    if (data.issues) {
+      var allIssues = [];
+      ['critical', 'important', 'opportunity'].forEach(function(level) {
+        (data.issues[level] || []).forEach(function(iss) {
+          iss._level = level;
+          allIssues.push(iss);
+        });
       });
-      $('#siloq-supporting-content').html(supHtml);
+      renderQuickWins(allIssues);
     }
 
     // Roadmap
     if (data.roadmap) {
       renderRoadmap(data.roadmap);
     }
-
-    // Open the plan accordion sections and set aria
-    $('.siloq-plan-section .siloq-accordion').addClass('is-open')
-      .find('.siloq-accordion__trigger').attr('aria-expanded', 'true');
   }
+
+  function renderQuickWins(issues) {
+    if (!issues.length) {
+      $('#siloq-issues-content').html('<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;">✅ No issues found. Sync more pages to check them.</div>');
+      return;
+    }
+
+    var completed = [];
+    var pending   = [];
+
+    issues.forEach(function(iss) {
+      var key = (iss.post_id || '') + '_' + (iss.fix_type || sanitizeKey(iss.issue));
+      var isDone = !!qwCompleted[key];
+      if (isDone) completed.push(iss);
+      else        pending.push(iss);
+    });
+
+    var total = issues.length;
+    var doneCount = completed.length;
+    $('#siloq-qw-progress').text(doneCount + ' of ' + total + ' completed');
+
+    var html = '';
+
+    function issueRow(iss, isDone) {
+      var key      = (iss.post_id || '') + '_' + (iss.fix_type || sanitizeKey(iss.issue));
+      var isAutoFix = iss.fix_category === 'auto' && (iss.fix_type === 'meta_title' || iss.fix_type === 'meta_description');
+      var levelColors = { critical: '#dc2626', important: '#d97706', opportunity: '#4f46e5' };
+      var color = levelColors[iss._level] || '#6b7280';
+
+      var actionBtn = '';
+      if (isAutoFix && !isDone) {
+        actionBtn = '<button class="siloq-qw-apply-btn siloq-btn siloq-btn--sm siloq-btn--primary" '
+          + 'data-post-id="' + escAttr(String(iss.post_id || '')) + '" '
+          + 'data-fix-type="' + escAttr(iss.fix_type || '') + '" '
+          + 'data-formula="' + escAttr(iss.formula || '') + '" '
+          + 'data-qw-key="' + escAttr(key) + '" '
+          + 'style="background:#059669;border-color:#059669;font-size:11px;padding:3px 10px;">Apply Fix</button>';
+      } else if (iss.fix_category === 'auto' && iss.fix_type === 'schema' && !isDone) {
+        actionBtn = '<button class="siloq-schema-fix-btn siloq-btn siloq-btn--sm siloq-btn--primary" '
+          + 'data-post-id="' + escAttr(String(iss.post_id || '')) + '" '
+          + 'style="font-size:11px;padding:3px 10px;">Generate Schema</button>';
+      } else if (iss.fix_category === 'content' && iss.elementor_url && !isDone) {
+        actionBtn = '<a href="' + escAttr(iss.elementor_url) + '" target="_blank" '
+          + 'class="siloq-btn siloq-btn--sm siloq-btn--outline" style="font-size:11px;padding:3px 10px;">Open in Elementor</a>';
+      }
+
+      return '<div class="siloq-qw-row" data-key="' + escAttr(key) + '" style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;opacity:' + (isDone ? '0.6' : '1') + ';">'
+        + '<input type="checkbox" class="siloq-qw-checkbox" data-key="' + escAttr(key) + '" '
+        + 'data-post-id="' + escAttr(String(iss.post_id || '')) + '" '
+        + 'data-issue-type="' + escAttr(iss.fix_type || sanitizeKey(iss.issue)) + '" '
+        + (isDone ? 'checked ' : '')
+        + 'style="margin-top:3px;accent-color:#4f46e5;width:15px;height:15px;flex-shrink:0;">'
+        + '<div style="flex:1;">'
+        + '<span style="font-size:13px;font-weight:' + (isDone ? '400' : '600') + ';color:' + (isDone ? '#9ca3af' : '#111827') + ';">'
+        + escHtml(iss.title) + '</span>'
+        + ' <span style="font-size:11px;color:' + color + ';font-weight:500;">&mdash; ' + escHtml(iss.issue) + '</span>'
+        + (isDone ? ' <span style="font-size:11px;color:#059669;margin-left:4px;">✓ fixed</span>' : '')
+        + (!isDone && actionBtn ? '<div style="margin-top:6px;">' + actionBtn + '<div class="siloq-qw-fix-panel" style="display:none;margin-top:8px;"></div></div>' : '')
+        + '</div>'
+        + '</div>';
+    }
+
+    pending.forEach(function(iss)   { html += issueRow(iss, false); });
+    completed.forEach(function(iss) { html += issueRow(iss, true);  });
+
+    $('#siloq-issues-content').html(html);
+  }
+
+  function sanitizeKey(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
+  }
+
+  // ── Quick Win checkbox persistence ───────────────────────────────────
+  $(document).on('change', '.siloq-qw-checkbox', function() {
+    var $cb   = $(this);
+    var key   = $cb.data('key');
+    var postId = $cb.data('post-id');
+    var issType = $cb.data('issue-type');
+    var checked = $cb.is(':checked');
+
+    qwCompleted[key] = checked ? true : false;
+
+    $.post(cfg.ajaxUrl, {
+      action:     'siloq_save_quick_win',
+      nonce:      cfg.nonce,
+      post_id:    postId,
+      issue_type: issType,
+      checked:    checked ? 1 : 0
+    });
+
+    // Move row to bottom (completed) or top (uncompleted) after a short delay
+    var $row = $cb.closest('.siloq-qw-row');
+    $row.css('opacity', checked ? '0.6' : '1');
+    setTimeout(function() {
+      if (checked) {
+        $('#siloq-issues-content').append($row);
+      } else {
+        var $firstDone = $('#siloq-issues-content .siloq-qw-row').filter(function() {
+          return $(this).find('.siloq-qw-checkbox').is(':checked');
+        }).first();
+        if ($firstDone.length) $firstDone.before($row);
+        else $('#siloq-issues-content').prepend($row);
+      }
+
+      // Update progress counter
+      var total = $('#siloq-issues-content .siloq-qw-row').length;
+      var done  = $('#siloq-issues-content .siloq-qw-checkbox:checked').length;
+      $('#siloq-qw-progress').text(done + ' of ' + total + ' completed');
+    }, 300);
+  });
+
+  // ── Inline Fix Panel (Priority Actions + Quick Wins) ─────────────────
+  // Shared handler for both .siloq-action-apply-btn and .siloq-qw-apply-btn
+  $(document).on('click', '.siloq-action-apply-btn, .siloq-qw-apply-btn', function() {
+    var $btn      = $(this);
+    var postId    = $btn.data('post-id');
+    var fixType   = $btn.data('fix-type');  // 'meta_title' | 'meta_description'
+    var formula   = $btn.data('formula');
+    var qwKey     = $btn.data('qw-key');
+    var $panel    = $btn.closest('.siloq-action-card, .siloq-qw-row').find('.siloq-inline-fix-panel, .siloq-qw-fix-panel').first();
+
+    if (!$panel.length || $panel.is(':visible')) return; // Already open
+
+    var fieldLabel = fixType === 'meta_title' ? 'SEO Title' : 'Meta Description';
+    var maxLen     = fixType === 'meta_title' ? 60 : 160;
+    var hasAI      = !!cfg.hasAnthropicKey;
+
+    $panel.html(
+      '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;">' + fieldLabel + ' suggestion:</div>'
+      + '<textarea class="siloq-fix-textarea" style="width:100%;font-size:12px;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;resize:vertical;min-height:52px;font-family:inherit;" maxlength="' + maxLen + '">' + escHtml(formula || '') + '</textarea>'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:6px;">'
+      + '<span class="siloq-char-count" style="font-size:11px;color:#9ca3af;">' + (formula ? formula.length : 0) + ' / ' + maxLen + ' chars</span>'
+      + '<div style="display:flex;gap:6px;">'
+      + (hasAI ? '<button class="siloq-fix-ai-btn siloq-btn siloq-btn--sm siloq-btn--outline" style="font-size:11px;" data-post-id="' + postId + '" data-field="' + (fixType === 'meta_title' ? 'title' : 'description') + '">✨ Improve with AI</button>' : '')
+      + '<button class="siloq-fix-confirm-btn siloq-btn siloq-btn--sm siloq-btn--primary" style="font-size:11px;background:#059669;border-color:#059669;" data-post-id="' + postId + '" data-fix-type="' + fixType + '" data-qw-key="' + (qwKey || '') + '">Confirm &amp; Apply</button>'
+      + '<button class="siloq-fix-cancel-btn siloq-btn siloq-btn--sm siloq-btn--outline" style="font-size:11px;">Cancel</button>'
+      + '</div></div>'
+    ).show();
+
+    // Live char count
+    $panel.find('.siloq-fix-textarea').on('input', function() {
+      $panel.find('.siloq-char-count').text($(this).val().length + ' / ' + maxLen + ' chars');
+    });
+
+    $btn.prop('disabled', true);
+  });
+
+  // Cancel inline fix
+  $(document).on('click', '.siloq-fix-cancel-btn', function() {
+    var $panel = $(this).closest('.siloq-inline-fix-panel, .siloq-qw-fix-panel');
+    $panel.hide().empty();
+    $panel.closest('.siloq-action-card, .siloq-qw-row').find('.siloq-action-apply-btn, .siloq-qw-apply-btn').prop('disabled', false);
+  });
+
+  // AI improve button
+  $(document).on('click', '.siloq-fix-ai-btn', function() {
+    var $btn   = $(this);
+    var postId = $btn.data('post-id');
+    var field  = $btn.data('field');
+    var $ta    = $btn.closest('.siloq-inline-fix-panel, .siloq-qw-fix-panel').find('.siloq-fix-textarea');
+    $btn.text('Generating...').prop('disabled', true);
+    $.post(cfg.ajaxUrl, { action: 'siloq_generate_meta_suggestion', nonce: cfg.nonce, post_id: postId, field: field, use_ai: 1 }, function(res) {
+      if (res.success && res.data.suggestion) {
+        $ta.val(res.data.suggestion).trigger('input');
+      }
+      $btn.text('✨ Improve with AI').prop('disabled', false);
+    }).fail(function() { $btn.text('✨ Improve with AI').prop('disabled', false); });
+  });
+
+  // Confirm & Apply — writes directly via ajax_dashboard_fix
+  $(document).on('click', '.siloq-fix-confirm-btn', function() {
+    var $btn    = $(this);
+    var postId  = $btn.data('post-id');
+    var fixType = $btn.data('fix-type'); // 'meta_title' | 'meta_description'
+    var qwKey   = $btn.data('qw-key');
+    var $panel  = $btn.closest('.siloq-inline-fix-panel, .siloq-qw-fix-panel');
+    var value   = $panel.find('.siloq-fix-textarea').val().trim();
+
+    if (!value) { alert('Please enter a value before applying.'); return; }
+
+    $btn.text('Applying...').prop('disabled', true);
+
+    var fixMode = fixType === 'meta_title' ? 'fix_meta' : 'fix_meta';
+    var fixSubtype = fixType === 'meta_title' ? 'title' : 'description';
+
+    $.post(cfg.ajaxUrl, {
+      action:       'siloq_dashboard_fix',
+      nonce:        cfg.nonce,
+      post_id:      postId,
+      fix_action:   fixMode,
+      fix_type:     fixSubtype,
+      custom_value: value  // Pass user's edited value directly
+    }, function(res) {
+      if (res.success) {
+        $panel.html('<div style="font-size:12px;color:#059669;font-weight:600;padding:6px 0;">✅ Applied: "' + escHtml(value.substring(0, 60)) + (value.length > 60 ? '...' : '') + '"</div>');
+        // Auto-check the Quick Win if this came from QW
+        if (qwKey) {
+          var $cb = $('#siloq-issues-content .siloq-qw-checkbox[data-key="' + qwKey + '"]');
+          if ($cb.length && !$cb.is(':checked')) {
+            $cb.prop('checked', true).trigger('change');
+          }
+        }
+      } else {
+        var msg = res.data && res.data.message ? res.data.message : 'Apply failed.';
+        $panel.html('<div style="font-size:12px;color:#dc2626;padding:6px 0;">⚠ ' + escHtml(msg) + '</div>');
+        $btn.prop('disabled', false).text('Confirm & Apply');
+      }
+    });
+  });
+
+  // ── Fix All — bulk apply titles + descriptions ────────────────────────
+  $(document).on('click', '#siloq-fix-all-btn', function() {
+    var $btn = $(this);
+    // Collect all pages with missing titles or descriptions from Priority Actions
+    var postIds = [];
+    $('#siloq-actions-content .siloq-action-apply-btn').each(function() {
+      var id = $(this).data('post-id');
+      if (id && postIds.indexOf(id) === -1) postIds.push(id);
+    });
+    // Also collect from Quick Wins
+    $('#siloq-issues-content .siloq-qw-apply-btn').each(function() {
+      var id = $(this).data('post-id');
+      if (id && postIds.indexOf(id) === -1) postIds.push(id);
+    });
+
+    if (!postIds.length) {
+      $('#siloq-fix-all-bar').hide();
+      return;
+    }
+
+    $btn.prop('disabled', true).text('Fixing...');
+    $('#siloq-fix-all-progress').show();
+    var applied = [], failed = [], total = postIds.length, done = 0;
+
+    // Fetch page titles for progress display
+    var pageTitles = {};
+    $('#siloq-actions-content .siloq-action-apply-btn').each(function() {
+      var id = $(this).data('post-id');
+      var headline = $(this).closest('.siloq-action-card').find('p').first().text();
+      if (id) pageTitles[id] = headline || ('Page ' + id);
+    });
+
+    function applyNext() {
+      if (!postIds.length) {
+        $('#siloq-fix-all-progress').hide();
+        $btn.prop('disabled', false).text('Fix All Missing Titles & Descriptions');
+        var summaryHtml = '<strong>' + applied.length + ' pages updated</strong>';
+        if (applied.length) {
+          summaryHtml += '<ul style="margin:8px 0 0;padding:0 0 0 16px;font-size:12px;">';
+          applied.forEach(function(a) { summaryHtml += '<li>' + escHtml(a.title) + (a.seo_title ? ' — Title: "' + escHtml(a.seo_title.substring(0, 40)) + '..."' : '') + '</li>'; });
+          summaryHtml += '</ul>';
+        }
+        if (failed.length) summaryHtml += '<div style="color:#dc2626;margin-top:6px;font-size:12px;">' + failed.length + ' failed: ' + failed.map(function(f){ return escHtml(f.title); }).join(', ') + '</div>';
+
+        $('#siloq-fix-all-summary')
+          .html(summaryHtml)
+          .css({'background': failed.length ? '#fef2f2' : '#f0fdf4', 'color': failed.length ? '#991b1b' : '#166534', 'border': '1px solid ' + (failed.length ? '#fca5a5' : '#86efac'), 'border-radius': '8px', 'padding': '12px 16px'})
+          .show();
+        if (!failed.length) $('#siloq-fix-all-bar').hide();
+        return;
+      }
+
+      var postId = postIds.shift();
+      done++;
+      var pct = Math.round((done / total) * 100);
+      $('#siloq-fix-all-pbar').css('width', pct + '%');
+      $('#siloq-fix-all-msg').text('Applying to ' + (pageTitles[postId] || 'Page ' + postId) + '... (' + done + ' of ' + total + ')');
+
+      $.post(cfg.ajaxUrl, { action: 'siloq_fix_all_seo', nonce: cfg.nonce, post_id: postId }, function(res) {
+        if (res.success) {
+          applied.push({ title: res.data.title || ('Page ' + postId), seo_title: res.data.applied && res.data.applied.title });
+        } else {
+          failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
+        }
+        setTimeout(applyNext, 600);
+      }).fail(function() {
+        failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
+        setTimeout(applyNext, 600);
+      });
+    }
+    applyNext();
+  });
 
   /* ─── Roadmap Checkbox Persistence ───────────── */
   function initRoadmap() {

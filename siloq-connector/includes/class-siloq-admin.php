@@ -2771,183 +2771,109 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             <div id="siloq-tab-plan" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
                 <div class="siloq-plan-section">
 
-                    <div style="text-align:right;margin-bottom:8px">
-                            <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">
-                                <?php echo $has_plan ? '&#8635; Refresh Plan' : 'Generate Your SEO Plan &rarr;'; ?>
+                    <!-- Tab header -->
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <h2 style="font-size:18px;font-weight:700;margin:0 0 4px;">SEO/GEO Plan</h2>
+                            <p style="color:#6b7280;font-size:13px;margin:0;">Your site's current SEO health and exactly what to do about it.</p>
+                        </div>
+                        <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">
+                            <?php echo $has_plan ? '&#8635; Refresh Plan' : 'Generate Your SEO Plan &rarr;'; ?>
+                        </button>
+                    </div>
+
+                    <!-- Section 1: Site Health Score -->
+                    <div class="siloq-card" style="margin-bottom:16px;padding:20px;">
+                        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+                            <div id="siloq-health-ring-wrap" style="flex-shrink:0;">
+                                <!-- JS fills SVG ring -->
+                                <svg width="80" height="80" viewBox="0 0 80 80" id="siloq-health-ring">
+                                    <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" stroke-width="8"/>
+                                    <circle id="siloq-health-arc" cx="40" cy="40" r="34" fill="none" stroke="#4f46e5" stroke-width="8"
+                                        stroke-dasharray="213.6" stroke-dashoffset="213.6"
+                                        stroke-linecap="round" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 0.6s ease;"/>
+                                </svg>
+                                <div id="siloq-health-score-num" style="position:relative;margin-top:-60px;text-align:center;font-size:22px;font-weight:800;color:#1e1b4b;">—</div>
+                                <div style="text-align:center;font-size:10px;color:#9ca3af;margin-top:32px;">/ 100</div>
+                            </div>
+                            <div style="flex:1;min-width:180px;">
+                                <h3 style="font-size:16px;font-weight:700;margin:0 0 4px;" id="siloq-health-label">Site Health Score</h3>
+                                <p style="color:#6b7280;font-size:13px;margin:0 0 12px;">Here's what's affecting your score and how to fix it.</p>
+                                <div id="siloq-score-breakdown" style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fix All banner (shown by JS when missing titles/descs exist) -->
+                    <div id="siloq-fix-all-bar" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <span style="font-weight:700;color:#166534;font-size:14px;">⚡ Quick fix available</span>
+                                <span id="siloq-fix-all-desc" style="font-size:13px;color:#166534;margin-left:8px;"></span>
+                            </div>
+                            <button id="siloq-fix-all-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="background:#059669;border-color:#059669;">
+                                Fix All Missing Titles &amp; Descriptions
                             </button>
                         </div>
+                        <div id="siloq-fix-all-progress" style="display:none;margin-top:10px;">
+                            <div style="font-size:12px;color:#166534;font-weight:600;margin-bottom:5px;" id="siloq-fix-all-msg">Preparing...</div>
+                            <div style="background:#bbf7d0;border-radius:999px;height:6px;"><div id="siloq-fix-all-pbar" style="height:100%;background:#059669;border-radius:999px;width:0%;transition:width 0.3s;"></div></div>
+                        </div>
+                    </div>
+                    <div id="siloq-fix-all-summary" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:13px;"></div>
 
-                    <!-- Section 1: Site Architecture Map -->
-                    <div class="siloq-accordion">
-                        <button class="siloq-accordion__trigger" aria-expanded="false">
-                            <span>Site Architecture Map</span>
-                            <span class="siloq-accordion__arrow">&#9660;</span>
-                        </button>
-                        <div class="siloq-accordion__content" id="siloq-architecture-content">
-                            <p class="siloq-empty">Generate a plan to see your site architecture.</p>
+                    <!-- Section 2: Priority Actions -->
+                    <div class="siloq-card" style="margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0;">Priority Actions</h3>
+                            <span id="siloq-actions-count" style="font-size:12px;color:#6b7280;"></span>
+                        </div>
+                        <div id="siloq-actions-content">
+                            <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see priority actions.</p>
                         </div>
                     </div>
 
-                    <!-- Section 2: Priority Action Plan -->
-                    <div class="siloq-accordion">
-                        <button class="siloq-accordion__trigger" aria-expanded="false">
-                            <span>Priority Action Plan</span>
-                            <span class="siloq-accordion__arrow">&#9660;</span>
-                        </button>
-                        <div class="siloq-accordion__content" id="siloq-actions-content">
-                            <p class="siloq-empty">Generate a plan to see priority actions.</p>
+                    <!-- Section 3: Site Architecture -->
+                    <div class="siloq-card" style="margin-bottom:16px;">
+                        <div style="margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0 0 3px;">Site Architecture</h3>
+                            <p style="font-size:12px;color:#6b7280;margin:0;">How your pages are organized for search engines. Hub pages should link to all their spoke/city pages, and each spoke should link back up.</p>
+                        </div>
+                        <div id="siloq-architecture-content">
+                            <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see your site architecture.</p>
                         </div>
                     </div>
 
-                    <!-- Section 3: Supporting Content Opportunities -->
-                    <div class="siloq-accordion">
-                        <button class="siloq-accordion__trigger" aria-expanded="false">
-                            <span>Supporting Content Opportunities</span>
-                            <span class="siloq-accordion__arrow">&#9660;</span>
-                        </button>
-                        <div class="siloq-accordion__content" id="siloq-supporting-content">
-                            <?php
-                            // Real gap analysis
-                            $all_pages_q = get_posts( array(
-                                'post_type'      => 'page',
-                                'posts_per_page' => -1,
-                                'post_status'    => 'publish',
-                                'fields'         => 'all',
-                            ) );
-                            $page_data = array();
-                            foreach ( $all_pages_q as $pg ) {
-                                $page_data[] = array(
-                                    'title'     => $pg->post_title,
-                                    'url'       => get_permalink( $pg->ID ),
-                                    'page_role' => get_post_meta( $pg->ID, '_siloq_page_role', true ),
-                                );
-                            }
-                            $categorized = self::categorize_pages( $page_data );
-                            $city_count  = count( $categorized['cities'] );
-                            $has_cards   = false;
-
-                            // --- Card 1: Missing Service Areas Hub ---
-                            if ( $city_count >= 3 && $categorized['service_area_page'] === null ) :
-                                $has_cards = true;
-                            ?>
-                            <div class="siloq-action-card" style="border-left:4px solid #f59e0b;background:#fffbeb;border-radius:6px;padding:16px;margin-bottom:12px;">
-                                <div class="siloq-action-card__body">
-                                    <span style="display:inline-block;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">HIGHEST PRIORITY</span>
-                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;">Create a Service Areas Hub Page</p>
-                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">You have <?php echo intval( $city_count ); ?> city pages with no hub connecting them. They compete instead of reinforcing one authoritative page.</p>
-                                    <p style="color:#999;font-size:12px;margin:0 0 4px;"><strong>Recommended URL:</strong> /service-areas/</p>
-                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Impact:</strong> High &mdash; affects all <?php echo intval( $city_count ); ?> city pages</p>
-                                    <button onclick="siloqCreateGapDraft(this,'Service Areas','service-areas')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
-                                </div>
-                            </div>
-                            <?php endif; ?>
-
-                            <?php
-                            // --- Card 2: Content Gaps (missing service pages) ---
-                            $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
-                            if ( ! is_array( $primary_services ) ) { $primary_services = array(); }
-
-                            // Filter out garbage service values: skip anything that looks like an
-                            // extracted title fragment (contains state abbr, ends with "Electrician",
-                            // or is longer than 5 words). Only show clean service names.
-                            $state_abbrs_svc = array('AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC');
-                            $primary_services = array_filter( $primary_services, function( $s ) use ( $state_abbrs_svc ) {
-                                if ( str_word_count( $s ) > 5 ) return false; // too long — likely a title fragment
-                                foreach ( $state_abbrs_svc as $st ) {
-                                    if ( preg_match( '/\b' . $st . '\b/', $s ) ) return false; // contains state abbr
-                                }
-                                return true;
-                            });
-
-                            $existing_urls = array_map( function( $p ) { return strtolower( $p['url'] ); }, $page_data );
-
-                            // Extract clean city name from the first city page title
-                            // Title patterns: "Electrician Smithville, MO" or "Smithville, MO Electrician"
-                            $first_city_raw = ! empty( $categorized['cities'] ) ? $categorized['cities'][0]['title'] : '';
-                            $first_city = $first_city_raw;
-                            if ( ! empty( $first_city_raw ) ) {
-                                // Remove trailing service keywords and state abbreviations
-                                $first_city = preg_replace( '/\b(electrician|electric|plumb|hvac|roof|repair|install|service|clean|maint|remodel|contractor|landscap|pest|paint|concrete|handyman|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/i', '', $first_city_raw );
-                                $first_city = trim( preg_replace( '/[,\s]+$/', '', $first_city ) );
-                                if ( empty( $first_city ) ) { $first_city = $first_city_raw; }
-                            }
-
-                            foreach ( $primary_services as $service ) :
-                                $service_slug = sanitize_title( $service );
-                                $found = false;
-                                foreach ( $existing_urls as $eu ) {
-                                    if ( strpos( $eu, $service_slug ) !== false ) { $found = true; break; }
-                                }
-                                if ( $found ) { continue; }
-                                $has_cards = true;
-                                $card_title = $first_city ? esc_html( $service ) . ' in ' . esc_html( $first_city ) : esc_html( $service );
-                            ?>
-                            <div class="siloq-action-card" style="border-left:4px solid #3b82f6;background:#eff6ff;border-radius:6px;padding:16px;margin-bottom:12px;">
-                                <div class="siloq-action-card__body">
-                                    <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">CONTENT GAP</span>
-                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $card_title; ?></p>
-                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $service ); ?>&rdquo; as a primary service. Adding a dedicated page improves topical authority and gives Google a clear ranking signal.</p>
-                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> Sub-page (Transactional)</p>
-                                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode($service); ?>,'service')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-
-                            <?php
-                            // --- Card 3: Local SEO Gaps (missing city pages) ---
-                            $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
-                            if ( ! is_array( $service_areas ) ) { $service_areas = array(); }
-
-                            $existing_titles = array_map( function( $p ) { return strtolower( $p['title'] ); }, $page_data );
-                            $first_service   = ! empty( $primary_services ) ? $primary_services[0] : '';
-
-                            foreach ( $service_areas as $city_entry ) :
-                                $city_name = is_array( $city_entry ) ? ( isset( $city_entry['city'] ) ? $city_entry['city'] : '' ) : $city_entry;
-                                if ( empty( $city_name ) ) { continue; }
-                                $found = false;
-                                foreach ( $existing_titles as $et ) {
-                                    if ( strpos( $et, strtolower( $city_name ) ) !== false ) { $found = true; break; }
-                                }
-                                if ( $found ) { continue; }
-                                $has_cards = true;
-                                $suggested_title = esc_html( $city_name ) . ( $first_service ? ' ' . esc_html( $first_service ) : '' );
-                            ?>
-                            <div class="siloq-action-card" style="border-left:4px solid #7c3aed;background:#f5f3ff;border-radius:6px;padding:16px;margin-bottom:12px;">
-                                <div class="siloq-action-card__body">
-                                    <span style="display:inline-block;background:#7c3aed;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:8px;">LOCAL SEO GAP</span>
-                                    <p class="siloq-action-card__headline" style="font-weight:600;margin:0 0 6px;"><?php echo $suggested_title; ?></p>
-                                    <p style="color:#666;font-size:13px;margin:0 0 8px;">No page targets &ldquo;<?php echo esc_html( $city_name ); ?>&rdquo;. Adding a dedicated city page helps rank for local searches and strengthens your service area coverage.</p>
-                                    <p style="color:#999;font-size:12px;margin:0 0 10px;"><strong>Type:</strong> City Landing Page (Local)</p>
-                                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode($suggested_title); ?>,'city')" class="siloq-btn siloq-btn--sm siloq-btn--primary">Create Draft &rarr;</button>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-
-                            <?php if ( ! $has_cards ) : ?>
-                            <p class="siloq-empty">No content gaps detected. Your site covers all configured services and areas.</p>
-                            <?php endif; ?>
+                    <!-- Section 4: Pages You Should Create -->
+                    <div class="siloq-card" style="margin-bottom:16px;">
+                        <div style="margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0 0 3px;">Pages You Should Create</h3>
+                            <p style="font-size:12px;color:#6b7280;margin:0;">Based on your service list and service areas — pages that don't exist yet but would drive real traffic.</p>
+                        </div>
+                        <div id="siloq-supporting-content">
+                            <?php echo self::render_gap_cards(); ?>
                         </div>
                     </div>
 
-                    <!-- Section 4: Content Issues -->
-                    <div class="siloq-accordion">
-                        <button class="siloq-accordion__trigger" aria-expanded="false">
-                            <span>Content Issues</span>
-                            <span class="siloq-accordion__arrow">&#9660;</span>
-                        </button>
-                        <div class="siloq-accordion__content" id="siloq-issues-content">
-                            <p class="siloq-empty">Generate a plan to see content issues.</p>
+                    <!-- Section 5: Quick Wins -->
+                    <div class="siloq-card" style="margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0;">Quick Wins</h3>
+                            <span id="siloq-qw-progress" style="font-size:12px;font-weight:600;color:#4f46e5;"></span>
+                        </div>
+                        <p style="font-size:12px;color:#6b7280;margin:0 0 14px;">Every item below is fixable in under 2 minutes with Siloq's help. Completed items move to the bottom.</p>
+                        <div id="siloq-issues-content">
+                            <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see quick wins.</p>
                         </div>
                     </div>
 
-                    <!-- Section 5: 90-Day Roadmap -->
-                    <div class="siloq-accordion">
-                        <button class="siloq-accordion__trigger" aria-expanded="false">
-                            <span>90-Day Roadmap</span>
-                            <span class="siloq-accordion__arrow">&#9660;</span>
-                        </button>
-                        <div class="siloq-accordion__content" id="siloq-roadmap-content">
-                            <p class="siloq-empty">Generate a plan to see your roadmap.</p>
+                    <!-- Section 6: 90-Day Roadmap -->
+                    <div class="siloq-card">
+                        <div style="margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0;">90-Day Roadmap</h3>
+                        </div>
+                        <div id="siloq-roadmap-content">
+                            <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see your roadmap.</p>
                         </div>
                     </div>
 
@@ -4717,6 +4643,9 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
 
         switch ( $fix_action ) {
             case 'fix_meta':
+                // If the user edited the value in the inline panel, use it directly
+                $custom_value = sanitize_text_field( $_POST['custom_value'] ?? '' );
+
                 // Detect active SEO plugin (checked once, cached in option)
                 $seo_plugin = get_option( 'siloq_active_seo_plugin', '' );
                 if ( empty( $seo_plugin ) ) {
@@ -4735,65 +4664,29 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                 }
 
                 if ( $fix_type === 'title' ) {
-                    // Build the best available SEO title
-                    $post_obj   = get_post( $post_id );
-                    $post_title = $post_obj ? $post_obj->post_title : '';
-                    $analysis   = json_decode( get_post_meta( $post_id, '_siloq_analysis_data', true ), true ) ?: [];
-                    $primary_kw = $analysis['primary_keyword'] ?? '';
-                    $biz_name   = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
-
-                    // Build SEO title: "Primary Keyword | Business Name" or fallback to post title
-                    if ( $primary_kw ) {
-                        $seo_title = $primary_kw . ' | ' . $biz_name;
+                    // Use custom_value if user edited it in the inline panel, otherwise generate
+                    if ( ! empty( $custom_value ) ) {
+                        $seo_title = mb_substr( $custom_value, 0, 60 );
                     } else {
-                        $seo_title = $post_title . ' | ' . $biz_name;
+                        $seo_title = self::siloq_formula_seo_title( $post_id );
                     }
-                    // Cap at 60 chars
-                    if ( strlen( $seo_title ) > 60 ) {
-                        $seo_title = substr( $seo_title, 0, 57 ) . '...';
-                    }
-
                     self::write_seo_title( $post_id, $seo_title, $seo_plugin );
-                    wp_send_json_success( [ 'message' => 'SEO title applied via ' . $seo_plugin . '.', 'value' => $seo_title ] );
+                    wp_send_json_success( [ 'message' => 'SEO title applied.', 'value' => $seo_title ] );
 
                 } elseif ( $fix_type === 'description' ) {
-                    // Generate meta description from analysis excerpt or content
-                    $analysis = json_decode( get_post_meta( $post_id, '_siloq_analysis_data', true ), true ) ?: [];
-                    $desc = '';
-
-                    // Prefer analysis-generated excerpt
-                    if ( ! empty( $analysis['meta_description'] ) ) {
-                        $desc = $analysis['meta_description'];
-                    } elseif ( ! empty( $analysis['excerpt'] ) ) {
-                        $desc = $analysis['excerpt'];
+                    if ( ! empty( $custom_value ) ) {
+                        $desc = mb_substr( $custom_value, 0, 160 );
                     } else {
-                        // Fall back to post content snippet
-                        $post_obj = get_post( $post_id );
-                        $content  = $post_obj ? wp_strip_all_tags( $post_obj->post_content ) : '';
-                        if ( empty( $content ) ) {
-                            // Try Elementor data
-                            $el_data = get_post_meta( $post_id, '_elementor_data', true );
-                            if ( $el_data ) {
-                                preg_match_all( '/"editor_content"\s*:\s*"([^"]{20,})"/', $el_data, $m );
-                                $content = ! empty( $m[1] ) ? html_entity_decode( $m[1][0] ) : '';
-                            }
-                        }
-                        $desc = wp_trim_words( $content, 28, '' );
+                        $desc = self::siloq_formula_meta_desc( $post_id );
                     }
-
-                    // Trim to ≤160 chars at word boundary
-                    if ( mb_strlen( $desc ) > 160 ) {
-                        $desc = mb_substr( $desc, 0, 157 ) . '...';
-                    }
-                    $desc = trim( $desc );
 
                     if ( empty( $desc ) ) {
-                        wp_send_json_error( [ 'message' => 'Could not generate description — run Widget Intelligence on this page first.' ] );
+                        wp_send_json_error( [ 'message' => 'Could not generate description — add content to this page first.' ] );
                         return;
                     }
 
                     self::write_seo_description( $post_id, $desc, $seo_plugin );
-                    wp_send_json_success( [ 'message' => 'Meta description applied via ' . $seo_plugin . '.', 'value' => $desc ] );
+                    wp_send_json_success( [ 'message' => 'Meta description applied.', 'value' => $desc ] );
 
                 } else {
                     wp_send_json_error( [ 'message' => 'Unknown meta fix type.' ] );
@@ -4916,6 +4809,430 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
         }
 
         return $result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // GAP DETECTION — Pages You Should Create
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Render "Pages You Should Create" cards with clean gap detection.
+     *
+     * Rules:
+     * - Service gaps: compare siloq_primary_services against existing page SLUGS and TITLES only.
+     *   NEVER parse keywords out of existing page titles.
+     * - City gaps: check every synced page title AND slug for the city name (case-insensitive partial).
+     *   Also check the Service Areas hub page body text — if a city is mentioned there, skip it.
+     * - No "CONTENT GAP" / "LOCAL SEO GAP" labels. Use "Missing Service Page" / "Missing City Page".
+     */
+    public static function render_gap_cards() {
+        ob_start();
+
+        // Build existing pages dataset
+        $post_types = function_exists( 'get_siloq_crawlable_post_types' )
+            ? get_siloq_crawlable_post_types()
+            : array( 'page', 'post' );
+
+        $all_posts = get_posts( array(
+            'post_type'      => $post_types,
+            'post_status'    => array( 'publish', 'draft' ),
+            'posts_per_page' => -1,
+        ) );
+
+        // Build lookup arrays: title_lower, slug
+        $existing_titles = array();
+        $existing_slugs  = array();
+        foreach ( $all_posts as $p ) {
+            $existing_titles[] = strtolower( $p->post_title );
+            $existing_slugs[]  = strtolower( $p->post_name );
+        }
+
+        // Get Service Areas hub page body text for city cross-reference
+        $hub_body_text = '';
+        foreach ( $all_posts as $p ) {
+            $slug = strtolower( $p->post_name );
+            if ( strpos( $slug, 'service-area' ) !== false || strpos( strtolower( $p->post_title ), 'service area' ) !== false ) {
+                $hub_body_text = strtolower( wp_strip_all_tags( $p->post_content ) );
+                // Also check Elementor data
+                if ( empty( $hub_body_text ) ) {
+                    $el = get_post_meta( $p->ID, '_elementor_data', true );
+                    if ( $el ) {
+                        preg_match_all( '/"text"\s*:\s*"([^"]{10,})"/', $el, $m );
+                        $hub_body_text = strtolower( implode( ' ', $m[1] ?? [] ) );
+                    }
+                }
+                break;
+            }
+        }
+
+        $biz_name     = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+        $primary_city = get_option( 'siloq_city', '' );
+        $has_cards    = false;
+
+        // ── Service gaps ────────────────────────────────────────────────────
+        // Only compare against siloq_primary_services option — NEVER parse from page titles
+        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        if ( ! is_array( $primary_services ) ) $primary_services = array();
+
+        // Filter to clean service names only (≤5 words, no state abbreviations)
+        $state_abbrs = array('AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+                             'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+                             'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+                             'VA','WA','WV','WI','WY','DC');
+        $primary_services = array_values( array_filter( $primary_services, function( $s ) use ( $state_abbrs ) {
+            if ( empty( trim( $s ) ) ) return false;
+            if ( str_word_count( $s ) > 5 ) return false; // Too long — likely a page title fragment
+            foreach ( $state_abbrs as $st ) {
+                if ( preg_match( '/\b' . $st . '\b/i', $s ) ) return false;
+            }
+            return true;
+        } ) );
+
+        foreach ( $primary_services as $service ) {
+            $service_lower = strtolower( trim( $service ) );
+            $service_slug  = sanitize_title( $service );
+            $found         = false;
+
+            foreach ( $existing_titles as $t ) {
+                if ( strpos( $t, $service_lower ) !== false ) { $found = true; break; }
+            }
+            if ( ! $found ) {
+                foreach ( $existing_slugs as $s ) {
+                    if ( strpos( $s, $service_slug ) !== false ) { $found = true; break; }
+                }
+            }
+            if ( $found ) continue;
+
+            $has_cards   = true;
+            $card_title  = $primary_city ? $service . ' in ' . $primary_city : $service;
+            $why_it_matters = 'You don\'t have a dedicated page for "' . $service . '." Without one, Google has no clear signal to rank you for this service — it spreads your authority across unrelated pages instead of concentrating it.';
+            ?>
+            <div class="siloq-gap-card" style="border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:16px;margin-bottom:12px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;">
+                        <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING SERVICE PAGE</span>
+                        <p style="font-size:14px;font-weight:700;color:#1e3a5f;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
+                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
+                    </div>
+                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $card_title ); ?>,'service')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;">Create Draft &rarr;</button>
+                </div>
+            </div>
+            <?php
+        }
+
+        // ── City gaps ────────────────────────────────────────────────────────
+        // Only cities in siloq_service_areas that have NO matching page title/slug
+        // AND are not mentioned in the Service Areas hub body text
+        $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
+        if ( ! is_array( $service_areas ) ) $service_areas = array();
+        $first_service = ! empty( $primary_services ) ? $primary_services[0] : '';
+
+        foreach ( $service_areas as $city_entry ) {
+            $city_name = is_array( $city_entry ) ? ( $city_entry['city'] ?? '' ) : (string) $city_entry;
+            $city_name = trim( $city_name );
+            if ( empty( $city_name ) ) continue;
+
+            $city_lower = strtolower( $city_name );
+            $city_slug  = sanitize_title( $city_name );
+            $found      = false;
+
+            // Check existing page titles
+            foreach ( $existing_titles as $t ) {
+                if ( strpos( $t, $city_lower ) !== false ) { $found = true; break; }
+            }
+            // Check existing page slugs
+            if ( ! $found ) {
+                foreach ( $existing_slugs as $s ) {
+                    if ( strpos( $s, $city_slug ) !== false ) { $found = true; break; }
+                }
+            }
+            // Check Service Areas hub body text — if listed there, skip (already covered)
+            if ( ! $found && $hub_body_text && strpos( $hub_body_text, $city_lower ) !== false ) {
+                $found = true;
+            }
+
+            if ( $found ) continue;
+
+            $has_cards      = true;
+            $suggested_title = $city_name . ( $first_service ? ' ' . $first_service : '' );
+            $why_it_matters = 'People in ' . $city_name . ' are searching for ' . ( $first_service ? strtolower( $first_service ) . ' services' : 'your services' ) . ', but you don\'t have a page for them. A dedicated city page captures local intent and links back to your Service Areas hub to build authority.';
+            ?>
+            <div class="siloq-gap-card" style="border:1px solid #ede9fe;background:#f5f3ff;border-radius:8px;padding:16px;margin-bottom:12px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;">
+                        <span style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING CITY PAGE</span>
+                        <p style="font-size:14px;font-weight:700;color:#2e1065;margin:0 0 6px;"><?php echo esc_html( $suggested_title ); ?></p>
+                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
+                    </div>
+                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $suggested_title ); ?>,'city')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;background:#7c3aed;border-color:#7c3aed;">Create Draft &rarr;</button>
+                </div>
+            </div>
+            <?php
+        }
+
+        if ( ! $has_cards ) {
+            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
+                . '<div style="font-size:28px;margin-bottom:8px;">✅</div>'
+                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">All pages covered</p>'
+                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Your configured services and service areas all have dedicated pages. Add more services or areas in Settings to see new opportunities.</p>'
+                . '</div>';
+        }
+
+        return ob_get_clean();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // FORMULA SEO TITLE / META DESC GENERATION
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Generate a smart, page-type-aware SEO title formula.
+     * Never makes an API call — instant, deterministic.
+     *
+     * City page:    "Excelsior Springs Electrician | Able Electric KC"
+     * Service page: "Panel Upgrades in Kansas City | Able Electric KC"
+     * Hub page:     "Service Areas | Able Electric KC"
+     * Generic:      "Page Title | Business Name"
+     */
+    public static function siloq_formula_seo_title( $post_id ) {
+        $post_title   = get_the_title( $post_id );
+        $biz_name     = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+        $primary_city = get_option( 'siloq_city', '' );
+        $page_type    = get_post_meta( $post_id, '_siloq_page_role', true )
+            ?: get_post_meta( $post_id, '_siloq_page_type_classification', true )
+            ?: 'supporting';
+
+        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        if ( ! is_array( $primary_services ) ) $primary_services = [];
+        $primary_service = ! empty( $primary_services ) ? $primary_services[0] : '';
+
+        $title = '';
+
+        if ( in_array( $page_type, [ 'spoke', 'city' ], true ) ) {
+            // City page: use post title (already contains city + service) + brand
+            // Clean it up: remove trailing state abbr if duplicated
+            $title = $post_title . ' | ' . $biz_name;
+        } elseif ( in_array( $page_type, [ 'hub', 'apex_hub' ], true ) ) {
+            // Hub: "Service Areas | Business Name"
+            $title = $post_title . ' | ' . $biz_name;
+        } elseif ( $page_type === 'supporting' || $page_type === 'orphan' ) {
+            // Service/supporting page: add "in [Primary City]" if not already in title
+            if ( $primary_city && stripos( $post_title, $primary_city ) === false ) {
+                $title = $post_title . ' in ' . $primary_city . ' | ' . $biz_name;
+            } else {
+                $title = $post_title . ' | ' . $biz_name;
+            }
+        } else {
+            $title = $post_title . ' | ' . $biz_name;
+        }
+
+        // Cap at 60 chars
+        if ( mb_strlen( $title ) > 60 ) {
+            // Try without the "in City" part first
+            $short = $post_title . ' | ' . $biz_name;
+            if ( mb_strlen( $short ) <= 60 ) {
+                $title = $short;
+            } else {
+                $title = mb_substr( $title, 0, 57 ) . '...';
+            }
+        }
+
+        return $title;
+    }
+
+    /**
+     * Generate a formula-based meta description.
+     * Uses analysis excerpt, then page content snippet, then generic.
+     */
+    public static function siloq_formula_meta_desc( $post_id ) {
+        $post_title   = get_the_title( $post_id );
+        $biz_name     = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+        $primary_city = get_option( 'siloq_city', '' );
+        $phone        = get_option( 'siloq_phone', '' );
+
+        // Try analysis excerpt first
+        $analysis = json_decode( get_post_meta( $post_id, '_siloq_analysis_data', true ), true ) ?: [];
+        if ( ! empty( $analysis['meta_description'] ) ) {
+            $desc = $analysis['meta_description'];
+        } elseif ( ! empty( $analysis['excerpt'] ) ) {
+            $desc = $analysis['excerpt'];
+        } else {
+            // Build from post content
+            $post_obj = get_post( $post_id );
+            $content  = $post_obj ? wp_strip_all_tags( $post_obj->post_content ) : '';
+
+            // Try Elementor data if post content empty
+            if ( empty( $content ) ) {
+                $el_data = get_post_meta( $post_id, '_elementor_data', true );
+                if ( $el_data ) {
+                    preg_match_all( '/"text"\s*:\s*"([^"]{30,})"/', $el_data, $m );
+                    $content = ! empty( $m[1] ) ? html_entity_decode( implode( ' ', array_slice( $m[1], 0, 3 ) ) ) : '';
+                }
+            }
+
+            if ( ! empty( $content ) ) {
+                $desc = wp_trim_words( $content, 22, '' );
+            } else {
+                // Generic fallback using business info
+                $city_str = $primary_city ? ' in ' . $primary_city : '';
+                $phone_str = $phone ? ' Call ' . $phone . '.' : '';
+                $desc = $biz_name . ' provides professional ' . strtolower( $post_title ) . $city_str . '.' . $phone_str;
+            }
+        }
+
+        // Trim to ≤160 chars
+        if ( mb_strlen( $desc ) > 160 ) {
+            $desc = mb_substr( $desc, 0, 157 ) . '...';
+        }
+
+        return trim( $desc );
+    }
+
+    /**
+     * AJAX: Return a formula-generated suggestion for title or description.
+     * Optionally calls Claude API if BYOK is configured and user requests AI upgrade.
+     */
+    public static function ajax_generate_meta_suggestion() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $post_id   = intval( $_POST['post_id'] ?? 0 );
+        $field     = sanitize_key( $_POST['field']    ?? 'title' ); // 'title' | 'description'
+        $use_ai    = ! empty( $_POST['use_ai'] ) && $_POST['use_ai'] === '1';
+
+        if ( ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing post_id' ] );
+        }
+
+        if ( $use_ai ) {
+            // Try Claude BYOK
+            $api_key = get_option( 'siloq_anthropic_api_key', '' );
+            if ( ! $api_key ) {
+                // Fall through to formula
+                $use_ai = false;
+            } else {
+                $post_title = get_the_title( $post_id );
+                $content    = wp_strip_all_tags( get_post_field( 'post_content', $post_id ) );
+                $biz_name   = get_option( 'siloq_business_name', get_bloginfo( 'name' ) );
+                $city       = get_option( 'siloq_city', '' );
+
+                if ( $field === 'title' ) {
+                    $prompt = "Write an SEO title tag (max 60 characters) for a web page titled \"$post_title\" for a business called \"$biz_name\" in $city. Format: [primary keyword] | [brand name]. Just the title, no explanation.";
+                } else {
+                    $snippet = mb_substr( $content, 0, 400 );
+                    $prompt  = "Write a meta description (max 155 characters) for a page titled \"$post_title\" for $biz_name. Content snippet: $snippet. Include a call to action. Just the description, no explanation.";
+                }
+
+                $response = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
+                    'timeout' => 20,
+                    'headers' => [
+                        'x-api-key'         => $api_key,
+                        'anthropic-version' => '2023-06-01',
+                        'content-type'      => 'application/json',
+                    ],
+                    'body' => wp_json_encode( [
+                        'model'      => 'claude-3-haiku-20240307',
+                        'max_tokens' => 100,
+                        'messages'   => [ [ 'role' => 'user', 'content' => $prompt ] ],
+                    ] ),
+                ] );
+
+                if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 ) {
+                    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+                    $ai_text = $body['content'][0]['text'] ?? '';
+                    if ( $ai_text ) {
+                        $ai_text = trim( trim( $ai_text ), '"' );
+                        wp_send_json_success( [ 'suggestion' => $ai_text, 'source' => 'ai' ] );
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Formula fallback (always works, no API)
+        $suggestion = $field === 'title'
+            ? self::siloq_formula_seo_title( $post_id )
+            : self::siloq_formula_meta_desc( $post_id );
+
+        wp_send_json_success( [ 'suggestion' => $suggestion, 'source' => 'formula' ] );
+    }
+
+    /**
+     * AJAX: Apply SEO title + description to all pages with missing values.
+     * Processes one page per call; JS calls sequentially with progress reporting.
+     */
+    public static function ajax_fix_all_seo() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing post_id' ] );
+        }
+
+        $seo_plugin   = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
+        $applied      = [];
+        $title_applied = false;
+        $desc_applied  = false;
+
+        // Check current title
+        $current_title = self::siloq_get_page_title( $post_id );
+        $needs_title   = ( $current_title === get_the_title( $post_id ) || empty( $current_title ) );
+        if ( $needs_title ) {
+            $title = self::siloq_formula_seo_title( $post_id );
+            self::write_seo_title( $post_id, $title, $seo_plugin );
+            $applied['title'] = $title;
+            $title_applied    = true;
+        }
+
+        // Check current description
+        $current_desc = self::siloq_get_meta_description( $post_id );
+        $needs_desc   = empty( $current_desc ) || ( is_array( $current_desc ) && isset( $current_desc['status'] ) );
+        if ( $needs_desc ) {
+            $desc = self::siloq_formula_meta_desc( $post_id );
+            self::write_seo_description( $post_id, $desc, $seo_plugin );
+            $applied['description'] = $desc;
+            $desc_applied = true;
+        }
+
+        wp_send_json_success( [
+            'post_id'       => $post_id,
+            'title'         => get_the_title( $post_id ),
+            'applied'       => $applied,
+            'title_applied' => $title_applied,
+            'desc_applied'  => $desc_applied,
+        ] );
+    }
+
+    /**
+     * AJAX: Save a Quick Win checkbox state.
+     */
+    public static function ajax_save_quick_win() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $post_id    = intval( $_POST['post_id'] ?? 0 );
+        $issue_type = sanitize_key( $_POST['issue_type'] ?? '' );
+        $checked    = ! empty( $_POST['checked'] ) && $_POST['checked'] === '1';
+
+        $key = $post_id . '_' . $issue_type;
+        $completed = get_option( 'siloq_quick_wins_completed', [] );
+        if ( ! is_array( $completed ) ) $completed = [];
+
+        if ( $checked ) {
+            $completed[ $key ] = time();
+        } else {
+            unset( $completed[ $key ] );
+        }
+
+        update_option( 'siloq_quick_wins_completed', $completed );
+        wp_send_json_success( [ 'key' => $key, 'checked' => $checked ] );
     }
 
     // ═══════════════════════════════════════════════════════════════
