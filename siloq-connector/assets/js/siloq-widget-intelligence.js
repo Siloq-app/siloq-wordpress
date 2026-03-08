@@ -712,17 +712,163 @@
 
     function renderWILinkRow(page) {
         var linked = page.already_linked;
+        var isHub  = page.hub_link === true;
         var typeColors = {apex_hub:'#7c3aed', hub:'#4f46e5', spoke:'#0891b2', supporting:'#059669', orphan:'#9ca3af'};
         var tColor = typeColors[page.page_type] || '#6b7280';
-        return '<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px solid #f3f4f6;">'
+        var applyBtn = '';
+        if (!linked) {
+            var encodedUrl    = esc(page.url    || '');
+            var encodedAnchor = esc(page.anchor_text || page.title || '');
+            var hubFlag = isHub ? ' data-is-hub="1"' : '';
+            applyBtn = '<button class="siloq-link-apply-btn" '
+                + 'data-url="' + encodedUrl + '" '
+                + 'data-anchor="' + encodedAnchor + '"'
+                + hubFlag
+                + ' style="margin-top:3px;font-size:10px;padding:2px 8px;background:#4f46e5;color:#fff;border:none;border-radius:3px;cursor:pointer;white-space:nowrap;">'
+                + (isHub ? '⭐ Insert Hub Link' : 'Insert Link')
+                + '</button>';
+        }
+        return '<div class="siloq-link-row" style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid #f3f4f6;'
+            + (isHub ? 'background:#f5f3ff;margin:0 -8px;padding:6px 8px;border-left:3px solid #7c3aed;' : '') + '">'
             + '<span style="margin-top:2px;font-size:10px;">' + (linked ? '✅' : '⬜') + '</span>'
             + '<div style="flex:1;min-width:0;">'
-            + '<a href="' + esc(page.url || '#') + '" target="_blank" style="font-size:11px;font-weight:600;color:#1e40af;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-            + esc(page.title) + '</a>'
+            + '<a href="' + esc(page.url || '#') + '" target="_blank" style="font-size:11px;font-weight:' + (isHub ? '700' : '600') + ';color:#1e40af;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+            + esc(page.title) + (isHub ? ' <span style="font-size:9px;color:#7c3aed;">(hub)</span>' : '') + '</a>'
             + '<span style="font-size:10px;color:' + tColor + ';font-weight:600;">' + esc(page.page_type || '') + '</span>'
-            + (!linked && page.anchor_text ? '<span style="font-size:10px;color:#6b7280;"> · anchor: "' + esc(page.anchor_text) + '"</span>' : '')
+            + (page.anchor_text && !linked ? '<span style="font-size:10px;color:#6b7280;"> · "' + esc(page.anchor_text) + '"</span>' : '')
+            + '<br>' + applyBtn
             + '</div>'
             + '</div>';
+    }
+
+    // ── Insert link into Elementor content ────────────────────────────────
+    // Finds anchor text in text-editor widgets and wraps it with <a href>.
+    // Falls back to appending a "See also" section if anchor text not found.
+    $(document).on('click', '.siloq-link-apply-btn', function() {
+        var $btn    = $(this);
+        var url     = $btn.data('url');
+        var anchor  = $btn.data('anchor');
+        var isHub   = $btn.data('is-hub');
+
+        if (!url || !anchor) return;
+        $btn.text('Inserting...').prop('disabled', true);
+
+        var applied = siloqInsertLink(url, String(anchor), !!isHub);
+
+        if (applied === true) {
+            $btn.text('✅ Inserted').css({'background':'#059669'});
+            $btn.closest('.siloq-link-row').find('> span:first-child').text('✅');
+            // Mark Elementor as changed
+            if (window.elementor && elementor.saver) {
+                elementor.saver.setFlagEditorChange(true);
+            }
+        } else if (applied === 'exists') {
+            $btn.text('Already linked').css({'background':'#6b7280'});
+        } else {
+            // Not found in content — offer append
+            $btn.text('Not found in content').css({'background':'#f59e0b','color':'#1c1917'});
+            var $append = $('<button style="margin-left:4px;font-size:10px;padding:2px 6px;background:#e0e7ff;color:#3730a3;border:none;border-radius:3px;cursor:pointer;">Add at bottom?</button>');
+            $btn.after($append);
+            $append.on('click', function() {
+                var appended = siloqAppendLink(url, anchor);
+                if (appended) {
+                    $btn.text('✅ Added at bottom').css({'background':'#059669','color':'#fff'});
+                    $append.remove();
+                    if (window.elementor && elementor.saver) elementor.saver.setFlagEditorChange(true);
+                } else {
+                    $append.text('Could not add — no text widget found').css({'background':'#fef2f2','color':'#991b1b'});
+                }
+            });
+            $btn.prop('disabled', false);
+        }
+    });
+
+    /**
+     * Walk Elementor model elements and insert <a href> around first occurrence of anchorText.
+     * Returns true if inserted, 'exists' if already linked, false if not found.
+     */
+    function siloqInsertLink(url, anchorText, preferLast) {
+        if (!window.elementor) return false;
+        var container = elementor.getPreviewContainer ? elementor.getPreviewContainer() : null;
+        if (!container) return false;
+
+        var result = false;
+        var alreadyLinked = false;
+
+        function escRegex(s) {
+            return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        }
+
+        function walkElements(elements) {
+            if (!elements || !elements.length) return;
+            elements.each(function(element) {
+                if (result) return;
+                var widgetType = element.get('widgetType');
+                // Target: text-editor, heading (for anchor), theme-post-content
+                if (widgetType === 'text-editor' || widgetType === 'theme-post-content') {
+                    var content = element.getSetting('editor') || '';
+                    if (!content) return;
+
+                    // Already has this exact link?
+                    var linkPattern = new RegExp('<a[^>]+href=["\']' + escRegex(url) + '["\'][^>]*>', 'i');
+                    if (linkPattern.test(content)) {
+                        alreadyLinked = true;
+                        return;
+                    }
+
+                    // Find anchor text not already inside an <a> tag
+                    // Regex: anchorText surrounded by word boundaries, not inside HTML tag
+                    var searchRegex = new RegExp('(?<![">])\\b(' + escRegex(anchorText) + ')\\b(?![^<]*>)', 'i');
+                    if (searchRegex.test(content)) {
+                        var newContent = content.replace(searchRegex, '<a href="' + url + '">$1</a>');
+                        element.setSetting('editor', newContent);
+                        result = true;
+                    }
+                }
+                var children = element.get('elements');
+                if (children && children.length) walkElements(children);
+            });
+        }
+
+        try {
+            walkElements(container.model.get('elements'));
+        } catch(e) {
+            console.error('Siloq link insert error:', e);
+        }
+
+        if (alreadyLinked) return 'exists';
+        return result;
+    }
+
+    /**
+     * Append a "See also: [anchor](url)" paragraph to the last text-editor widget.
+     */
+    function siloqAppendLink(url, anchorText) {
+        if (!window.elementor) return false;
+        var container = elementor.getPreviewContainer ? elementor.getPreviewContainer() : null;
+        if (!container) return false;
+
+        var lastTextWidget = null;
+
+        function walkForLast(elements) {
+            if (!elements || !elements.length) return;
+            elements.each(function(element) {
+                if (element.get('widgetType') === 'text-editor') lastTextWidget = element;
+                var children = element.get('elements');
+                if (children && children.length) walkForLast(children);
+            });
+        }
+
+        try {
+            walkForLast(container.model.get('elements'));
+        } catch(e) { return false; }
+
+        if (!lastTextWidget) return false;
+
+        var current = lastTextWidget.getSetting('editor') || '';
+        var appendHtml = '\n<p>See also: <a href="' + url + '">' + anchorText + '</a></p>';
+        lastTextWidget.setSetting('editor', current + appendHtml);
+        return true;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

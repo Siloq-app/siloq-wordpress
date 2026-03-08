@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.134
+* Version: 1.5.135
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.134');
+define('SILOQ_VERSION', '1.5.135');
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -1360,7 +1360,29 @@ class Siloq_Connector {
                 );
             }
 
-            $architecture[] = array('title' => $title, 'type' => $arch_type, 'id' => $post_id, 'score' => $score);
+            // Include parent hub_id so JS can group spokes under their hub in the tree
+            $hub_id = 0;
+            if ( $arch_type === 'spoke' || $arch_type === 'supporting' ) {
+                $hub_id = (int) get_post_meta( $post_id, '_siloq_service_area_hub_id', true );
+                if ( ! $hub_id ) {
+                    // Fall back to silo_data parent
+                    $silo = get_post_meta( $post_id, '_siloq_silo_data', true );
+                    if ( is_array( $silo ) && ! empty( $silo['hub_post_id'] ) ) {
+                        $hub_id = (int) $silo['hub_post_id'];
+                    }
+                }
+            }
+
+            $architecture[] = array(
+                'title'    => $title,
+                'type'     => $arch_type,
+                'id'       => $post_id,
+                'score'    => $score,
+                'hub_id'   => $hub_id,
+                'edit_url' => $edit_url,
+                'el_url'   => $elementor_url,
+                'url'      => get_permalink( $post_id ),
+            );
 
             // Extract issues from analysis
             if (isset($analysis['issues']) && is_array($analysis['issues'])) {

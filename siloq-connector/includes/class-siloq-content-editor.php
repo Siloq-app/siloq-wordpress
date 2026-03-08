@@ -277,10 +277,44 @@ class Siloq_Content_Editor {
         $hierarchy = [ 'apex_hub' => 5, 'hub' => 4, 'spoke' => 3, 'supporting' => 2, 'orphan' => 1 ];
         $current_rank = $hierarchy[ $current_type ] ?? 2;
 
-        $should_link_to   = [];  // Pages THIS page should link TO (higher → lower)
-        $should_link_from = [];  // Pages that should link TO this page (lower ranks link up)
+        $should_link_to   = [];  // Pages THIS page should link TO
+        $should_link_from = [];  // Pages that should link TO this page
+
+        // ── Hub link: spoke/supporting pages ALWAYS link to their parent hub ──
+        // This is the most important SEO link on any city/service page.
+        $parent_hub_id = (int) get_post_meta( $post_id, '_siloq_service_area_hub_id', true );
+        if ( ! $parent_hub_id ) {
+            $silo = get_post_meta( $post_id, '_siloq_silo_data', true );
+            if ( is_array( $silo ) && ! empty( $silo['hub_post_id'] ) ) {
+                $parent_hub_id = (int) $silo['hub_post_id'];
+            }
+        }
+
+        if ( $parent_hub_id && $parent_hub_id !== $post_id ) {
+            $hub_post = get_post( $parent_hub_id );
+            if ( $hub_post ) {
+                $hub_url = get_permalink( $parent_hub_id );
+                $hub_analysis_raw = get_post_meta( $parent_hub_id, '_siloq_analysis_data', true );
+                $hub_analysis     = is_array( $hub_analysis_raw ) ? $hub_analysis_raw : json_decode( $hub_analysis_raw, true );
+                $hub_anchor = ( is_array( $hub_analysis ) && ! empty( $hub_analysis['primary_keyword'] ) )
+                    ? $hub_analysis['primary_keyword']
+                    : $hub_post->post_title;
+                $should_link_to[] = [
+                    'id'             => $parent_hub_id,
+                    'title'          => $hub_post->post_title,
+                    'url'            => $hub_url,
+                    'page_type'      => 'hub',
+                    'anchor_text'    => $hub_anchor,
+                    'already_linked' => in_array( $hub_url, $existing_links, true ),
+                    'hub_link'       => true, // pinned to top
+                ];
+            }
+        }
 
         foreach ( $all_posts as $page ) {
+            // Skip the hub we already added above
+            if ( $parent_hub_id && $page->ID === $parent_hub_id ) continue;
+
             $page_type  = self::get_page_type( $page->ID );
             $page_rank  = $hierarchy[ $page_type ] ?? 2;
             $page_url   = get_permalink( $page->ID );
@@ -303,11 +337,26 @@ class Siloq_Content_Editor {
                 'already_linked' => $already_linked,
             ];
 
-            // This page (hub/apex) should link DOWN to lower-rank pages
+            // Hub/apex pages link DOWN to all spokes/supporting
+            if ( $current_type === 'hub' || $current_type === 'apex_hub' ) {
+                if ( $page_rank <= 3 ) $should_link_to[] = $entry;
+                continue;
+            }
+            // Spoke/supporting pages link to hub (handled above) + same-silo siblings
+            if ( in_array( $current_type, [ 'spoke', 'supporting' ], true ) ) {
+                // Same-silo sibling
+                $sibling_hub = (int) get_post_meta( $page->ID, '_siloq_service_area_hub_id', true );
+                if ( $parent_hub_id && $sibling_hub === $parent_hub_id ) {
+                    $should_link_to[] = $entry;
+                }
+                // Hub-type pages should link to this page
+                if ( $page_rank >= 4 ) $should_link_from[] = $entry;
+                continue;
+            }
+            // Default: higher-rank links down, lower-rank links up
             if ( $current_rank > $page_rank && $current_rank >= 3 ) {
                 $should_link_to[] = $entry;
             }
-            // Higher-rank pages should link TO this page
             if ( $page_rank > $current_rank ) {
                 $should_link_from[] = $entry;
             }

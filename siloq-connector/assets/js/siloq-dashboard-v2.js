@@ -136,26 +136,63 @@
     // Architecture tree
     var $archContent = $('#siloq-architecture-content');
     if (data.architecture && data.architecture.length) {
-      var html = '<ul class="siloq-tree">';
+      // Group nodes: hubs first, then nest spokes/supporting under their hub
+      var hubs   = {}; // id → node
+      var spokes = {}; // hub_id → [nodes]
+      var top    = []; // nodes with no parent (apex_hub, hub, orphan, pending, flat)
+
       data.architecture.forEach(function (node) {
-        var cls = 'siloq-tree--' + (node.type || 'spoke');
-        var label = node.title;
-        var extra = '';
-        if (node.type === 'pending') {
-          extra = ' <span style="color:#999;font-size:11px;">(not yet analyzed)</span>';
-        } else if (node.type === 'orphan') {
-          extra = ' <span style="color:#f59e0b;font-size:11px;">(no structure assigned)</span>';
-        } else if (node.type === 'hub') {
-          extra = ' <span style="color:#0ea5e9;font-size:11px;">HUB</span>';
-        } else if (node.type === 'missing') {
-          extra = ' <button class="siloq-btn siloq-btn--sm siloq-btn--outline">Create</button>';
+        if (node.type === 'hub' || node.type === 'apex_hub') {
+          hubs[node.id] = node;
+          hubs[node.id]._children = [];
         }
-        html += '<li class="' + cls + '">' + escHtml(label) + extra + '</li>';
       });
-      html += '</ul>';
-      $archContent.html(html);
+
+      data.architecture.forEach(function (node) {
+        if (node.type === 'hub' || node.type === 'apex_hub') {
+          top.push(node);
+        } else if (node.hub_id && hubs[node.hub_id]) {
+          hubs[node.hub_id]._children.push(node);
+        } else {
+          top.push(node);
+        }
+      });
+
+      function nodeHtml(node, depth) {
+        var indent = depth * 18;
+        var typeColors = {
+          'apex_hub':  '#7c3aed',
+          'hub':       '#0ea5e9',
+          'spoke':     '#059669',
+          'supporting':'#6b7280',
+          'orphan':    '#f59e0b',
+          'pending':   '#9ca3af',
+        };
+        var color = typeColors[node.type] || '#6b7280';
+        var badge = '';
+        if (node.type === 'apex_hub') badge = '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border-radius:3px;padding:1px 5px;margin-left:5px;">APEX HUB</span>';
+        else if (node.type === 'hub')  badge = '<span style="font-size:10px;font-weight:700;color:#0ea5e9;background:#e0f2fe;border-radius:3px;padding:1px 5px;margin-left:5px;">HUB</span>';
+        else if (node.type === 'orphan') badge = '<span style="font-size:10px;color:#f59e0b;margin-left:5px;">(no structure assigned)</span>';
+        else if (node.type === 'pending') badge = '<span style="font-size:10px;color:#9ca3af;margin-left:5px;">(not yet analyzed)</span>';
+        var link = node.el_url
+          ? '<a href="' + escAttr(node.el_url) + '" target="_blank" style="color:' + color + ';text-decoration:none;font-size:13px;font-weight:' + (depth === 0 ? '600' : '400') + ';">' + escHtml(node.title) + '</a>'
+          : '<span style="color:' + color + ';font-size:13px;">' + escHtml(node.title) + '</span>';
+        var connector = depth > 0 ? '<span style="color:#d1d5db;margin-right:4px;">└─</span>' : '';
+        var html = '<div style="display:flex;align-items:center;padding:5px 0;padding-left:' + indent + 'px;border-bottom:1px solid #f9fafb;">'
+          + connector + link + badge + '</div>';
+        if (node._children && node._children.length) {
+          node._children.forEach(function (child) {
+            html += nodeHtml(child, depth + 1);
+          });
+        }
+        return html;
+      }
+
+      var html = '';
+      top.forEach(function (node) { html += nodeHtml(node, 0); });
+      $archContent.html('<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">' + html + '</div>');
     } else {
-      $archContent.html('<p class="siloq-empty-hint">All pages are orphans &mdash; assign page types to build your structure.</p>');
+      $archContent.html('<p class="siloq-empty-hint">All pages are orphans &mdash; sync pages and assign page types to build your structure.</p>');
     }
 
     // Priority actions
