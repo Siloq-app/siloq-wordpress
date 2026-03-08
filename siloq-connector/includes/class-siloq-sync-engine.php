@@ -35,7 +35,20 @@ class Siloq_Sync_Engine {
         if (!current_user_can('edit_post', $post_id)) {
             return array('success' => false, 'message' => 'Insufficient permissions');
         }
-        
+
+        // Auto-publish Siloq-created hub/service-area pages that are still drafts
+        if ( $post->post_status === 'draft' ) {
+            $page_role = get_post_meta( $post_id, '_siloq_page_role', true );
+            if (
+                in_array( $page_role, array( 'hub', 'apex_hub', 'service_areas' ) ) ||
+                strpos( $post->post_name, 'service-area' ) !== false ||
+                strpos( strtolower( $post->post_title ), 'service area' ) !== false
+            ) {
+                wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ) );
+                $post = get_post( $post_id ); // refresh
+            }
+        }
+
         // Prepare page data
         $page_data = array(
             'wp_post_id' => $post->ID,
@@ -86,12 +99,30 @@ class Siloq_Sync_Engine {
      */
     public function sync_all_pages($offset = 0, $batch_size = 50) {
         // BUG 4 FIX: Fetch ALL posts with numberposts=-1 to sync every page
+        // Include drafts so Siloq-created hub/service-area pages get synced even if not manually published
         $all_posts = get_posts( array(
             'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => 'publish',
+            'post_status' => array( 'publish', 'draft' ),
             'numberposts' => -1,
             'fields'      => 'ids',
         ) );
+
+        // Auto-publish any draft hub or service-areas pages before syncing
+        // These were created by Siloq and should be live (user may not have manually published them)
+        foreach ( $all_posts as $pid ) {
+            $p = get_post( $pid );
+            if ( ! $p || $p->post_status !== 'draft' ) continue;
+            $slug      = $p->post_name;
+            $page_role = get_post_meta( $pid, '_siloq_page_role', true );
+            // Publish if it's a service-areas/hub page created by Siloq
+            if (
+                in_array( $page_role, array( 'hub', 'apex_hub', 'service_areas' ) ) ||
+                strpos( $slug, 'service-area' ) !== false ||
+                strpos( strtolower( $p->post_title ), 'service area' ) !== false
+            ) {
+                wp_update_post( array( 'ID' => $pid, 'post_status' => 'publish' ) );
+            }
+        }
 
         $synced_count = 0;
         $error_count  = 0;

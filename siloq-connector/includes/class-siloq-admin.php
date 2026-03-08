@@ -2062,7 +2062,13 @@ if ($has_plan && isset($plan_data['issues'])) {
                     'issue'        => $iss['issue'],
                     'score'        => $sc,
                     'severity'     => $sev,
-                    'elementor_url'=> isset($iss['elementor_url']) ? $iss['elementor_url'] : admin_url('post.php?post=' . $pid . '&action=elementor'),
+                    'post_id'      => $pid,
+                    'fix_type'     => $iss['fix_type'] ?? 'link',
+                    'fix_category' => $iss['fix_category'] ?? 'content',
+                    // Only use elementor_url for content issues; meta issues always use WP editor
+                    'elementor_url'=> (isset($iss['fix_type']) && in_array($iss['fix_type'], ['meta_title','meta_description']))
+                        ? get_edit_post_link($pid, 'raw')
+                        : (isset($iss['elementor_url']) ? $iss['elementor_url'] : admin_url('post.php?post=' . $pid . '&action=elementor')),
                 );
             }
         }
@@ -2668,7 +2674,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             $c_an = is_array($c_raw) ? $c_raw : (is_string($c_raw) ? json_decode($c_raw, true) : array());
             $c_sc = isset($c_an['score']) ? intval($c_an['score']) : 0;
             $c_sc_cls = $c_sc >= 75 ? 'good' : ($c_sc >= 50 ? 'ok' : 'bad');
-            $c_edit = admin_url('post.php?post=' . $child->ID . '&action=elementor');
+            $c_edit = get_edit_post_link( $child->ID, 'raw' ); // WP editor (not Elementor) so AIOSEO panel is visible
           ?>
           <div class="siloq-spoke-card">
             <div class="siloq-spoke-top">
@@ -2732,7 +2738,18 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
       <?php if ($ap['score'] > 0): ?>
       <div class="siloq-page-score-badge <?php echo $ap_sc_cls; ?>"><?php echo $ap['score']; ?></div>
       <?php endif; ?>
-      <a href="<?php echo esc_url($ap['elementor_url']); ?>" class="siloq-page-fix-link">Fix &rarr;</a>
+      <?php
+        $ap_fix_type = $ap['fix_type'] ?? 'link';
+        $ap_post_id  = $ap['post_id'] ?? 0;
+        if ($ap_fix_type === 'meta_title' && $ap_post_id):
+      ?><button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_meta" data-post-id="<?php echo intval($ap_post_id); ?>" data-type="title" style="font-size:10px;padding:3px 9px;white-space:nowrap;">Fix It</button>
+      <?php elseif ($ap_fix_type === 'meta_description' && $ap_post_id): ?>
+      <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_meta" data-post-id="<?php echo intval($ap_post_id); ?>" data-type="description" style="font-size:10px;padding:3px 9px;white-space:nowrap;">Fix It</button>
+      <?php elseif ($ap_fix_type === 'schema' && $ap_post_id): ?>
+      <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_schema" data-post-id="<?php echo intval($ap_post_id); ?>" style="font-size:10px;padding:3px 9px;white-space:nowrap;">Fix It</button>
+      <?php elseif (!empty($ap['elementor_url'])): ?>
+      <a href="<?php echo esc_url($ap['elementor_url']); ?>" target="_blank" class="siloq-page-fix-link">Fix &rarr;</a>
+      <?php endif; ?>
     </div>
     <?php endforeach; ?>
     <?php endif; ?>
@@ -4389,8 +4406,13 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             $post_id     = $p->ID;
             $title       = get_the_title($post_id);
             $edit_url    = get_edit_post_link($post_id, 'raw');
+            // el_url is ONLY used for content/H1 issues that require the visual editor
+            // Meta title/description always use edit_url (WP editor where AIOSEO panel lives)
             $el_url      = admin_url('post.php?post=' . $post_id . '&action=elementor');
             $score       = 100;
+
+            $formula_title = self::siloq_formula_seo_title($post_id);
+            $formula_desc  = self::siloq_formula_meta_desc($post_id);
 
             // ── Meta title ──────────────────────────────────────────────────
             $seo_title = self::siloq_get_page_title($post_id);
@@ -4398,9 +4420,13 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             if (!$has_seo_title) {
                 $score -= 10;
                 $actions[] = array('headline' => 'Add SEO title to "' . $title . '"',
-                    'detail' => 'Missing SEO title tag. Siloq will write one from your primary keyword.',
-                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
-                $issues['important'][] = array('title' => $title, 'issue' => 'Missing SEO title', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                    'detail' => 'Missing SEO title tag. Siloq will write one automatically.',
+                    'priority' => 'high', 'post_id' => $post_id,
+                    'fix_category' => 'auto', 'fix_type' => 'meta_title', 'formula' => $formula_title,
+                    'edit_url' => $edit_url, 'elementor_url' => $edit_url); // WP editor, never Elementor
+                $issues['important'][] = array('title' => $title, 'issue' => 'Missing SEO title',
+                    'fix_category' => 'auto', 'fix_type' => 'meta_title', 'formula' => $formula_title,
+                    'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $edit_url);
             }
 
             // ── Meta description ────────────────────────────────────────────
@@ -4411,8 +4437,12 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                 $score -= 15;
                 $actions[] = array('headline' => 'Add meta description to "' . $title . '"',
                     'detail' => $broken ? 'Meta description contains full page content. Siloq will generate a proper summary.' : 'Missing meta description reduces CTR. Siloq will generate one.',
-                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
-                $issues['important'][] = array('title' => $title, 'issue' => 'Missing meta description', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                    'priority' => 'high', 'post_id' => $post_id,
+                    'fix_category' => 'auto', 'fix_type' => 'meta_description', 'formula' => $formula_desc,
+                    'edit_url' => $edit_url, 'elementor_url' => $edit_url); // WP editor, never Elementor
+                $issues['important'][] = array('title' => $title, 'issue' => 'Missing meta description',
+                    'fix_category' => 'auto', 'fix_type' => 'meta_description', 'formula' => $formula_desc,
+                    'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $edit_url);
             }
 
             // ── Schema ──────────────────────────────────────────────────────
@@ -4421,8 +4451,12 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
                 $score -= 20;
                 $actions[] = array('headline' => 'Add schema markup to "' . $title . '"',
                     'detail' => 'No structured data. Schema helps AI cite this page and improves rich results.',
-                    'priority' => 'high', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
-                $issues['opportunity'][] = array('title' => $title, 'issue' => 'No schema markup', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                    'priority' => 'high', 'post_id' => $post_id,
+                    'fix_category' => 'auto', 'fix_type' => 'schema',
+                    'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $issues['opportunity'][] = array('title' => $title, 'issue' => 'No schema markup',
+                    'fix_category' => 'auto', 'fix_type' => 'schema',
+                    'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
             }
 
             // ── Thin content ────────────────────────────────────────────────
