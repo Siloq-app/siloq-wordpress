@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.158
+* Version: 1.5.159
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.158');
+define('SILOQ_VERSION', '1.5.159');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -183,22 +183,11 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
-        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-detector.php';
-        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-rules-factory.php';
-
-        // Auto-detect business type — admin only, deferred, at most once (cached in option).
-        // Wrapped in try/catch so any detector failure never breaks the plugin.
-        if ( is_admin() && ! get_option( 'siloq_business_type_auto' ) ) {
-            add_action( 'admin_init', function() {
-                try {
-                    if ( class_exists( 'Siloq_Business_Detector' ) ) {
-                        Siloq_Business_Detector::get_or_detect();
-                    }
-                } catch ( Exception $e ) {
-                    // Detection failed — not fatal, site continues without auto-type
-                }
-            } );
-        }
+        // Business intelligence classes — loaded defensively so any failure never kills the plugin.
+        $detector_file = SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-detector.php';
+        $factory_file  = SILOQ_PLUGIN_DIR . 'includes/class-siloq-rules-factory.php';
+        if ( file_exists( $detector_file ) ) { @include_once $detector_file; }
+        if ( file_exists( $factory_file ) )  { @include_once $factory_file; }
 
         // Widget Intelligence — native Elementor panel controls
         if ( is_admin() ) {
