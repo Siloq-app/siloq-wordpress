@@ -112,14 +112,129 @@
     });
   }
 
+  /* ─── Intelligence Generation (Claude-powered analysis) ─── */
+  function renderIntelligenceResult(d) {
+    var intel = d.intelligence || {};
+    var problems = intel.architecture_problems || [];
+    var gaps = intel.content_gaps || [];
+    var orphans = intel.orphan_pages || [];
+
+    var actionsHtml = '';
+    var actionCount = 0;
+
+    // Architecture problems first (high severity)
+    for (var i = 0; i < problems.length && actionCount < 6; i++) {
+      var p = problems[i];
+      var color = p.severity === 'high' ? '#dc2626' : (p.severity === 'medium' ? '#d97706' : '#6b7280');
+      var bg = p.severity === 'high' ? '#fef2f2' : (p.severity === 'medium' ? '#fffbeb' : '#f8fafc');
+      actionsHtml += '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:' + bg + ';border-radius:8px;border:1px solid #e5e7eb;margin-bottom:7px;">' +
+        '<div style="width:22px;height:22px;border-radius:6px;background:' + bg + ';border:1px solid ' + color + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:' + color + ';flex-shrink:0;">' + (i+1) + '</div>' +
+        '<div style="flex:1;"><div style="font-size:12px;font-weight:600;color:#1e293b;margin-bottom:2px;">' + $('<div>').text(p.description).html() + '</div>' +
+        '<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:' + bg + ';color:' + color + ';border:1px solid ' + color + ';">' + (p.severity || 'info') + '</span></div></div>';
+      actionCount++;
+    }
+
+    // Content gaps
+    for (var j = 0; j < gaps.length && actionCount < 8; j++) {
+      var g = gaps[j];
+      actionsHtml += '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;margin-bottom:7px;">' +
+        '<div style="width:22px;height:22px;border-radius:6px;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">+</div>' +
+        '<div style="flex:1;"><div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:2px;">Create: ' + $('<div>').text(g.title).html() + '</div>' +
+        '<span style="font-size:10px;color:#16a34a;">' + (g.type || 'page') + ' · ' + (g.priority || 'medium') + ' priority</span></div></div>';
+      actionCount++;
+    }
+
+    if (actionsHtml) {
+      $('#siloq-actions-content').html(actionsHtml);
+      $('#siloq-actions-count').text(actionCount + ' items');
+    } else {
+      $('#siloq-actions-content').html('<div style="padding:20px;text-align:center;color:#6b7280;font-size:13px;">No critical architecture issues found.</div>');
+    }
+
+    // Render Site Architecture
+    var hubs = intel.hub_pages || [];
+    var spokes = intel.spoke_pages || [];
+    var orphanPages = intel.orphan_pages || [];
+
+    var archHtml = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">' +
+      '<div style="text-align:center;padding:10px 16px;background:#f0fdf4;border-radius:8px;">' +
+      '<div style="font-size:22px;font-weight:800;color:#16a34a;">' + hubs.length + '</div><div style="font-size:11px;color:#6b7280;">Hubs</div></div>' +
+      '<div style="text-align:center;padding:10px 16px;background:#f8fafc;border-radius:8px;">' +
+      '<div style="font-size:22px;font-weight:800;color:#4f46e5;">' + spokes.length + '</div><div style="font-size:11px;color:#6b7280;">Spokes</div></div>' +
+      '<div style="text-align:center;padding:10px 16px;background:#fef2f2;border-radius:8px;">' +
+      '<div style="font-size:22px;font-weight:800;color:#dc2626;">' + orphanPages.length + '</div><div style="font-size:11px;color:#6b7280;">Orphans</div></div>' +
+      '</div>';
+
+    for (var k = 0; k < Math.min(hubs.length, 5); k++) {
+      var h = hubs[k];
+      var hubSpokes = spokes.filter(function(s) { return s.hub_page_id === h.page_id; });
+      archHtml += '<div style="padding:10px 13px;background:#f8fafc;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:7px;">' +
+        '<div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:4px;">\uD83D\uDD35 ' + $('<div>').text(h.title).html() + '</div>' +
+        '<div style="font-size:11px;color:#6b7280;">' + hubSpokes.length + ' spoke page' + (hubSpokes.length !== 1 ? 's' : '') + ' \u00B7 ' + $('<div>').text(h.reason || '').html() + '</div>' +
+        '</div>';
+    }
+
+    if (orphanPages.length > 0) {
+      archHtml += '<div style="padding:10px 13px;background:#fef2f2;border-radius:8px;border:1px solid #fca5a5;margin-bottom:7px;">' +
+        '<div style="font-size:12px;font-weight:700;color:#dc2626;margin-bottom:4px;">\u26A0 ' + orphanPages.length + ' orphaned page' + (orphanPages.length !== 1 ? 's' : '') + ' detected</div>' +
+        '<div style="font-size:11px;color:#6b7280;">These pages have no hub connection. They won\'t pass authority through your silo structure.</div></div>';
+    }
+
+    $('#siloq-architecture-content').html(archHtml || '<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">No architecture data available.</div>');
+
+    // Business type mismatch notice
+    if (d.business_type) {
+      var storedType = cfg.businessType || '';
+      if (storedType && storedType !== d.business_type) {
+        var $typeNotice = $('<div>').css({
+          'background':'#fffbeb','border':'1px solid #fcd34d','border-radius':'8px',
+          'padding':'10px 14px','margin-bottom':'12px','font-size':'13px','color':'#92400e'
+        }).html('\uD83D\uDCA1 Claude detected your site as <strong>' + d.business_type + '</strong> \u2014 currently set to <strong>' + storedType + '</strong>. <a href="' + (cfg.settingsUrl || '#') + '" style="color:#d97706;">Update in Settings \u2192</a>');
+        $('#siloq-tab-plan .siloq-plan-section').first().prepend($typeNotice);
+      }
+    }
+  }
+
   function initPlanGeneration() {
-    // Manual generate button
+    // Manual generate button — intelligence endpoint
     $(document).on('click', '.siloq-generate-plan-btn', function (e) {
       e.preventDefault();
-      loadPlanData($(this));
+      var $btn = $(this);
+      if ($btn.data('loading')) return;
+
+      $btn.data('loading', true)
+        .prop('disabled', true)
+        .html('<span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span> Analyzing your site...');
+
+      // Show generating state in Plan tab sections
+      $('#siloq-actions-content').html('<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">\uD83E\uDDE0 Claude is analyzing your site architecture...</div>');
+      $('#siloq-architecture-content').html('<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">Mapping hubs, spokes, and orphans...</div>');
+
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_generate_intelligence',
+        nonce: cfg.nonce
+      }, function (resp) {
+        $btn.data('loading', false).prop('disabled', false);
+
+        if (!resp.success) {
+          $btn.html('\u26A0 Error \u2014 Retry');
+          $('#siloq-actions-content').html(
+            '<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">' +
+            (resp.data && resp.data.message ? resp.data.message : 'Intelligence generation failed. Try again.') +
+            '</div>'
+          );
+          return;
+        }
+
+        $btn.html('\u2713 Plan Generated \u2014 Refresh to see updates');
+        renderIntelligenceResult(resp.data);
+      }).fail(function () {
+        $btn.data('loading', false).prop('disabled', false).html('\u26A0 Error \u2014 Retry');
+        $('#siloq-actions-content').html('<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">Request failed. Check your connection and try again.</div>');
+      });
     });
 
-    // Auto-load when plan tab becomes active (covers "View Priority Actions" click too)
+    // Auto-load existing plan data when plan tab becomes active
     $(document).on('click', '[aria-controls="siloq-tab-plan"], .siloq-tab-btn[aria-controls="siloq-tab-plan"]', function () {
       if (!planLoaded) {
         setTimeout(function () { loadPlanData(null); }, 100);

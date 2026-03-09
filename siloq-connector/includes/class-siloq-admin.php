@@ -6441,6 +6441,35 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
     // ═══════════════════════════════════════════════════════════════
 
     /**
+     * AJAX: Generate intelligence analysis via Siloq API.
+     */
+    public static function ajax_generate_intelligence() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Permission denied.'));
+            return;
+        }
+
+        $site_id = get_option('siloq_site_id');
+        if (!$site_id) {
+            wp_send_json_error(array('message' => 'Site not configured. Complete setup first.'));
+            return;
+        }
+
+        $result = Siloq_API_Client::generate_intelligence($site_id);
+        if (is_wp_error($result)) {
+            wp_send_json_error(array('message' => $result->get_error_message()));
+            return;
+        }
+
+        // Cache the intelligence locally so the dashboard can read it without an API call
+        update_option('siloq_site_intelligence', wp_json_encode($result), false);
+        update_option('siloq_intelligence_generated_at', current_time('mysql'));
+
+        wp_send_json_success($result);
+    }
+
+    /**
      * AJAX: Apply schema to a single page — called sequentially by the JS bulk processor.
      * The JS calls this once per page with a 1-second delay between calls.
      */
