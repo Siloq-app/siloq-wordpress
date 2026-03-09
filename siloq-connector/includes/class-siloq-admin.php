@@ -640,6 +640,13 @@ class Siloq_Admin {
                                             <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
                                         </select>
                                         <p class="description"><?php _e('Helps Siloq suggest the best content structure.', 'siloq-connector'); ?></p>
+                                        <?php
+                                        $detected_type = get_option('siloq_business_type_auto', '');
+                                        $effective_type = Siloq_Business_Detector::get_effective_type();
+                                        if ($detected_type && empty(get_option('siloq_business_type'))) {
+                                            echo '<p class="description" style="color:#059669;">✓ Auto-detected: ' . esc_html(Siloq_Business_Detector::get_label($detected_type)) . '. Override above if incorrect.</p>';
+                                        }
+                                        ?>
                                     </td>
                                 </tr>
                                 <tr>
