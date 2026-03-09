@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.142
+* Version: 1.5.143
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.142');
+define('SILOQ_VERSION', '1.5.143');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -353,13 +353,6 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_detect_service_hub',         array($this, 'ajax_detect_service_hub'));
         add_action('wp_ajax_siloq_toggle_redirect',            array('Siloq_Admin', 'ajax_toggle_redirect'));
 
-        // Redirect manager AJAX
-        add_action('wp_ajax_siloq_get_redirects',        array($this, 'ajax_get_redirects'));
-        add_action('wp_ajax_siloq_add_redirect',         array($this, 'ajax_add_redirect'));
-        add_action('wp_ajax_siloq_delete_redirect',      array($this, 'ajax_delete_redirect'));
-        add_action('wp_ajax_siloq_toggle_redirect',      array($this, 'ajax_toggle_redirect'));
-        add_action('wp_ajax_siloq_bulk_add_redirects',   array($this, 'ajax_bulk_add_redirects'));
-        add_action('wp_ajax_siloq_preview_city_redirects', array($this, 'ajax_preview_city_redirects'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
         // Agent Ready — llms.txt, Authority Manifest, AI Visibility Audit (v1.5.139)
