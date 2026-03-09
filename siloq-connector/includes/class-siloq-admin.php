@@ -5604,8 +5604,13 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
             $fields[] = ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)];
             $fields[] = ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)];
         } elseif ($eff_biz_type === 'ecommerce') {
-            // Ecommerce: services less critical; address less critical; WooCommerce presence matters
-            $fields[] = ['key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => function_exists('wc_get_product') && get_terms(['taxonomy'=>'product_cat','hide_empty'=>true,'number'=>1]) ? true : (is_array($services) && !empty($services))];
+            // Ecommerce: product categories configured or WooCommerce active with products
+            $wc_has_cats = false;
+            if (function_exists('wc_get_product')) {
+                $wc_cats = get_terms(array('taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 1));
+                $wc_has_cats = !is_wp_error($wc_cats) && !empty($wc_cats);
+            }
+            $fields[] = ['key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => $wc_has_cats || (is_array($services) && !empty($services))];
         } elseif ($eff_biz_type === 'event_venue') {
             // Event venue: services = event types; no service areas
             $fields[] = ['key' => 'primary_services', 'label' => 'Event Types Offered', 'weight' => 40, 'filled' => is_array($services) && !empty($services)];
