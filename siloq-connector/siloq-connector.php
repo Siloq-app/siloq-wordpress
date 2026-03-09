@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.137
+* Version: 1.5.138
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,11 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.137');
+define('SILOQ_VERSION', '1.5.138');
+
+if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
+    define( "SILOQ_EXCLUDED_POST_TYPES", ["jet-engine","jet-engine-taxonomy","e-loop-item","elementor_library","acf-field-group","acf-field","revision","nav_menu_item","custom_css","wp_block","wp_template","wp_template_part","wp_navigation","oembed_cache","wpcode"] );
+}
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
 // WordPress-dependent constants will be defined when WordPress is loaded
@@ -160,6 +164,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-admin-metabox.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-faq-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-debug-logger.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
@@ -365,6 +370,12 @@ class Siloq_Connector {
         add_action('wp_ajax_nopriv_siloq_run_audit_background', array($this, 'ajax_run_audit_background'));
         add_action('wp_ajax_siloq_audit_status',         array($this, 'ajax_audit_status'));
         add_action('siloq_audit_cron_job',               array($this, 'run_audit_cron_job'));
+
+        // Debug logging AJAX
+        add_action('wp_ajax_siloq_toggle_debug',       array('Siloq_Admin', 'ajax_toggle_debug'));
+        add_action('wp_ajax_siloq_get_debug_log',      array('Siloq_Admin', 'ajax_get_debug_log'));
+        add_action('wp_ajax_siloq_clear_debug_log',    array('Siloq_Admin', 'ajax_clear_debug_log'));
+        add_action('wp_ajax_siloq_download_debug_log', array('Siloq_Admin', 'ajax_download_debug_log'));
 
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));

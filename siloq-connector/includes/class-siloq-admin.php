@@ -994,6 +994,39 @@ class Siloq_Admin {
                     </div>
                 </form>
                 
+                <!-- Debug Card -->
+                <div class="siloq-card siloq-debug-card">
+                    <h2>
+                        <button type="button" class="siloq-toggle-debug-section" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;padding:0;font:inherit;color:inherit;">
+                            <span class="dashicons dashicons-admin-tools"></span>
+                            <span><?php _e('Debug Logging', 'siloq-connector'); ?></span>
+                            <span class="dashicons dashicons-arrow-down-alt2 siloq-debug-icon" style="margin-left:auto;"></span>
+                        </button>
+                    </h2>
+                    <div class="siloq-debug-content" style="display:none;">
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row"><?php _e('Debug Mode', 'siloq-connector'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" id="siloq_debug_toggle" <?php checked( get_option('siloq_debug_mode') ); ?>>
+                                        <?php _e('Enable debug logging', 'siloq-connector'); ?>
+                                    </label>
+                                    <span id="siloq-debug-toggle-status" style="margin-left:8px;"></span>
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="margin-top:12px;display:flex;gap:8px;">
+                            <button type="button" id="siloq-clear-debug-log" class="button"><?php _e('Clear Log', 'siloq-connector'); ?></button>
+                            <button type="button" id="siloq-download-debug-log" class="button"><?php _e('Download Log', 'siloq-connector'); ?></button>
+                        </div>
+                        <div style="margin-top:12px;">
+                            <h4 style="margin-bottom:6px;"><?php _e('Last 50 Log Lines', 'siloq-connector'); ?></h4>
+                            <pre id="siloq-debug-log-viewer" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:4px;max-height:400px;overflow:auto;font-size:12px;line-height:1.5;white-space:pre-wrap;"><?php _e('Loading...', 'siloq-connector'); ?></pre>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Help Card -->
                 <div class="siloq-card siloq-help-card">
                     <h2><?php _e('Need Help?', 'siloq-connector'); ?></h2>
@@ -1610,6 +1643,77 @@ class Siloq_Admin {
                 });
             })();
             <?php endif; ?>
+
+            // ── Debug Logging Tab ────────────────────────────────────────
+            (function() {
+                var nonce = '<?php echo wp_create_nonce("siloq_debug_nonce"); ?>';
+                var debugOn = <?php echo get_option('siloq_debug_mode') ? 'true' : 'false'; ?>;
+                var refreshTimer = null;
+
+                $('.siloq-toggle-debug-section').on('click', function() {
+                    var content = $('.siloq-debug-content');
+                    var icon = $(this).find('.siloq-debug-icon');
+                    content.slideToggle(300, function() {
+                        icon.toggleClass('dashicons-arrow-down-alt2 dashicons-arrow-up-alt2');
+                    });
+                    if (!content.is(':visible')) loadDebugLog();
+                });
+
+                function loadDebugLog() {
+                    $.post(ajaxurl, {action: 'siloq_get_debug_log', nonce: nonce}, function(r) {
+                        if (r.success) {
+                            $('#siloq-debug-log-viewer').text(r.data.log || '(empty)');
+                        }
+                    });
+                }
+
+                function startAutoRefresh() {
+                    stopAutoRefresh();
+                    if (debugOn) {
+                        refreshTimer = setInterval(loadDebugLog, 30000);
+                    }
+                }
+                function stopAutoRefresh() {
+                    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+                }
+
+                $('#siloq_debug_toggle').on('change', function() {
+                    var enabled = $(this).is(':checked');
+                    $.post(ajaxurl, {action: 'siloq_toggle_debug', nonce: nonce, enabled: enabled ? 1 : 0}, function(r) {
+                        if (r.success) {
+                            debugOn = enabled;
+                            $('#siloq-debug-toggle-status').text(enabled ? 'Enabled' : 'Disabled').css('color', enabled ? '#16a34a' : '#888');
+                            if (enabled) startAutoRefresh(); else stopAutoRefresh();
+                        }
+                    });
+                });
+
+                $('#siloq-clear-debug-log').on('click', function() {
+                    $.post(ajaxurl, {action: 'siloq_clear_debug_log', nonce: nonce}, function(r) {
+                        if (r.success) {
+                            $('#siloq-debug-log-viewer').text('(cleared)');
+                        }
+                    });
+                });
+
+                $('#siloq-download-debug-log').on('click', function() {
+                    $.post(ajaxurl, {action: 'siloq_download_debug_log', nonce: nonce}, function(r) {
+                        if (r.success && r.data.content) {
+                            var blob = new Blob([r.data.content], {type: 'text/plain'});
+                            var a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = 'siloq_debug.log';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        }
+                    });
+                });
+
+                // Initial load if section is visible
+                if ($('.siloq-debug-content').is(':visible')) loadDebugLog();
+                startAutoRefresh();
+            })();
         })(jQuery);
         </script>
         <?php
@@ -1877,7 +1981,7 @@ class Siloq_Admin {
 
         // Insight data
         $synced_post_types = function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post');
-        $synced_pages = get_posts(array('post_type' => $synced_post_types, 'meta_query' => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')), 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids'));
+        $synced_pages = get_posts(array('post_type' => $synced_post_types, 'post_type__not_in' => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [], 'meta_query' => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')), 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids'));
         $hub_count = 0; $orphan_count = 0; $missing_count = 0;
         if ($has_plan) {
             $hub_count = isset($plan_data['hub_count']) ? intval($plan_data['hub_count']) : 0;
@@ -4390,9 +4494,10 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             : array('page', 'post');
 
         $posts = get_posts(array(
-            'post_type'      => $post_types,
-            'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'post_type'          => $post_types,
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => 'publish',
+            'posts_per_page'     => -1,
         ));
 
         if (empty($posts)) return null;
@@ -4499,9 +4604,10 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             : array('page', 'post');
 
         $posts = get_posts(array(
-            'post_type'      => $post_types,
-            'post_status'    => 'publish',
-            'posts_per_page' => -1,
+            'post_type'          => $post_types,
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => 'publish',
+            'posts_per_page'     => -1,
         ));
 
         if (empty($posts)) {
@@ -5638,5 +5744,39 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             'target_prefix' => $target_prefix,
             'hub_slug'      => $hub_slug,
         ] );
+    }
+
+    // ── Debug Logging AJAX Handlers ──────────────────────────────────────
+
+    public static function ajax_toggle_debug() {
+        check_ajax_referer( 'siloq_debug_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Forbidden' );
+        $enabled = ! empty( $_POST['enabled'] );
+        update_option( 'siloq_debug_mode', $enabled ? 1 : 0 );
+        wp_send_json_success( array( 'enabled' => $enabled ) );
+    }
+
+    public static function ajax_get_debug_log() {
+        check_ajax_referer( 'siloq_debug_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Forbidden' );
+        $logger = Siloq_Debug_Logger::get_instance();
+        $lines  = $logger->get_last_lines( 50 );
+        wp_send_json_success( array( 'log' => implode( '', $lines ) ) );
+    }
+
+    public static function ajax_clear_debug_log() {
+        check_ajax_referer( 'siloq_debug_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Forbidden' );
+        Siloq_Debug_Logger::get_instance()->clear();
+        wp_send_json_success();
+    }
+
+    public static function ajax_download_debug_log() {
+        check_ajax_referer( 'siloq_debug_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) wp_send_json_error( 'Forbidden' );
+        $logger = Siloq_Debug_Logger::get_instance();
+        $path   = $logger->get_file_path();
+        $content = file_exists( $path ) ? file_get_contents( $path ) : '';
+        wp_send_json_success( array( 'content' => $content ) );
     }
 }

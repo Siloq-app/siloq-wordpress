@@ -264,6 +264,7 @@ class Siloq_Content_Editor {
             'post_type'      => function_exists( 'get_siloq_crawlable_post_types' )
                 ? get_siloq_crawlable_post_types()
                 : [ 'page', 'post' ],
+            'post_type__not_in' => defined( 'SILOQ_EXCLUDED_POST_TYPES' ) ? SILOQ_EXCLUDED_POST_TYPES : [],
             'post_status'    => 'publish',
             'numberposts'    => -1,
             'meta_query'     => [ [ 'key' => '_siloq_synced', 'compare' => 'EXISTS' ] ],

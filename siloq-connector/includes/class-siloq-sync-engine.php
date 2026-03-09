@@ -79,7 +79,10 @@ class Siloq_Sync_Engine {
             update_post_meta($post_id, '_siloq_synced', true);
             update_post_meta($post_id, '_siloq_synced_at', current_time('mysql'));
             update_post_meta($post_id, '_siloq_sync_data', $result['data']);
-            
+
+            // Service Areas hub auto-classification (runs on every sync)
+            $this->maybe_classify_service_areas_hub( $post );
+
             return array(
                 'success' => true,
                 'message' => 'Page synced successfully',
@@ -101,10 +104,11 @@ class Siloq_Sync_Engine {
         // BUG 4 FIX: Fetch ALL posts with numberposts=-1 to sync every page
         // Include drafts so Siloq-created hub/service-area pages get synced even if not manually published
         $all_posts = get_posts( array(
-            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => array( 'publish', 'draft' ),
-            'numberposts' => -1,
-            'fields'      => 'ids',
+            'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => array( 'publish', 'draft' ),
+            'numberposts'        => -1,
+            'fields'             => 'ids',
         ) );
 
         // Auto-publish any draft hub or service-areas pages before syncing
@@ -148,11 +152,12 @@ class Siloq_Sync_Engine {
 
         // BUG 4 FIX: Schedule auto-analysis for unanalyzed pages
         $unanalyzed = get_posts( array(
-            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => 'publish',
-            'numberposts' => -1,
-            'fields'      => 'ids',
-            'meta_query'  => array(
+            'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => 'publish',
+            'numberposts'        => -1,
+            'fields'             => 'ids',
+            'meta_query'         => array(
                 'relation' => 'AND',
                 array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
                 array( 'key' => '_siloq_analysis_score', 'compare' => 'NOT EXISTS' ),
@@ -180,10 +185,11 @@ class Siloq_Sync_Engine {
      */
     public function get_sync_status() {
         $args = array(
-            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => array('publish', 'draft'),
-            'posts_per_page' => 500,
-            'no_found_rows'  => true,
+            'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => array('publish', 'draft'),
+            'posts_per_page'     => 500,
+            'no_found_rows'      => true,
             'update_post_meta_cache' => false,
             'update_post_term_cache' => false,
             'meta_query' => array(
@@ -199,7 +205,7 @@ class Siloq_Sync_Engine {
                 )
             )
         );
-        
+
         $posts = get_posts($args);
         $total_pages = count($posts);
         $synced_pages = 0;
@@ -257,10 +263,11 @@ class Siloq_Sync_Engine {
      */
     public function sync_outdated_pages() {
         $args = array(
-            'post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_status' => array('publish', 'draft'),
-            'posts_per_page' => 500,
-            'no_found_rows'  => true,
+            'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
+            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => array('publish', 'draft'),
+            'posts_per_page'     => 500,
+            'no_found_rows'      => true,
             'update_post_meta_cache' => false,
             'update_post_term_cache' => false,
             'meta_query' => array(
@@ -275,7 +282,7 @@ class Siloq_Sync_Engine {
                 )
             )
         );
-        
+
         $posts = get_posts($args);
         $outdated_pages = array();
         
@@ -366,5 +373,157 @@ class Siloq_Sync_Engine {
         });
         
         return array_slice($history, 0, $limit);
+    }
+
+    /**
+     * Detect if a synced page is a Service Areas hub and auto-classify spokes.
+     *
+     * Runs on every sync (upsert pattern). A page is a Service Areas hub if its
+     * title contains "service area" (case-insensitive) OR its slug contains
+     * "service-area" or "service-areas".
+     *
+     * @param WP_Post $post The post that was just synced.
+     */
+    private function maybe_classify_service_areas_hub( $post ) {
+        $title_lower = strtolower( $post->post_title );
+        $slug        = $post->post_name;
+
+        $is_hub = ( strpos( $title_lower, 'service area' ) !== false )
+               || ( strpos( $slug, 'service-area' ) !== false );
+
+        if ( ! $is_hub ) {
+            return;
+        }
+
+        if ( function_exists( 'siloq_debug_log' ) ) {
+            siloq_debug_log( "Service Areas hub detected: \"{$post->post_title}\" (ID {$post->ID})" );
+        }
+
+        // Set this page's role to Hub
+        update_post_meta( $post->ID, '_siloq_page_role', 'hub' );
+
+        // Gather service areas list from business profile
+        $service_areas_raw = get_option( 'siloq_service_areas', '' );
+        $service_areas     = array();
+        if ( is_array( $service_areas_raw ) ) {
+            $service_areas = $service_areas_raw;
+        } elseif ( is_string( $service_areas_raw ) && ! empty( $service_areas_raw ) ) {
+            $decoded = json_decode( $service_areas_raw, true );
+            $service_areas = is_array( $decoded ) ? $decoded : array_filter( array_map( 'trim', explode( ',', $service_areas_raw ) ) );
+        }
+
+        // Extract just city names (strip state portion like ", MO")
+        $city_names = array();
+        foreach ( $service_areas as $area ) {
+            $parts = array_map( 'trim', explode( ',', $area ) );
+            if ( ! empty( $parts[0] ) ) {
+                $city_names[] = strtolower( $parts[0] );
+            }
+        }
+
+        // Get all synced published pages (excluding self)
+        $all_pages = get_posts( array(
+            'post_type'          => function_exists( 'get_siloq_crawlable_post_types' ) ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
+            'post_type__not_in'  => defined( 'SILOQ_EXCLUDED_POST_TYPES' ) ? SILOQ_EXCLUDED_POST_TYPES : [],
+            'post_status'        => 'publish',
+            'numberposts'        => -1,
+            'exclude'            => array( $post->ID ),
+        ) );
+
+        $has_service_areas_list = ! empty( $city_names );
+
+        foreach ( $all_pages as $candidate ) {
+            $candidate_slug  = $candidate->post_name;
+            $candidate_title = strtolower( $candidate->post_title );
+            $is_spoke        = false;
+            $confidence      = 'high';
+
+            // Check 1: Previously manually classified as Spoke for this hub
+            $existing_role   = get_post_meta( $candidate->ID, '_siloq_page_role', true );
+            $existing_hub_id = (int) get_post_meta( $candidate->ID, '_siloq_service_area_hub_id', true );
+            if ( $existing_role === 'spoke' && $existing_hub_id === $post->ID ) {
+                $is_spoke = true;
+            }
+
+            // Check 2: Title matches a city from service areas list
+            if ( ! $is_spoke && $has_service_areas_list ) {
+                foreach ( $city_names as $city ) {
+                    if ( strpos( $candidate_title, $city ) !== false ) {
+                        $is_spoke = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check 3: Slug matches city-state pattern (e.g., "kansas-city-mo")
+            if ( ! $is_spoke && preg_match( '/^[a-z]+-(?:[a-z]+-)*[a-z]{2}$/', $candidate_slug ) ) {
+                if ( $has_service_areas_list ) {
+                    // Verify slug city portion matches a known service area
+                    $slug_city = preg_replace( '/-[a-z]{2}$/', '', $candidate_slug );
+                    $slug_city_name = str_replace( '-', ' ', $slug_city );
+                    if ( in_array( $slug_city_name, $city_names, true ) ) {
+                        $is_spoke = true;
+                    }
+                } else {
+                    // No service areas list — flag as likely location page
+                    $is_spoke   = true;
+                    $confidence = 'low';
+                }
+            }
+
+            if ( ! $is_spoke ) {
+                continue;
+            }
+
+            // Check for cannibalization: already assigned to a DIFFERENT hub
+            if ( $existing_hub_id && $existing_hub_id !== $post->ID && $existing_role === 'spoke' ) {
+                update_post_meta( $candidate->ID, '_siloq_cannibalization_warning',
+                    sprintf( 'Page "%s" is spoke of hub #%d but also matches hub #%d ("%s")',
+                        $candidate->post_title, $existing_hub_id, $post->ID, $post->post_title
+                    )
+                );
+                if ( function_exists( 'siloq_debug_log' ) ) {
+                    siloq_debug_log( "Cannibalization: \"{$candidate->post_title}\" already spoke of hub #{$existing_hub_id}, skipping hub #{$post->ID}" );
+                }
+                continue;
+            }
+
+            // Assign as spoke
+            update_post_meta( $candidate->ID, '_siloq_page_role', 'spoke' );
+            update_post_meta( $candidate->ID, '_siloq_service_area_hub_id', $post->ID );
+
+            if ( $confidence === 'low' ) {
+                update_post_meta( $candidate->ID, '_siloq_location_confidence', 'low' );
+            }
+
+            // Add Priority Action: link back to Service Areas hub
+            $actions = get_post_meta( $candidate->ID, '_siloq_priority_actions', true );
+            if ( ! is_array( $actions ) ) {
+                $actions = array();
+            }
+            $action_text = sprintf( 'Add internal link from "%s" back to Service Areas', $candidate->post_title );
+            // Avoid duplicates
+            $already_has = false;
+            foreach ( $actions as $a ) {
+                if ( isset( $a['text'] ) && $a['text'] === $action_text ) {
+                    $already_has = true;
+                    break;
+                }
+            }
+            if ( ! $already_has ) {
+                $actions[] = array(
+                    'text'     => $action_text,
+                    'hub_id'   => $post->ID,
+                    'hub_title'=> $post->post_title,
+                    'type'     => 'internal_link',
+                    'created'  => current_time( 'mysql' ),
+                );
+                update_post_meta( $candidate->ID, '_siloq_priority_actions', $actions );
+            }
+
+            if ( function_exists( 'siloq_debug_log' ) ) {
+                siloq_debug_log( "Spoke assigned: \"{$candidate->post_title}\" → hub \"{$post->post_title}\" (confidence: {$confidence})" );
+            }
+        }
     }
 }
