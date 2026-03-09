@@ -304,27 +304,6 @@ class Siloq_Admin {
                     <?php _e('Siloq Settings', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('The SEO Architect — Eliminate keyword cannibalization and optimize your site structure.', 'siloq-connector'); ?></p>
-                <?php
-                try {
-                    $_dash_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', ''));
-                    $_dash_biz_auto = !get_option('siloq_business_type') && get_option('siloq_business_type_auto');
-                    if ($_dash_biz_type && class_exists('Siloq_Business_Detector')) {
-                        $label = Siloq_Business_Detector::get_label($_dash_biz_type);
-                        $badge_color = '#4f46e5';
-                        if ($_dash_biz_type === 'ecommerce') $badge_color = '#0891b2';
-                        if ($_dash_biz_type === 'event_venue') $badge_color = '#7c3aed';
-                        if ($_dash_biz_type === 'local_service' || $_dash_biz_type === 'local_service_multi') $badge_color = '#059669';
-                        echo '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-                        echo '<span style="background:' . $badge_color . ';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.3px;">' . esc_html($label) . '</span>';
-                        if ($_dash_biz_auto) {
-                            echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Auto-detected · Override in Settings →</a>';
-                        } else {
-                            echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Change in Settings →</a>';
-                        }
-                        echo '</div>';
-                    }
-                } catch (Exception $e) { /* Badge display non-critical — fail silently */ }
-                ?>
             </div>
             
             <?php settings_errors('siloq_settings'); ?>
@@ -661,12 +640,6 @@ class Siloq_Admin {
                                             <option value="other"><?php _e('Other', 'siloq-connector'); ?></option>
                                         </select>
                                         <p class="description"><?php _e('Helps Siloq suggest the best content structure.', 'siloq-connector'); ?></p>
-                                        <?php
-                                        $detected_type = get_option('siloq_business_type_auto', '');
-                                        if ($detected_type && empty(get_option('siloq_business_type')) && class_exists('Siloq_Business_Detector')) {
-                                            echo '<p class="description" style="color:#059669;">✓ Auto-detected: ' . esc_html(Siloq_Business_Detector::get_label($detected_type)) . '. Override above if incorrect.</p>';
-                                        }
-                                        ?>
                                     </td>
                                 </tr>
                                 <tr>
@@ -2096,14 +2069,6 @@ $all_synced_pages = get_posts(array(
     'posts_per_page' => -1,
     'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
-// For ecommerce sites: exclude individual WooCommerce products from architecture map.
-// Products are analyzed separately for product-level SEO issues.
-$_arch_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-if ($_arch_biz_type === 'ecommerce') {
-    $all_synced_pages = array_values(array_filter($all_synced_pages, function($p) {
-        return $p->post_type !== 'product';
-    }));
-}
 $hub_data = array();
 $non_hub_ids = array();
 
@@ -3274,31 +3239,22 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 
                     <?php
 // ── URL Restructure Recommendation ──────────────────────────────────────────
-// BUSINESS TYPE GATE: URL restructure is ONLY valid for local service businesses.
-// Never show this card for ecommerce, event_venue, restaurant, medical, or general sites.
-// A URL restructure on the wrong business type would destroy their SEO permanently.
-$_site_business_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-$_restructure_allowed = in_array($_site_business_type, ['local_service', 'local_service_multi'], true);
-
-$_plan_sa_hub   = null;
+// Detect hub page + spoke pages whose URLs aren't yet nested under /service-areas/
+$_plan_sa_hub   = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
 $_plan_sa_spokes_count = 0;
-
-if ( $_restructure_allowed ) {
-    $_plan_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
-    if ( $_plan_sa_hub ) {
-        $_plan_spokes = get_posts([
-            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
-            'post_status' => 'publish',
-            'numberposts' => -1,
-            'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
-        ]);
-        foreach ( $_plan_spokes as $_ps ) {
-            $slug = get_page_uri($_ps);
-            if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
-        }
+if ( $_plan_sa_hub ) {
+    $_plan_spokes = get_posts([
+        'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
+    ]);
+    foreach ( $_plan_spokes as $_ps ) {
+        $slug = get_page_uri($_ps);
+        if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
     }
 }
-if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
+if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 ?>
 <div class="siloq-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;background:#fffbeb;">
   <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
@@ -3314,16 +3270,13 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         to complete your silo architecture. Siloq will create 301 redirects automatically — old URLs keep working.
       </p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <a href="#siloq-tab-redirects" class="siloq-tab-btn siloq-btn siloq-btn--primary siloq-btn--sm" aria-controls="siloq-tab-redirects">
-          Preview URL Changes →
-        </a>
-        <button type="button" id="siloq-plan-apply-restructure" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="border-color:#d97706;color:#d97706;">
-          ⚡ Apply All (requires confirmation)
+        <button type="button" id="siloq-plan-apply-restructure" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="background:#d97706;border-color:#d97706;">
+          ⚡ Apply All Redirects Now
         </button>
+        <a href="#siloq-tab-redirects" class="siloq-tab-btn siloq-btn siloq-btn--outline siloq-btn--sm" aria-controls="siloq-tab-redirects" style="font-size:11px;">
+          Preview First →
+        </a>
       </div>
-      <p style="font-size:11px;color:#92400e;margin:6px 0 0;">
-        ⚠️ URL changes are permanent. Google treats redirected URLs as new pages for 3–6 months. Preview before applying.
-      </p>
       <div id="siloq-plan-restructure-status" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:5px;"></div>
     </div>
   </div>
@@ -3331,20 +3284,6 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 <script type="text/javascript">
 (function($){
     $('#siloq-plan-apply-restructure').on('click', function() {
-        // CONFIRM gate — URL restructures are permanent and SEO-critical.
-        // Force the user to type CONFIRM before executing.
-        var confirmText = prompt(
-            '⚠️ This will create 301 redirects and change your URL structure permanently.\n\n' +
-            'Google will treat redirected URLs as new pages for 3–6 months.\n\n' +
-            'Type CONFIRM (all caps) to proceed, or Cancel to preview first.'
-        );
-        if (confirmText !== 'CONFIRM') {
-            if (confirmText !== null) {
-                alert('Cancelled. You typed "' + confirmText + '" — you must type exactly CONFIRM to proceed.');
-            }
-            return;
-        }
-
         var $btn = $(this);
         var $status = $('#siloq-plan-restructure-status');
         $btn.prop('disabled', true).text('Loading…');
@@ -3419,18 +3358,7 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <div class="siloq-card" style="margin-bottom:16px;">
                         <div style="margin-bottom:14px;">
                             <h3 style="font-size:15px;font-weight:700;margin:0 0 3px;">Site Architecture</h3>
-                            <?php
-                            $_arch_desc_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-                            $_arch_desc = 'How your pages are organized for search engines. Hub pages should link to all their spoke pages, and each spoke should link back up.';
-                            if (in_array($_arch_desc_type, ['local_service', 'local_service_multi'], true)) {
-                                $_arch_desc = 'How your pages are organized for search engines. Service hub pages should link to all their city spoke pages, and each spoke should link back up.';
-                            } elseif ($_arch_desc_type === 'ecommerce') {
-                                $_arch_desc = 'How your product categories are organized. Category hub pages should link to all products, and product pages link back to their category.';
-                            } elseif ($_arch_desc_type === 'event_venue') {
-                                $_arch_desc = 'How your event services are organized. Event type hubs (Corporate, Wedding, Social) should link to all related service pages.';
-                            }
-                            ?>
-                            <p style="font-size:12px;color:#6b7280;margin:0;"><?php echo esc_html($_arch_desc); ?></p>
+                            <p style="font-size:12px;color:#6b7280;margin:0;">How your pages are organized for search engines. Hub pages should link to all their spoke/city pages, and each spoke should link back up.</p>
                         </div>
                         <div id="siloq-architecture-content">
                             <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see your site architecture.</p>
@@ -3441,18 +3369,7 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <div class="siloq-card" style="margin-bottom:16px;">
                         <div style="margin-bottom:14px;">
                             <h3 style="font-size:15px;font-weight:700;margin:0 0 3px;">Pages You Should Create</h3>
-                            <?php
-                            $_gap_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-                            $_gap_desc = 'Based on your site structure — pages that don\'t exist yet but would drive real traffic.';
-                            if (in_array($_gap_biz_type, ['local_service', 'local_service_multi'], true)) {
-                                $_gap_desc = 'Based on your service list and service areas — missing city and service pages that would drive local traffic.';
-                            } elseif ($_gap_biz_type === 'ecommerce') {
-                                $_gap_desc = 'Based on your WooCommerce product taxonomy — missing category hub pages and product SEO issues.';
-                            } elseif ($_gap_biz_type === 'event_venue') {
-                                $_gap_desc = 'Based on your event types — missing event category hubs that would rank for high-intent venue searches.';
-                            }
-                            ?>
-                            <p style="font-size:12px;color:#6b7280;margin:0;"><?php echo esc_html($_gap_desc); ?></p>
+                            <p style="font-size:12px;color:#6b7280;margin:0;">Based on your service list and service areas — pages that don't exist yet but would drive real traffic.</p>
                         </div>
                         <div id="siloq-supporting-content">
                             <?php echo self::render_gap_cards(); ?>
@@ -3710,12 +3627,6 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
                 <!-- ═══ URL RESTRUCTURE — Service Area Hub Detection ═══ -->
                 <?php
-                // BUSINESS TYPE GATE: Only show URL restructure for local service businesses.
-                $_rt_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-                $_rt_allowed  = in_array($_rt_biz_type, ['local_service', 'local_service_multi'], true);
-
-                if ( $_rt_allowed ) :
-
                 // Detect service-areas hub page and city spokes for restructure suggestion
                 $_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
                 $_sa_spokes = [];
@@ -3914,7 +3825,7 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     function siloqEsc(str) { return $('<div>').text(str || '').html(); }
                 }(jQuery));
                 </script>
-                <?php endif; // end URL restructure (local_service only) ?>
+                <?php endif; ?>
                 <!-- ═══ /URL RESTRUCTURE ═══ -->
 
                 <!-- Add New Redirect -->
@@ -5584,40 +5495,14 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
 
-        // Build completeness fields dynamically by business type.
-        // Local-service-specific fields (service areas) must not penalize ecommerce/event sites.
-        $eff_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-        if ( empty($eff_biz_type) ) $eff_biz_type = 'general';
-        $is_local_service = in_array($eff_biz_type, array('local_service', 'local_service_multi'), true);
-
-        $fields = array(
-            array('key' => 'business_name', 'label' => 'Business Name', 'weight' => 15, 'filled' => !empty($business_name)),
-            array('key' => 'business_type', 'label' => 'Business Type', 'weight' => 15, 'filled' => !empty($business_type)),
-            array('key' => 'phone',         'label' => 'Phone',         'weight' => 10, 'filled' => !empty($phone)),
-            array('key' => 'address',       'label' => 'Address',       'weight' => 20, 'filled' => $address_filled),
-        );
-
-        if ($is_local_service) {
-            // Local service: services + service areas both matter
-            $fields[] = array('key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services));
-            $fields[] = array('key' => 'service_areas', 'label' => 'Service Areas', 'weight' => 15, 'filled' => is_array($areas) && !empty($areas));
-        } elseif ($eff_biz_type === 'ecommerce') {
-            // Ecommerce: product categories configured or WooCommerce active with products
-            $wc_has_cats = false;
-            if (function_exists('wc_get_product')) {
-                $wc_cats = get_terms(array('taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 1));
-                $wc_has_cats = !is_wp_error($wc_cats) && !empty($wc_cats);
-            }
-            $fields[] = array('key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => $wc_has_cats || (is_array($services) && !empty($services)));
-        } elseif ($eff_biz_type === 'event_venue') {
-            // Event venue: services = event types; no service areas
-            $fields[] = array('key' => 'primary_services', 'label' => 'Event Types Offered', 'weight' => 40, 'filled' => is_array($services) && !empty($services));
-        } else {
-            // General: services only, no areas
-            $fields[] = array('key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 40, 'filled' => is_array($services) && !empty($services));
-        }
-
-        return $fields;
+        return [
+            ['key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => !empty($business_name)],
+            ['key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => !empty($business_type)],
+            ['key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => !empty($phone)],
+            ['key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled],
+            ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
+            ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
+        ];
     }
 
     /**
@@ -5703,246 +5588,18 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Render "Pages You Should Create" cards with business-type-aware gap detection.
+     * Render "Pages You Should Create" cards with clean gap detection.
      *
-     * Branches by siloq_business_type to show relevant gap cards:
-     * - ecommerce:          WooCommerce category hubs + product meta issues
-     * - event_venue:        Event type hubs + orphaned service pages
-     * - local_service/multi: Service page + city page gaps (original logic)
-     * - general:            Service page gaps only
+     * Rules:
+     * - Service gaps: compare siloq_primary_services against existing page SLUGS and TITLES only.
+     *   NEVER parse keywords out of existing page titles.
+     * - City gaps: check every synced page title AND slug for the city name (case-insensitive partial).
+     *   Also check the Service Areas hub page body text — if a city is mentioned there, skip it.
+     * - No "CONTENT GAP" / "LOCAL SEO GAP" labels. Use "Missing Service Page" / "Missing City Page".
      */
     public static function render_gap_cards() {
         ob_start();
-        $biz_type = get_option( 'siloq_business_type', get_option( 'siloq_business_type_auto', 'general' ) );
 
-        if ( $biz_type === 'ecommerce' ) {
-            self::render_gap_cards_ecommerce();
-        } elseif ( $biz_type === 'event_venue' ) {
-            self::render_gap_cards_event_venue();
-        } elseif ( in_array( $biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
-            self::render_gap_cards_local_service();
-        } else {
-            self::render_gap_cards_general();
-        }
-
-        return ob_get_clean();
-    }
-
-    /**
-     * Gap cards for ecommerce sites — WooCommerce category hub gaps + product meta issues.
-     */
-    private static function render_gap_cards_ecommerce() {
-        if ( ! function_exists( 'wc_get_product' ) ) {
-            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">WooCommerce not detected</p>'
-                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Connect WooCommerce to see product category gap analysis.</p>'
-                . '</div>';
-            return;
-        }
-
-        $has_cards = false;
-
-        // Get all product categories with products
-        $cats = get_terms( array( 'taxonomy' => 'product_cat', 'hide_empty' => true ) );
-        if ( is_wp_error( $cats ) ) {
-            $cats = array();
-        }
-
-        // Build existing pages dataset for hub matching
-        $post_types = function_exists( 'get_siloq_crawlable_post_types' )
-            ? get_siloq_crawlable_post_types()
-            : array( 'page', 'post' );
-
-        $all_posts = get_posts( array(
-            'post_type'      => $post_types,
-            'post_status'    => array( 'publish', 'draft' ),
-            'posts_per_page' => -1,
-        ) );
-
-        $existing_titles = array();
-        $existing_slugs  = array();
-        foreach ( $all_posts as $p ) {
-            $existing_titles[] = strtolower( $p->post_title );
-            $existing_slugs[]  = strtolower( $p->post_name );
-        }
-
-        // Check each category for a matching hub page
-        foreach ( $cats as $cat ) {
-            $cat_lower = strtolower( $cat->name );
-            $cat_slug  = sanitize_title( $cat->name );
-            $found     = false;
-
-            foreach ( $existing_titles as $t ) {
-                if ( strpos( $t, $cat_lower ) !== false ) { $found = true; break; }
-            }
-            if ( ! $found ) {
-                foreach ( $existing_slugs as $s ) {
-                    if ( strpos( $s, $cat_slug ) !== false ) { $found = true; break; }
-                }
-            }
-            if ( $found ) continue;
-
-            $has_cards  = true;
-            $card_title = $cat->name . ' — Category Overview Page';
-            $desc       = 'You have ' . $cat->count . ' products in ' . esc_html( $cat->name ) . ' but no dedicated category hub page. A hub page for this category can rank for high-intent \'best ' . strtolower( $cat->name ) . '\' and \'' . strtolower( $cat->name ) . ' buying guide\' searches. Individual product pages can\'t compete for these terms.';
-            ?>
-            <div class="siloq-gap-card" style="border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:16px;margin-bottom:12px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING CATEGORY HUB</span>
-                        <p style="font-size:14px;font-weight:700;color:#1e3a5f;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
-                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $desc ); ?></p>
-                    </div>
-                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $card_title ); ?>,'hub')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;">Create Draft &rarr;</button>
-                </div>
-            </div>
-            <?php
-        }
-
-        // Check for products missing meta descriptions (Yoast)
-        $no_meta = get_posts( array(
-            'post_type'      => 'product',
-            'post_status'    => 'publish',
-            'posts_per_page' => 5,
-            'meta_query'     => array(
-                'relation' => 'AND',
-                array( 'key' => '_yoast_wpseo_metadesc', 'compare' => 'NOT EXISTS' ),
-            ),
-        ) );
-
-        if ( ! empty( $no_meta ) ) {
-            $has_cards   = true;
-            $meta_count  = count( $no_meta );
-            $card_title  = $meta_count . ' products missing meta descriptions';
-            $desc        = 'Product pages without meta descriptions get Google\'s auto-generated snippets, which often show price info or specs instead of your selling proposition. Each missing meta is a missed conversion opportunity.';
-            ?>
-            <div class="siloq-gap-card" style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:16px;margin-bottom:12px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#f97316;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">PRODUCT SEO ISSUE</span>
-                        <p style="font-size:14px;font-weight:700;color:#9a3412;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
-                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $desc ); ?></p>
-                    </div>
-                    <button onclick="document.querySelector('[aria-controls=&quot;siloq-tab-pages&quot;]').click()" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;background:#f97316;border-color:#f97316;">Fix in Pages Tab &rarr;</button>
-                </div>
-            </div>
-            <?php
-        }
-
-        if ( ! $has_cards ) {
-            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<div style="font-size:28px;margin-bottom:8px;">&#x2705;</div>'
-                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">All product categories covered</p>'
-                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Your product categories all have dedicated hub pages.</p>'
-                . '</div>';
-        }
-    }
-
-    /**
-     * Gap cards for event venues — missing event type hubs + orphaned service pages.
-     */
-    private static function render_gap_cards_event_venue() {
-        $event_types = array(
-            'Corporate Events' => array( 'corporate', 'business', 'company', 'conference', 'meeting', 'seminar' ),
-            'Weddings'         => array( 'wedding', 'bride', 'bridal', 'ceremony', 'reception' ),
-            'Social Events'    => array( 'birthday', 'anniversary', 'celebration', 'party', 'social' ),
-            'Nonprofit Events' => array( 'nonprofit', 'charity', 'fundraiser', 'gala', 'benefit' ),
-            'Holiday Parties'  => array( 'holiday', 'christmas', 'new year', 'halloween' ),
-        );
-
-        // Build existing pages dataset
-        $post_types = function_exists( 'get_siloq_crawlable_post_types' )
-            ? get_siloq_crawlable_post_types()
-            : array( 'page', 'post' );
-
-        $all_posts = get_posts( array(
-            'post_type'      => $post_types,
-            'post_status'    => array( 'publish', 'draft' ),
-            'posts_per_page' => -1,
-        ) );
-
-        $existing_titles = array();
-        $existing_slugs  = array();
-        foreach ( $all_posts as $p ) {
-            $existing_titles[] = strtolower( $p->post_title );
-            $existing_slugs[]  = strtolower( $p->post_name );
-        }
-
-        $has_cards = false;
-
-        // Check each event type for a matching hub page
-        foreach ( $event_types as $event_label => $keywords ) {
-            $found = false;
-            foreach ( $keywords as $kw ) {
-                foreach ( $existing_titles as $t ) {
-                    if ( strpos( $t, $kw ) !== false ) { $found = true; break 2; }
-                }
-                foreach ( $existing_slugs as $s ) {
-                    if ( strpos( $s, $kw ) !== false ) { $found = true; break 2; }
-                }
-            }
-            if ( $found ) continue;
-
-            $has_cards  = true;
-            $card_title = $event_label . ' — Event Services Page';
-            $event_lower = strtolower( $event_label );
-            $desc       = 'People searching for \'' . $event_lower . '\' venues in your city can\'t find a dedicated page. Without a ' . $event_lower . ' hub, your homepage competes against specialized pages on your own site. Each event type hub becomes a content anchor for all related services.';
-            ?>
-            <div class="siloq-gap-card" style="border:1px solid #e9d5ff;background:#faf5ff;border-radius:8px;padding:16px;margin-bottom:12px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#9333ea;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING EVENT HUB</span>
-                        <p style="font-size:14px;font-weight:700;color:#581c87;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
-                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $desc ); ?></p>
-                    </div>
-                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $card_title ); ?>,'hub')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;background:#9333ea;border-color:#9333ea;">Create Draft &rarr;</button>
-                </div>
-            </div>
-            <?php
-        }
-
-        // Check for orphaned service pages (no page role, low content)
-        $orphan_count = 0;
-        foreach ( $all_posts as $p ) {
-            if ( $orphan_count >= 3 ) break;
-            $page_role = get_post_meta( $p->ID, '_siloq_page_role', true );
-            if ( ! empty( $page_role ) ) continue;
-
-            // Check for low internal link count (fewer than 5 links in content)
-            $link_count = preg_match_all( '/<a\s[^>]*href\s*=/i', $p->post_content, $matches );
-            $word_count = str_word_count( wp_strip_all_tags( $p->post_content ) );
-            if ( $link_count >= 5 || $word_count >= 300 ) continue;
-
-            $has_cards = true;
-            $orphan_count++;
-            ?>
-            <div class="siloq-gap-card" style="border:1px solid #fde68a;background:#fffbeb;border-radius:8px;padding:16px;margin-bottom:12px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#d97706;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">ORPHANED SERVICE PAGE</span>
-                        <p style="font-size:14px;font-weight:700;color:#92400e;margin:0 0 6px;"><?php echo esc_html( $p->post_title ); ?></p>
-                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;">This page exists but has no internal links connecting it to your main event categories. Isolated pages don't pass authority.</p>
-                    </div>
-                    <button onclick="document.querySelector('[aria-controls=&quot;siloq-tab-pages&quot;]').click()" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;background:#d97706;border-color:#d97706;">View in Pages Tab &rarr;</button>
-                </div>
-            </div>
-            <?php
-        }
-
-        if ( ! $has_cards ) {
-            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<div style="font-size:28px;margin-bottom:8px;">&#x2705;</div>'
-                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">All event types covered</p>'
-                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Your event types all have dedicated hub pages.</p>'
-                . '</div>';
-        }
-    }
-
-    /**
-     * Gap cards for local service businesses — service page + city page gaps.
-     * This is the original render_gap_cards() logic, preserved exactly.
-     */
-    private static function render_gap_cards_local_service() {
         // Build existing pages dataset
         $post_types = function_exists( 'get_siloq_crawlable_post_types' )
             ? get_siloq_crawlable_post_types()
@@ -6087,102 +5744,13 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         if ( ! $has_cards ) {
             echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<div style="font-size:28px;margin-bottom:8px;">&#x2705;</div>'
+                . '<div style="font-size:28px;margin-bottom:8px;">✅</div>'
                 . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">All pages covered</p>'
                 . '<p style="font-size:12px;color:#9ca3af;margin:0;">Your configured services and service areas all have dedicated pages. Add more services or areas in Settings to see new opportunities.</p>'
                 . '</div>';
         }
-    }
 
-    /**
-     * Gap cards for general/unknown business types — service page gaps only.
-     */
-    private static function render_gap_cards_general() {
-        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
-        if ( ! is_array( $primary_services ) ) $primary_services = array();
-
-        if ( empty( $primary_services ) ) {
-            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">No services configured</p>'
-                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Add your services in Settings &gt; Business Profile to see content gap recommendations.</p>'
-                . '</div>';
-            return;
-        }
-
-        // Build existing pages dataset
-        $post_types = function_exists( 'get_siloq_crawlable_post_types' )
-            ? get_siloq_crawlable_post_types()
-            : array( 'page', 'post' );
-
-        $all_posts = get_posts( array(
-            'post_type'      => $post_types,
-            'post_status'    => array( 'publish', 'draft' ),
-            'posts_per_page' => -1,
-        ) );
-
-        $existing_titles = array();
-        $existing_slugs  = array();
-        foreach ( $all_posts as $p ) {
-            $existing_titles[] = strtolower( $p->post_title );
-            $existing_slugs[]  = strtolower( $p->post_name );
-        }
-
-        // Filter to clean service names only (≤5 words, no state abbreviations)
-        $state_abbrs = array('AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
-                             'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-                             'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
-                             'VA','WA','WV','WI','WY','DC');
-        $primary_services = array_values( array_filter( $primary_services, function( $s ) use ( $state_abbrs ) {
-            if ( empty( trim( $s ) ) ) return false;
-            if ( str_word_count( $s ) > 5 ) return false;
-            foreach ( $state_abbrs as $st ) {
-                if ( preg_match( '/\b' . $st . '\b/i', $s ) ) return false;
-            }
-            return true;
-        } ) );
-
-        $primary_city = get_option( 'siloq_city', '' );
-        $has_cards    = false;
-
-        foreach ( $primary_services as $service ) {
-            $service_lower = strtolower( trim( $service ) );
-            $service_slug  = sanitize_title( $service );
-            $found         = false;
-
-            foreach ( $existing_titles as $t ) {
-                if ( strpos( $t, $service_lower ) !== false ) { $found = true; break; }
-            }
-            if ( ! $found ) {
-                foreach ( $existing_slugs as $s ) {
-                    if ( strpos( $s, $service_slug ) !== false ) { $found = true; break; }
-                }
-            }
-            if ( $found ) continue;
-
-            $has_cards   = true;
-            $card_title  = $primary_city ? $service . ' in ' . $primary_city : $service;
-            $why_it_matters = 'You don\'t have a dedicated page for "' . $service . '." Without one, Google has no clear signal to rank you for this service — it spreads your authority across unrelated pages instead of concentrating it.';
-            ?>
-            <div class="siloq-gap-card" style="border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:16px;margin-bottom:12px;">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING SERVICE PAGE</span>
-                        <p style="font-size:14px;font-weight:700;color:#1e3a5f;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
-                        <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
-                    </div>
-                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $card_title ); ?>,'service')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;">Create Draft &rarr;</button>
-                </div>
-            </div>
-            <?php
-        }
-
-        if ( ! $has_cards ) {
-            echo '<div style="text-align:center;padding:28px 16px;color:#9ca3af;">'
-                . '<div style="font-size:28px;margin-bottom:8px;">&#x2705;</div>'
-                . '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 4px;">All pages covered</p>'
-                . '<p style="font-size:12px;color:#9ca3af;margin:0;">Your configured services all have dedicated pages. Add more services in Settings to see new opportunities.</p>'
-                . '</div>';
-        }
+        return ob_get_clean();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -6442,35 +6010,6 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
     // ═══════════════════════════════════════════════════════════════
     // BULK SCHEMA APPLY
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * AJAX: Generate intelligence analysis via Siloq API.
-     */
-    public static function ajax_generate_intelligence() {
-        check_ajax_referer('siloq_ajax_nonce', 'nonce');
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => 'Permission denied.'));
-            return;
-        }
-
-        $site_id = get_option('siloq_site_id');
-        if (!$site_id) {
-            wp_send_json_error(array('message' => 'Site not configured. Complete setup first.'));
-            return;
-        }
-
-        $result = Siloq_API_Client::generate_intelligence($site_id);
-        if (is_wp_error($result)) {
-            wp_send_json_error(array('message' => $result->get_error_message()));
-            return;
-        }
-
-        // Cache the intelligence locally so the dashboard can read it without an API call
-        update_option('siloq_site_intelligence', wp_json_encode($result), false);
-        update_option('siloq_intelligence_generated_at', current_time('mysql'));
-
-        wp_send_json_success($result);
-    }
 
     /**
      * AJAX: Apply schema to a single page — called sequentially by the JS bulk processor.

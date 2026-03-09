@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.160
+* Version: 1.5.152
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.160');
+define('SILOQ_VERSION', '1.5.152');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -183,11 +183,6 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
-        // Business intelligence classes — loaded defensively so any failure never kills the plugin.
-        $detector_file = SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-detector.php';
-        $factory_file  = SILOQ_PLUGIN_DIR . 'includes/class-siloq-rules-factory.php';
-        if ( file_exists( $detector_file ) ) { @include_once $detector_file; }
-        if ( file_exists( $factory_file ) )  { @include_once $factory_file; }
 
         // Widget Intelligence — native Elementor panel controls
         if ( is_admin() ) {
@@ -398,9 +393,6 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_clear_debug_log',    array('Siloq_Admin', 'ajax_clear_debug_log'));
         add_action('wp_ajax_siloq_download_debug_log', array('Siloq_Admin', 'ajax_download_debug_log'));
 
-        // Intelligence API
-        add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));
-
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -557,8 +549,6 @@ class Siloq_Connector {
                 'siteId'          => get_option('siloq_site_id', ''),
                 'hasAnthropicKey' => ! empty( get_option('siloq_anthropic_api_key', '') ) ? '1' : '',
                 'qwCompleted'     => $qw_completed,
-                'settingsUrl'     => admin_url('admin.php?page=siloq-settings'),
-                'businessType'    => get_option('siloq_business_type', get_option('siloq_business_type_auto', '')),
             ));
         }
 
