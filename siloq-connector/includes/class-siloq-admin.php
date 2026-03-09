@@ -305,23 +305,25 @@ class Siloq_Admin {
                 </h1>
                 <p class="siloq-tagline"><?php _e('The SEO Architect — Eliminate keyword cannibalization and optimize your site structure.', 'siloq-connector'); ?></p>
                 <?php
-                $_dash_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', ''));
-                $_dash_biz_auto = !get_option('siloq_business_type') && get_option('siloq_business_type_auto');
-                if ($_dash_biz_type && class_exists('Siloq_Business_Detector')) {
-                    $label = Siloq_Business_Detector::get_label($_dash_biz_type);
-                    $badge_color = '#4f46e5';
-                    if ($_dash_biz_type === 'ecommerce') $badge_color = '#0891b2';
-                    if ($_dash_biz_type === 'event_venue') $badge_color = '#7c3aed';
-                    if ($_dash_biz_type === 'local_service' || $_dash_biz_type === 'local_service_multi') $badge_color = '#059669';
-                    echo '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
-                    echo '<span style="background:' . $badge_color . ';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.3px;">' . esc_html($label) . '</span>';
-                    if ($_dash_biz_auto) {
-                        echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Auto-detected · Override in Settings →</a>';
-                    } else {
-                        echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Change in Settings →</a>';
+                try {
+                    $_dash_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', ''));
+                    $_dash_biz_auto = !get_option('siloq_business_type') && get_option('siloq_business_type_auto');
+                    if ($_dash_biz_type && class_exists('Siloq_Business_Detector')) {
+                        $label = Siloq_Business_Detector::get_label($_dash_biz_type);
+                        $badge_color = '#4f46e5';
+                        if ($_dash_biz_type === 'ecommerce') $badge_color = '#0891b2';
+                        if ($_dash_biz_type === 'event_venue') $badge_color = '#7c3aed';
+                        if ($_dash_biz_type === 'local_service' || $_dash_biz_type === 'local_service_multi') $badge_color = '#059669';
+                        echo '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+                        echo '<span style="background:' . $badge_color . ';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.3px;">' . esc_html($label) . '</span>';
+                        if ($_dash_biz_auto) {
+                            echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Auto-detected · Override in Settings →</a>';
+                        } else {
+                            echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Change in Settings →</a>';
+                        }
+                        echo '</div>';
                     }
-                    echo '</div>';
-                }
+                } catch (Exception $e) { /* Badge display non-critical — fail silently */ }
                 ?>
             </div>
             
@@ -661,8 +663,7 @@ class Siloq_Admin {
                                         <p class="description"><?php _e('Helps Siloq suggest the best content structure.', 'siloq-connector'); ?></p>
                                         <?php
                                         $detected_type = get_option('siloq_business_type_auto', '');
-                                        $effective_type = Siloq_Business_Detector::get_effective_type();
-                                        if ($detected_type && empty(get_option('siloq_business_type'))) {
+                                        if ($detected_type && empty(get_option('siloq_business_type')) && class_exists('Siloq_Business_Detector')) {
                                             echo '<p class="description" style="color:#059669;">✓ Auto-detected: ' . esc_html(Siloq_Business_Detector::get_label($detected_type)) . '. Override above if incorrect.</p>';
                                         }
                                         ?>
@@ -5590,19 +5591,20 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         // Build completeness fields dynamically by business type.
         // Local-service-specific fields (service areas) must not penalize ecommerce/event sites.
         $eff_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
-        $is_local_service = in_array($eff_biz_type, ['local_service', 'local_service_multi'], true);
+        if ( empty($eff_biz_type) ) $eff_biz_type = 'general';
+        $is_local_service = in_array($eff_biz_type, array('local_service', 'local_service_multi'), true);
 
-        $fields = [
-            ['key' => 'business_name', 'label' => 'Business Name', 'weight' => 15, 'filled' => !empty($business_name)],
-            ['key' => 'business_type', 'label' => 'Business Type', 'weight' => 15, 'filled' => !empty($business_type)],
-            ['key' => 'phone',         'label' => 'Phone',         'weight' => 10, 'filled' => !empty($phone)],
-            ['key' => 'address',       'label' => 'Address',       'weight' => 20, 'filled' => $address_filled],
-        ];
+        $fields = array(
+            array('key' => 'business_name', 'label' => 'Business Name', 'weight' => 15, 'filled' => !empty($business_name)),
+            array('key' => 'business_type', 'label' => 'Business Type', 'weight' => 15, 'filled' => !empty($business_type)),
+            array('key' => 'phone',         'label' => 'Phone',         'weight' => 10, 'filled' => !empty($phone)),
+            array('key' => 'address',       'label' => 'Address',       'weight' => 20, 'filled' => $address_filled),
+        );
 
         if ($is_local_service) {
             // Local service: services + service areas both matter
-            $fields[] = ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)];
-            $fields[] = ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)];
+            $fields[] = array('key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services));
+            $fields[] = array('key' => 'service_areas', 'label' => 'Service Areas', 'weight' => 15, 'filled' => is_array($areas) && !empty($areas));
         } elseif ($eff_biz_type === 'ecommerce') {
             // Ecommerce: product categories configured or WooCommerce active with products
             $wc_has_cats = false;
@@ -5610,13 +5612,13 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 $wc_cats = get_terms(array('taxonomy' => 'product_cat', 'hide_empty' => true, 'number' => 1));
                 $wc_has_cats = !is_wp_error($wc_cats) && !empty($wc_cats);
             }
-            $fields[] = ['key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => $wc_has_cats || (is_array($services) && !empty($services))];
+            $fields[] = array('key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => $wc_has_cats || (is_array($services) && !empty($services)));
         } elseif ($eff_biz_type === 'event_venue') {
             // Event venue: services = event types; no service areas
-            $fields[] = ['key' => 'primary_services', 'label' => 'Event Types Offered', 'weight' => 40, 'filled' => is_array($services) && !empty($services)];
+            $fields[] = array('key' => 'primary_services', 'label' => 'Event Types Offered', 'weight' => 40, 'filled' => is_array($services) && !empty($services));
         } else {
             // General: services only, no areas
-            $fields[] = ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 40, 'filled' => is_array($services) && !empty($services)];
+            $fields[] = array('key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 40, 'filled' => is_array($services) && !empty($services));
         }
 
         return $fields;
