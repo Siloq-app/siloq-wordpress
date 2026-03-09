@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.138
+* Version: 1.5.139
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.138');
+define('SILOQ_VERSION', '1.5.139');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", ["jet-engine","jet-engine-taxonomy","e-loop-item","elementor_library","acf-field-group","acf-field","revision","nav_menu_item","custom_css","wp_block","wp_template","wp_template_part","wp_navigation","oembed_cache","wpcode"] );
@@ -166,6 +166,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-debug-logger.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -346,6 +347,13 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_preview_city_redirects', array($this, 'ajax_preview_city_redirects'));
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));
+        // Agent Ready — llms.txt, Authority Manifest, AI Visibility Audit (v1.5.139)
+        Siloq_Agent_Ready::init();
+        add_action('wp_ajax_siloq_generate_agent_files',    array('Siloq_Agent_Ready', 'ajax_generate_agent_files'));
+        add_action('wp_ajax_siloq_get_agent_status',        array('Siloq_Agent_Ready', 'ajax_get_agent_status'));
+        add_action('wp_ajax_siloq_run_ai_visibility_audit', array('Siloq_Agent_Ready', 'ajax_run_ai_visibility_audit'));
+        add_action('wp_ajax_siloq_flush_rewrites',          array($this, 'ajax_flush_rewrites'));
+
         // Dashboard one-click fix buttons
         add_action('wp_ajax_siloq_dashboard_fix',          array('Siloq_Admin', 'ajax_dashboard_fix'));
         add_action('wp_ajax_siloq_generate_meta_suggestion', array('Siloq_Admin', 'ajax_generate_meta_suggestion'));
@@ -710,6 +718,8 @@ class Siloq_Connector {
             // Retroactive service-area hub detection — runs silently on every full sync
             if ( ! $result['has_more'] ) {
                 $this->run_service_hub_detection();
+                // Regenerate agent files (llms.txt + authority-manifest.json) if previously generated
+                Siloq_Agent_Ready::on_sync_complete();
             }
 
             wp_send_json_success($result);
@@ -990,6 +1000,7 @@ class Siloq_Connector {
             'business_type'    => get_option( 'siloq_business_type', '' ),
             'primary_services' => json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [],
             'service_areas'    => json_decode( get_option( 'siloq_service_areas',    '[]' ), true ) ?: [],
+            'founding_year'    => get_option( 'siloq_founding_year', '' ),
         ];
 
         // Try to supplement with API data (fresher, includes service_cities etc.)
@@ -1045,6 +1056,7 @@ class Siloq_Connector {
         $state            = sanitize_text_field( strtoupper( $_POST['state'] ?? '' ) );
         $zip              = sanitize_text_field( $_POST['zip']              ?? '' );
         $business_type    = sanitize_text_field( $_POST['business_type']    ?? '' );
+        $founding_year    = sanitize_text_field( $_POST['founding_year']    ?? '' );
         $primary_services = isset( $_POST['primary_services'] )
             ? array_map( 'sanitize_text_field', (array) $_POST['primary_services'] )
             : [];
@@ -1061,6 +1073,7 @@ class Siloq_Connector {
             'state'            => update_option( 'siloq_state',            $state ),
             'zip'              => update_option( 'siloq_zip',              $zip ),
             'business_type'    => update_option( 'siloq_business_type',    $business_type ),
+            'founding_year'    => update_option( 'siloq_founding_year',    $founding_year ),
             'primary_services' => update_option( 'siloq_primary_services', wp_json_encode( $primary_services ) ),
             'service_areas'    => update_option( 'siloq_service_areas',    wp_json_encode( $service_areas ) ),
         ];
@@ -3064,6 +3077,18 @@ class Siloq_Connector {
                 ? "Repaired {$fixed} page" . ($fixed > 1 ? 's' : '') . ". The Siloq schema panel will now appear in the Elementor editor for all pages."
                 : "All pages already have Elementor edit mode set — no repair needed.",
         ));
+    }
+
+    /**
+     * AJAX: Flush rewrite rules (used after first agent file generation).
+     */
+    public function ajax_flush_rewrites() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+        Siloq_Agent_Ready::flush_rewrites();
+        wp_send_json_success( [ 'message' => 'Rewrite rules flushed.' ] );
     }
 }
 

@@ -672,6 +672,15 @@ class Siloq_Admin {
                                 </tr>
                                 <tr>
                                     <th scope="row">
+                                        <label for="siloq_founding_year"><?php _e('Year Founded', 'siloq-connector'); ?></label>
+                                    </th>
+                                    <td>
+                                        <input type="text" id="siloq_founding_year" name="siloq_founding_year" class="small-text" placeholder="<?php _e('e.g. 2008', 'siloq-connector'); ?>" maxlength="4" style="width:90px;">
+                                        <p class="description"><?php _e('Used in llms.txt and authority manifest for AI citation. Auto-populated from Google Business Profile if available.', 'siloq-connector'); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">
                                         <label for="siloq_primary_services"><?php _e('Services/Products', 'siloq-connector'); ?></label>
                                     </th>
                                     <td>
@@ -1264,6 +1273,7 @@ class Siloq_Admin {
                             $('#siloq_state').val(profile.state || '');
                             $('#siloq_zip').val(profile.zip || '');
                             $('#siloq_business_type').val(profile.business_type || '');
+                            $('#siloq_founding_year').val(profile.founding_year || '');
                             siloqServices = profile.primary_services || [];
                             siloqAreas = profile.service_areas || [];
                             renderServices();
@@ -1403,6 +1413,7 @@ class Siloq_Admin {
                         state: $('#siloq_state').val(),
                         zip: $('#siloq_zip').val(),
                         business_type: $('#siloq_business_type').val(),
+                        founding_year: $('#siloq_founding_year').val(),
                         primary_services: siloqServices,
                         service_areas: siloqAreas
                     },
@@ -2886,6 +2897,266 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
 </div>
 
 </div><!-- /.siloq-dash-v2 -->
+
+<!-- ═══════ AI VISIBILITY SECTION ═══════ -->
+<?php
+$_agent_status = Siloq_Agent_Ready::get_badge_status();
+$_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
+?>
+<div class="siloq-ai-visibility-section" style="margin:24px 0 0 0;">
+  <div class="siloq-card" style="padding:20px 24px;">
+
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px;">🤖</span>
+        <span style="font-size:16px;font-weight:700;color:#1e293b;">AI Visibility</span>
+      </div>
+      <!-- Agent-Ready Badge -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <?php
+        $badge_color = [
+          'green' => 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;',
+          'amber' => 'background:#fef9c3;color:#854d0e;border:1px solid #fde68a;',
+          'red'   => 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;',
+        ][ $_agent_status['color'] ] ?? '';
+        ?>
+        <span id="siloq-agent-badge" style="<?php echo esc_attr( $badge_color ); ?> padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">
+          <?php echo esc_html( $_agent_status['badge'] ); ?>
+        </span>
+        <?php if ( $_agent_status['status'] !== 'not_ready' ) : ?>
+          <a id="siloq-view-llms-link" href="<?php echo esc_url( $_agent_status['llms_url'] ); ?>" target="_blank" rel="noopener" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">View llms.txt</a>
+          <button type="button" id="siloq-copy-llms-link" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;" data-url="<?php echo esc_attr( $_agent_status['llms_url'] ); ?>">📋 Copy Link</button>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Badge message / missing fields -->
+    <?php if ( $_agent_status['message'] ) : ?>
+    <p id="siloq-agent-message" style="margin:0 0 14px;font-size:12px;color:#64748b;">
+      <?php echo esc_html( $_agent_status['message'] ); ?>
+      <?php if ( ! empty( $_agent_status['missing'] ) ) : ?>
+        — <strong>Missing:</strong> <?php echo esc_html( implode( ', ', $_agent_status['missing'] ) ); ?>
+      <?php endif; ?>
+    </p>
+    <?php endif; ?>
+
+    <!-- Generate / Regenerate button -->
+    <div style="margin-bottom:18px;">
+      <?php if ( $_agent_status['status'] === 'not_ready' ) : ?>
+        <button type="button" id="siloq-generate-agent-files" class="siloq-btn siloq-btn--primary siloq-btn--sm">
+          ⚡ Generate Agent Files
+        </button>
+      <?php else : ?>
+        <button type="button" id="siloq-generate-agent-files" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+          🔄 Regenerate Files
+        </button>
+      <?php endif; ?>
+      <span id="siloq-agent-gen-status" style="margin-left:10px;font-size:12px;color:#64748b;"></span>
+    </div>
+
+    <!-- AI Visibility Checklist -->
+    <div style="border-top:1px solid #e2e8f0;padding-top:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="font-size:13px;font-weight:600;color:#334155;">AI Visibility Checks</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="siloq-audit-score" style="font-size:12px;font-weight:600;color:#64748b;">
+            <?php if ( ! empty( $_audit_cache['score'] ) ) : ?>
+              <?php echo esc_html( $_audit_cache['score'] . '/' . $_audit_cache['total'] ); ?> checks passing
+            <?php endif; ?>
+          </span>
+          <button type="button" id="siloq-run-ai-audit" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Run Audit</button>
+        </div>
+      </div>
+
+      <div id="siloq-audit-results">
+        <?php if ( ! empty( $_audit_cache['checks'] ) ) : ?>
+          <?php foreach ( $_audit_cache['checks'] as $check_key => $check ) :
+            $icon = $check['pass'] === true ? '✓' : ( $check['pass'] === false ? '✗' : '⚠' );
+            $icon_style = $check['severity'] === 'green'
+              ? 'color:#16a34a;font-weight:700;'
+              : ( $check['severity'] === 'red' ? 'color:#dc2626;font-weight:700;' : 'color:#d97706;font-weight:700;' );
+          ?>
+          <div class="siloq-audit-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;">
+            <span style="<?php echo esc_attr( $icon_style ); ?>width:16px;flex-shrink:0;font-size:14px;"><?php echo $icon; ?></span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:600;color:#334155;"><?php echo esc_html( $check['label'] ); ?></div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;"><?php echo esc_html( $check['message'] ); ?></div>
+              <?php if ( ! empty( $check['link'] ) && ! empty( $check['link_text'] ) ) : ?>
+                <a href="<?php echo esc_attr( $check['link'] ); ?>" <?php if ( strpos( $check['link'], '#' ) !== 0 ) echo 'target="_blank" rel="noopener"'; ?> class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+              <?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        <?php else : ?>
+          <div style="text-align:center;padding:20px;color:#94a3b8;font-size:12px;">
+            Click "Run Audit" to check your AI visibility across 5 signals.
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /.siloq-ai-visibility-section -->
+
+<script type="text/javascript">
+(function($) {
+    // ── Copy Link button ─────────────────────────────────────────────────
+    $(document).on('click', '#siloq-copy-llms-link', function() {
+        var url = $(this).data('url');
+        if (!url) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(function() {
+                var $btn = $('#siloq-copy-llms-link');
+                $btn.text('✓ Copied!');
+                setTimeout(function() { $btn.text('📋 Copy Link'); }, 2500);
+            });
+        } else {
+            // Fallback
+            var $tmp = $('<textarea>').val(url).appendTo('body').select();
+            document.execCommand('copy');
+            $tmp.remove();
+            $(this).text('✓ Copied!');
+            setTimeout(function() { $('#siloq-copy-llms-link').text('📋 Copy Link'); }, 2500);
+        }
+    });
+
+    // ── Generate / Regenerate agent files ───────────────────────────────
+    $(document).on('click', '#siloq-generate-agent-files', function() {
+        var $btn    = $(this);
+        var $status = $('#siloq-agent-gen-status');
+        $btn.prop('disabled', true).text('Generating…');
+        $status.text('');
+
+        $.ajax({
+            url:  (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+            type: 'POST',
+            data: {
+                action: 'siloq_generate_agent_files',
+                nonce:  (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : '')
+            },
+            success: function(response) {
+                $btn.prop('disabled', false);
+                if (response.success) {
+                    var badge = response.data.badge;
+                    $status.css('color', '#16a34a').text('✓ ' + response.data.message);
+                    // Update badge
+                    siloqUpdateAgentBadge(badge);
+                    $btn.text('🔄 Regenerate Files');
+                    // Refresh audit automatically
+                    siloqRunAiAudit();
+                    // Flush WP rewrites so /llms.txt is immediately accessible
+                    siloqFlushRewrites();
+                } else {
+                    $btn.text('⚡ Generate Agent Files');
+                    $status.css('color', '#dc2626').text('Error: ' + (response.data.message || 'Generation failed.'));
+                }
+            },
+            error: function() {
+                $btn.prop('disabled', false).text('⚡ Generate Agent Files');
+                $status.css('color', '#dc2626').text('Request failed. Try again.');
+            }
+        });
+    });
+
+    // ── Run AI Visibility Audit ──────────────────────────────────────────
+    function siloqRunAiAudit() {
+        var $btn   = $('#siloq-run-ai-audit');
+        var $score = $('#siloq-audit-score');
+        var $list  = $('#siloq-audit-results');
+        $btn.prop('disabled', true).text('Running…');
+
+        $.ajax({
+            url:  (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+            type: 'POST',
+            data: {
+                action: 'siloq_run_ai_visibility_audit',
+                nonce:  (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : '')
+            },
+            success: function(response) {
+                $btn.prop('disabled', false).text('Run Audit');
+                if (!response.success) return;
+                var data   = response.data;
+                $score.text(data.score + '/' + data.total + ' checks passing');
+                $list.html(siloqRenderAuditChecks(data.checks));
+                // Wire up tab-link clicks inside audit results
+                $list.find('a[href^="#siloq-tab-"]').on('click', function(e) {
+                    e.preventDefault();
+                    var tabId = $(this).attr('href').replace('#', '');
+                    $('.siloq-tab-btn[aria-controls="' + tabId + '"]').trigger('click');
+                });
+            },
+            error: function() {
+                $btn.prop('disabled', false).text('Run Audit');
+            }
+        });
+    }
+
+    $(document).on('click', '#siloq-run-ai-audit', function() {
+        siloqRunAiAudit();
+    });
+
+    function siloqRenderAuditChecks(checks) {
+        var html = '';
+        var severityColors = { green: '#16a34a', amber: '#d97706', red: '#dc2626' };
+        $.each(checks, function(key, check) {
+            var icon  = check.pass === true ? '✓' : (check.pass === false ? '✗' : '⚠');
+            var color = severityColors[check.severity] || '#64748b';
+            html += '<div class="siloq-audit-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;">';
+            html += '<span style="color:' + color + ';font-weight:700;width:16px;flex-shrink:0;font-size:14px;">' + icon + '</span>';
+            html += '<div style="flex:1;min-width:0;">';
+            html += '<div style="font-size:12px;font-weight:600;color:#334155;">' + siloqEscape(check.label) + '</div>';
+            html += '<div style="font-size:11px;color:#64748b;margin-top:2px;">' + siloqEscape(check.message) + '</div>';
+            if (check.link && check.link_text) {
+                var isExternal = check.link.indexOf('#') !== 0;
+                html += '<a href="' + siloqEscape(check.link) + '"' + (isExternal ? ' target="_blank" rel="noopener"' : '') + ' style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+            }
+            if (check.action === 'generate' && check.action_text) {
+                html += '<button type="button" id="siloq-generate-agent-files-audit" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;margin-top:4px;">' + siloqEscape(check.action_text) + '</button>';
+            }
+            html += '</div></div>';
+        });
+        return html;
+    }
+
+    // Proxy generate button inside audit list
+    $(document).on('click', '#siloq-generate-agent-files-audit', function() {
+        $('#siloq-generate-agent-files').trigger('click');
+    });
+
+    // ── Badge updater ────────────────────────────────────────────────────
+    function siloqUpdateAgentBadge(badge) {
+        if (!badge) return;
+        var colorMap = {
+            green: 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;',
+            amber: 'background:#fef9c3;color:#854d0e;border:1px solid #fde68a;',
+            red:   'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'
+        };
+        var style = colorMap[badge.color] || '';
+        $('#siloq-agent-badge').attr('style', style + 'padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;').text(badge.badge);
+        $('#siloq-agent-message').text(badge.message || '');
+        if (badge.llms_url) {
+            $('#siloq-view-llms-link').attr('href', badge.llms_url).show();
+            $('#siloq-copy-llms-link').data('url', badge.llms_url).show();
+        }
+    }
+
+    // ── Flush WP rewrites after file generation ──────────────────────────
+    // (ensures /llms.txt is immediately routable)
+    function siloqFlushRewrites() {
+        $.post(
+            (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+            { action: 'siloq_flush_rewrites', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : '') }
+        );
+    }
+
+    // ── Escape helper ────────────────────────────────────────────────────
+    function siloqEscape(str) {
+        return $('<div>').text(str || '').html();
+    }
+}(jQuery));
+</script>
+
             </div><!-- /dashboard tab -->
 
             <!-- ═══════ SEO/GEO PLAN TAB ═══════ -->
