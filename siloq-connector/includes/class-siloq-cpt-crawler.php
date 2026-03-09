@@ -76,13 +76,21 @@ function get_siloq_crawlable_post_types() {
         // WooCommerce internals (both legacy and HPOS formats)
         'product_variation',
         'shop_order',
-        'shop_coupon',
         'shop_order_refund',
+        'shop_order_placehold',  // HPOS compatibility placeholder — orders stored as wp_posts stubs
+        'shop_coupon',
         'wc_order',
         'wc_order_refund',
+        'wc_order_placehold',    // alias used on some WC versions
         'wc_product_download',
         'wc_user_csv_import_session',
         'wc_webhook',
+        'wc_order_status',
+        'wc_shipping_zone',
+        // Action Scheduler (used by WC, WP Mail SMTP, etc.) — never real content
+        'scheduled-action',
+        // WP/plugin cache
+        'oembed_cache',
     );
 
     /**

@@ -139,7 +139,23 @@ class Siloq_Sync_Engine {
         $results      = array();
 
         foreach ($all_posts as $post_id) {
-            $post   = get_post($post_id);
+            $post = get_post($post_id);
+
+            // Safety net: skip posts with no title and no public URL.
+            // These are WC order placeholders, cached items, or other
+            // internal CPT records that slipped through the exclusion list.
+            if ( $post ) {
+                $permalink = get_permalink( $post_id );
+                $site_url  = get_site_url();
+                // A "real" page must have a title or a URL that's different from
+                // the base site URL (i.e. not /?p=123 admin-only links).
+                $is_real_page = ! empty( $post->post_title )
+                    || ( $permalink && $permalink !== $site_url && strpos( $permalink, '?p=' ) === false );
+                if ( ! $is_real_page ) {
+                    continue; // skip — not indexable content
+                }
+            }
+
             $result = $this->sync_page($post_id);
             $results[] = array(
                 'post_id' => $post_id,
@@ -213,6 +229,17 @@ class Siloq_Sync_Engine {
         );
 
         $posts = get_posts($args);
+
+        // Filter out untitled/no-URL posts (WC placeholders, cache, etc.)
+        // that slipped through the CPT exclusion list.
+        $site_url = get_site_url();
+        $posts = array_filter( $posts, function( $p ) use ( $site_url ) {
+            if ( ! empty( $p->post_title ) ) return true;
+            $url = get_permalink( $p->ID );
+            return $url && $url !== $site_url && strpos( $url, '?p=' ) === false;
+        } );
+        $posts = array_values( $posts );
+
         $total_pages = count($posts);
         $synced_pages = 0;
         $outdated_pages = 0;
