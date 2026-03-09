@@ -3239,19 +3239,23 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 
                     <?php
 // ── URL Restructure Recommendation ──────────────────────────────────────────
-// Detect hub page + spoke pages whose URLs aren't yet nested under /service-areas/
-$_plan_sa_hub   = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+// Gate: only show for local_service sites. Ecommerce/event_venue/general never need city nesting.
+$_plan_biz_type = get_option( 'siloq_business_type', 'general' );
+$_plan_sa_hub   = null;
 $_plan_sa_spokes_count = 0;
-if ( $_plan_sa_hub ) {
-    $_plan_spokes = get_posts([
-        'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
-        'post_status' => 'publish',
-        'numberposts' => -1,
-        'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
-    ]);
-    foreach ( $_plan_spokes as $_ps ) {
-        $slug = get_page_uri($_ps);
-        if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
+if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
+    $_plan_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+    if ( $_plan_sa_hub ) {
+        $_plan_spokes = get_posts( array(
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'meta_query'  => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
+        ) );
+        foreach ( $_plan_spokes as $_ps ) {
+            $slug = get_page_uri( $_ps );
+            if ( strpos( $slug, 'service-area' ) === false ) $_plan_sa_spokes_count++;
+        }
     }
 }
 if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
@@ -5495,14 +5499,22 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
 
-        return [
-            ['key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => !empty($business_name)],
-            ['key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => !empty($business_type)],
-            ['key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => !empty($phone)],
-            ['key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled],
-            ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
-            ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
-        ];
+        // Service Areas only counts toward completeness for local service businesses.
+        // Ecommerce, event venue, and general sites don't have service areas.
+        $_cplt_biz = get_option( 'siloq_business_type', 'general' );
+        $_is_local = in_array( $_cplt_biz, array( 'local_service', 'local_service_multi' ), true );
+
+        $fields = array(
+            array( 'key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => ! empty( $business_name ) ),
+            array( 'key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => ! empty( $business_type ) ),
+            array( 'key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => ! empty( $phone ) ),
+            array( 'key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled ),
+            array( 'key' => 'primary_services', 'label' => 'Primary Services', 'weight' => $_is_local ? 25 : 40, 'filled' => is_array( $services ) && ! empty( $services ) ),
+        );
+        if ( $_is_local ) {
+            $fields[] = array( 'key' => 'service_areas', 'label' => 'Service Areas', 'weight' => 15, 'filled' => is_array( $areas ) && ! empty( $areas ) );
+        }
+        return $fields;
     }
 
     /**
@@ -5693,10 +5705,13 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         }
 
         // ── City gaps ────────────────────────────────────────────────────────
-        // Only cities in siloq_service_areas that have NO matching page title/slug
-        // AND are not mentioned in the Service Areas hub body text
-        $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
-        if ( ! is_array( $service_areas ) ) $service_areas = array();
+        // Only for local service businesses — city pages are meaningless for ecommerce/event venues.
+        $service_areas = array();
+        $_gap_biz_type = get_option( 'siloq_business_type', 'general' );
+        if ( in_array( $_gap_biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
+            $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
+            if ( ! is_array( $service_areas ) ) $service_areas = array();
+        }
         $first_service = ! empty( $primary_services ) ? $primary_services[0] : '';
 
         foreach ( $service_areas as $city_entry ) {
