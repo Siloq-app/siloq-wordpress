@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.148
+* Version: 1.5.149
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.148');
+define('SILOQ_VERSION', '1.5.149');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -3124,12 +3124,22 @@ function siloq_activate() {
     // Load required classes
     require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
     
-    // Add default options
+    // Add default options — uses add_option() deliberately: it is a no-op if
+    // the option already exists, so plugin UPDATES never overwrite live config.
     add_option('siloq_api_url', '');
     add_option('siloq_api_key', '');
     add_option('siloq_auto_sync', 'no');
     add_option('siloq_use_dummy_scan', 'yes');
-    
+
+    // Protect the onboarding flag on updates: if the site already has an API key
+    // and site ID, it was previously set up — mark onboarding complete so a plugin
+    // update never strands a live site on the setup wizard.
+    $existing_key     = get_option('siloq_api_key', '');
+    $existing_site_id = get_option('siloq_site_id', '');
+    if ( ! empty($existing_key) && ! empty($existing_site_id) ) {
+        update_option('siloq_onboarding_complete', 'yes');
+    }
+
     // Create redirects table
     Siloq_Redirect_Manager::create_table();
     

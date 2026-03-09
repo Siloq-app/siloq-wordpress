@@ -4846,6 +4846,12 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <button type="button" class="siloq-wizard-btn" id="siloq-wizard-sync-continue-btn" onclick="siloqWizardGoTo(4)" disabled>
                         <?php _e('Continue', 'siloq-connector'); ?>
                     </button>
+
+                    <div class="siloq-wizard-skip" style="margin-top:12px;">
+                        <a href="#" onclick="siloqWizardSkipToApp(); return false;" style="font-size:12px;color:#9ca3af;">
+                            <?php _e('Site already configured — skip to dashboard →', 'siloq-connector'); ?>
+                        </a>
+                    </div>
                 </div>
 
                 <!-- STEP 4: All Set -->
@@ -5061,6 +5067,18 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                             clearInterval(pollInterval);
                         });
                 }, 2000);
+            };
+
+            // Emergency escape hatch — marks onboarding complete and reloads
+            // the page so the real dashboard renders. Intended for sites that
+            // already have api_key + site_id but got trapped by a wizard reset.
+            window.siloqWizardSkipToApp = function() {
+                var fd = new FormData();
+                fd.append('action', 'siloq_wizard_complete');
+                fd.append('nonce', nonce);
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function() { window.location.reload(); })
+                    .catch(function() { window.location.reload(); });
             };
 
             window.siloqWizardFinish = function() {
