@@ -183,6 +183,11 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-detector.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-rules-factory.php';
+
+        // Auto-detect business type on every plugin load
+        Siloq_Business_Detector::get_or_detect();
 
         // Widget Intelligence — native Elementor panel controls
         if ( is_admin() ) {
