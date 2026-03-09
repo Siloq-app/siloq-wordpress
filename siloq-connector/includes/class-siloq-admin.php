@@ -304,6 +304,25 @@ class Siloq_Admin {
                     <?php _e('Siloq Settings', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('The SEO Architect — Eliminate keyword cannibalization and optimize your site structure.', 'siloq-connector'); ?></p>
+                <?php
+                $_dash_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', ''));
+                $_dash_biz_auto = !get_option('siloq_business_type') && get_option('siloq_business_type_auto');
+                if ($_dash_biz_type && class_exists('Siloq_Business_Detector')) {
+                    $label = Siloq_Business_Detector::get_label($_dash_biz_type);
+                    $badge_color = '#4f46e5';
+                    if ($_dash_biz_type === 'ecommerce') $badge_color = '#0891b2';
+                    if ($_dash_biz_type === 'event_venue') $badge_color = '#7c3aed';
+                    if ($_dash_biz_type === 'local_service' || $_dash_biz_type === 'local_service_multi') $badge_color = '#059669';
+                    echo '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+                    echo '<span style="background:' . $badge_color . ';color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.3px;">' . esc_html($label) . '</span>';
+                    if ($_dash_biz_auto) {
+                        echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Auto-detected · Override in Settings →</a>';
+                    } else {
+                        echo '<a href="' . esc_url(admin_url('admin.php?page=siloq-settings#business-profile')) . '" style="font-size:11px;color:#6b7280;text-decoration:none;">Change in Settings →</a>';
+                    }
+                    echo '</div>';
+                }
+                ?>
             </div>
             
             <?php settings_errors('siloq_settings'); ?>
@@ -2076,6 +2095,14 @@ $all_synced_pages = get_posts(array(
     'posts_per_page' => -1,
     'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
+// For ecommerce sites: exclude individual WooCommerce products from architecture map.
+// Products are analyzed separately for product-level SEO issues.
+$_arch_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
+if ($_arch_biz_type === 'ecommerce') {
+    $all_synced_pages = array_values(array_filter($all_synced_pages, function($p) {
+        return $p->post_type !== 'product';
+    }));
+}
 $hub_data = array();
 $non_hub_ids = array();
 
@@ -3391,7 +3418,18 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <div class="siloq-card" style="margin-bottom:16px;">
                         <div style="margin-bottom:14px;">
                             <h3 style="font-size:15px;font-weight:700;margin:0 0 3px;">Site Architecture</h3>
-                            <p style="font-size:12px;color:#6b7280;margin:0;">How your pages are organized for search engines. Hub pages should link to all their spoke/city pages, and each spoke should link back up.</p>
+                            <?php
+                            $_arch_desc_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
+                            $_arch_desc = 'How your pages are organized for search engines. Hub pages should link to all their spoke pages, and each spoke should link back up.';
+                            if (in_array($_arch_desc_type, ['local_service', 'local_service_multi'], true)) {
+                                $_arch_desc = 'How your pages are organized for search engines. Service hub pages should link to all their city spoke pages, and each spoke should link back up.';
+                            } elseif ($_arch_desc_type === 'ecommerce') {
+                                $_arch_desc = 'How your product categories are organized. Category hub pages should link to all products, and product pages link back to their category.';
+                            } elseif ($_arch_desc_type === 'event_venue') {
+                                $_arch_desc = 'How your event services are organized. Event type hubs (Corporate, Wedding, Social) should link to all related service pages.';
+                            }
+                            ?>
+                            <p style="font-size:12px;color:#6b7280;margin:0;"><?php echo esc_html($_arch_desc); ?></p>
                         </div>
                         <div id="siloq-architecture-content">
                             <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see your site architecture.</p>
