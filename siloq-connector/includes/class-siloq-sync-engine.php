@@ -101,6 +101,12 @@ class Siloq_Sync_Engine {
      * Sync all pages
      */
     public function sync_all_pages($offset = 0, $batch_size = 50) {
+        // Extend PHP execution time so large sites (80-500 pages) don't hit the
+        // shared-hosting 30s limit mid-batch. 300s = 5 min, well above any real need.
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+
         // BUG 4 FIX: Fetch ALL posts with numberposts=-1 to sync every page
         // Include drafts so Siloq-created hub/service-area pages get synced even if not manually published
         $all_posts = get_posts( array(

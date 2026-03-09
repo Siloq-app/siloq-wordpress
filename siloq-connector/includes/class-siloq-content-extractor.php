@@ -103,6 +103,17 @@ class Siloq_Content_Extractor {
             self::extract_classic( $post_id, $result );
             return;
         }
+
+        // Guard: skip json_decode on excessively large payloads to prevent
+        // memory exhaustion and timeouts. 512 KB of raw Elementor JSON is
+        // already massive — anything larger than 1 MB is a red flag.
+        // Fall back to classic extraction (post_content or wp_get_post_content).
+        if ( strlen( $raw ) > 1048576 ) { // 1 MB
+            $result['errors'][] = 'Elementor: _elementor_data exceeds 1 MB — falling back to classic extract';
+            self::extract_classic( $post_id, $result );
+            return;
+        }
+
         $data = json_decode( $raw, true );
         if ( json_last_error() !== JSON_ERROR_NONE ) {
             $result['errors'][] = 'Elementor: JSON decode failed';

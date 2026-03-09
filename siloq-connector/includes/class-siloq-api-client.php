@@ -134,11 +134,22 @@ class Siloq_API_Client {
 
         // Read SEO meta: AIOSEO (custom table) → Yoast → RankMath
         // AIOSEO 4.x stores meta in wp_aioseo_posts, NOT in standard post_meta.
+        // Guard: only query the AIOSEO table if it actually exists — avoids MySQL
+        // errors (and broken JSON responses) on sites that don't use AIOSEO.
         global $wpdb;
-        $aioseo = $wpdb->get_row( $wpdb->prepare(
-            "SELECT title, description FROM {$wpdb->prefix}aioseo_posts WHERE post_id = %d",
-            $post->ID
+        $aioseo = null;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        $aioseo_exists = (bool) $wpdb->get_var( $wpdb->prepare(
+            "SELECT COUNT(1) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s LIMIT 1",
+            DB_NAME,
+            $aioseo_table
         ) );
+        if ( $aioseo_exists ) {
+            $aioseo = $wpdb->get_row( $wpdb->prepare(
+                "SELECT title, description FROM {$aioseo_table} WHERE post_id = %d",
+                $post->ID
+            ) );
+        }
 
         $seo_title = ( $aioseo && ! empty( $aioseo->title ) )
             ? $aioseo->title
@@ -155,16 +166,28 @@ class Siloq_API_Client {
             ? Siloq_Content_Extractor::extract( $post->ID )
             : array( 'raw_text' => '', 'faq_items' => array(), 'links' => array(), 'headings' => array() );
         $extracted_text = $extracted['raw_text'] ?: '';
+
+        // Cap content at 100 KB to prevent oversized API payloads on pages with
+        // massive Elementor data or long-form content. The API only needs readable
+        // text for SEO analysis — not the full raw dump.
+        if ( strlen( $extracted_text ) > 102400 ) {
+            $extracted_text = substr( $extracted_text, 0, 102400 );
+        }
+
         $extracted_faqs = isset( $extracted['faq_items'] ) ? array_map( function( $item ) { return $item['question'] ?? ''; }, $extracted['faq_items'] ) : array();
         $extracted_links = $extracted['links'];
         $extracted_headings = $extracted['headings'];
 
+        // Fallback content for classic/Gutenberg — also cap at 100 KB
+        $fallback_content = '';
+        if ( $extracted_text === '' && in_array( $extracted['builder'] ?? '', array( 'classic', 'gutenberg' ), true ) ) {
+            $fallback_content = substr( $post->post_content, 0, 102400 );
+        }
+
         $data = array(
             'wp_post_id'        => $post->ID,
             'title'             => $post->post_title,
-            'content'           => ( $extracted_text !== '' )
-                ? $extracted_text
-                : ( ( $extracted['builder'] === 'classic' || $extracted['builder'] === 'gutenberg' ) ? $post->post_content : '' ),
+            'content'           => $extracted_text !== '' ? $extracted_text : $fallback_content,
             'url'               => get_permalink($post->ID),
             'type'              => $post->post_type,
             'status'            => $post->post_status,
