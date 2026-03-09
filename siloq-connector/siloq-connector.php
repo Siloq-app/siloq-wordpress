@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.139
+* Version: 1.5.140
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,10 +20,25 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.139');
+define('SILOQ_VERSION', '1.5.140');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
-    define( "SILOQ_EXCLUDED_POST_TYPES", ["jet-engine","jet-engine-taxonomy","e-loop-item","elementor_library","acf-field-group","acf-field","revision","nav_menu_item","custom_css","wp_block","wp_template","wp_template_part","wp_navigation","oembed_cache","wpcode"] );
+    define( "SILOQ_EXCLUDED_POST_TYPES", [
+        // Page builders / framework junk
+        "jet-engine","jet-engine-taxonomy","e-loop-item","elementor_library",
+        "acf-field-group","acf-field","wpcode","wp_block",
+        "wp_template","wp_template_part","wp_navigation",
+        // WordPress internals
+        "revision","nav_menu_item","custom_css","oembed_cache",
+        "customize_changeset","user_request","wp_global_styles",
+        // WooCommerce
+        "shop_order","shop_order_refund","shop_coupon","shop_webhook",
+        "product_variation","wc_order","wc_order_refund",
+        "wc_product_download","wc_user_csv_import_session",
+        // Other common e-commerce / plugin junk
+        "mc4wp-form","tribe_events","tribe_venue","tribe_organizer",
+        "dlm_download","dlm_download_version",
+    ] );
 }
 define('SILOQ_PLUGIN_FILE', __FILE__);
 
@@ -738,11 +753,17 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        
-        $sync_engine = new Siloq_Sync_Engine();
-        $status = $sync_engine->get_sync_status();
-        
-        wp_send_json_success($status);
+
+        try {
+            $sync_engine = new Siloq_Sync_Engine();
+            $status = $sync_engine->get_sync_status();
+            wp_send_json_success($status);
+        } catch (Throwable $e) {
+            wp_send_json_error(array(
+                'message' => 'Sync status error: ' . $e->getMessage(),
+                'code'    => 'SYNC_STATUS_ERROR',
+            ));
+        }
     }
     
     /**
@@ -1029,7 +1050,7 @@ class Siloq_Connector {
                     if ( isset( $api_data['zip_code'] ) )       $api_data['zip']            = $api_data['zip_code'];
                     if ( isset( $api_data['service_cities'] ) ) $api_data['service_areas']  = $api_data['service_cities'];
                     // API wins over local for overlapping fields
-                    $local = array_merge( $local, array_filter( $api_data, fn( $v ) => $v !== null && $v !== '' ) );
+                    $local = array_merge( $local, array_filter( $api_data, function( $v ) { return $v !== null && $v !== ''; } ) );
                 }
             }
         }

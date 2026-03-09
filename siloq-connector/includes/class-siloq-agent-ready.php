@@ -481,7 +481,7 @@ class Siloq_Agent_Ready {
         }
 
         // Score
-        $passing = count( array_filter( $results, fn( $r ) => $r['pass'] === true ) );
+        $passing = count( array_filter( $results, function( $r ) { return $r['pass'] === true; } ) );
         $total   = count( $results );
 
         return [

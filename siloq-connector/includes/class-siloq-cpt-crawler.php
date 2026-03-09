@@ -73,11 +73,16 @@ function get_siloq_crawlable_post_types() {
         'popup',
         'popups',
         'optinmonster',
-        // WooCommerce internals
+        // WooCommerce internals (both legacy and HPOS formats)
         'product_variation',
         'shop_order',
         'shop_coupon',
         'shop_order_refund',
+        'wc_order',
+        'wc_order_refund',
+        'wc_product_download',
+        'wc_user_csv_import_session',
+        'wc_webhook',
     );
 
     /**
