@@ -3239,22 +3239,31 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 
                     <?php
 // ── URL Restructure Recommendation ──────────────────────────────────────────
-// Detect hub page + spoke pages whose URLs aren't yet nested under /service-areas/
-$_plan_sa_hub   = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+// BUSINESS TYPE GATE: URL restructure is ONLY valid for local service businesses.
+// Never show this card for ecommerce, event_venue, restaurant, medical, or general sites.
+// A URL restructure on the wrong business type would destroy their SEO permanently.
+$_site_business_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
+$_restructure_allowed = in_array($_site_business_type, ['local_service', 'local_service_multi'], true);
+
+$_plan_sa_hub   = null;
 $_plan_sa_spokes_count = 0;
-if ( $_plan_sa_hub ) {
-    $_plan_spokes = get_posts([
-        'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
-        'post_status' => 'publish',
-        'numberposts' => -1,
-        'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
-    ]);
-    foreach ( $_plan_spokes as $_ps ) {
-        $slug = get_page_uri($_ps);
-        if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
+
+if ( $_restructure_allowed ) {
+    $_plan_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+    if ( $_plan_sa_hub ) {
+        $_plan_spokes = get_posts([
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
+            'post_status' => 'publish',
+            'numberposts' => -1,
+            'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
+        ]);
+        foreach ( $_plan_spokes as $_ps ) {
+            $slug = get_page_uri($_ps);
+            if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
+        }
     }
 }
-if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
+if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 ?>
 <div class="siloq-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;background:#fffbeb;">
   <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
@@ -3270,13 +3279,16 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         to complete your silo architecture. Siloq will create 301 redirects automatically — old URLs keep working.
       </p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button type="button" id="siloq-plan-apply-restructure" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="background:#d97706;border-color:#d97706;">
-          ⚡ Apply All Redirects Now
-        </button>
-        <a href="#siloq-tab-redirects" class="siloq-tab-btn siloq-btn siloq-btn--outline siloq-btn--sm" aria-controls="siloq-tab-redirects" style="font-size:11px;">
-          Preview First →
+        <a href="#siloq-tab-redirects" class="siloq-tab-btn siloq-btn siloq-btn--primary siloq-btn--sm" aria-controls="siloq-tab-redirects">
+          Preview URL Changes →
         </a>
+        <button type="button" id="siloq-plan-apply-restructure" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="border-color:#d97706;color:#d97706;">
+          ⚡ Apply All (requires confirmation)
+        </button>
       </div>
+      <p style="font-size:11px;color:#92400e;margin:6px 0 0;">
+        ⚠️ URL changes are permanent. Google treats redirected URLs as new pages for 3–6 months. Preview before applying.
+      </p>
       <div id="siloq-plan-restructure-status" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:5px;"></div>
     </div>
   </div>
@@ -3284,6 +3296,20 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 <script type="text/javascript">
 (function($){
     $('#siloq-plan-apply-restructure').on('click', function() {
+        // CONFIRM gate — URL restructures are permanent and SEO-critical.
+        // Force the user to type CONFIRM before executing.
+        var confirmText = prompt(
+            '⚠️ This will create 301 redirects and change your URL structure permanently.\n\n' +
+            'Google will treat redirected URLs as new pages for 3–6 months.\n\n' +
+            'Type CONFIRM (all caps) to proceed, or Cancel to preview first.'
+        );
+        if (confirmText !== 'CONFIRM') {
+            if (confirmText !== null) {
+                alert('Cancelled. You typed "' + confirmText + '" — you must type exactly CONFIRM to proceed.');
+            }
+            return;
+        }
+
         var $btn = $(this);
         var $status = $('#siloq-plan-restructure-status');
         $btn.prop('disabled', true).text('Loading…');
@@ -3627,6 +3653,15 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
                 <!-- ═══ URL RESTRUCTURE — Service Area Hub Detection ═══ -->
                 <?php
+                // BUSINESS TYPE GATE: Only show URL restructure for local service businesses.
+                $_rt_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
+                $_rt_allowed  = in_array($_rt_biz_type, ['local_service', 'local_service_multi'], true);
+
+                if ( ! $_rt_allowed ) {
+                    // Non-local-service site — completely suppress the restructure section
+                    // to prevent catastrophic wrong recommendations
+                } else :
+
                 // Detect service-areas hub page and city spokes for restructure suggestion
                 $_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
                 $_sa_spokes = [];
@@ -3825,7 +3860,8 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     function siloqEsc(str) { return $('<div>').text(str || '').html(); }
                 }(jQuery));
                 </script>
-                <?php endif; ?>
+                <?php endif; // end restructure section ?>
+                <?php endif; // end business type gate ?>
                 <!-- ═══ /URL RESTRUCTURE ═══ -->
 
                 <!-- Add New Redirect -->
