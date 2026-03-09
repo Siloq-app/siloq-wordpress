@@ -6226,7 +6226,13 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         if ( $ok ) {
             wp_send_json_success( [ 'message' => 'Redirect added.' ] );
         } else {
-            wp_send_json_error( [ 'message' => 'Failed to add redirect. It may already exist.' ] );
+            $db_err = Siloq_Redirect_Manager::$last_error;
+            wp_send_json_error( [
+                'message'  => 'Failed to add redirect.' . ( $db_err ? ' DB: ' . $db_err : ' It may already exist.' ),
+                'db_error' => $db_err,
+                'from'     => $from,
+                'to'       => $to,
+            ] );
         }
     }
 

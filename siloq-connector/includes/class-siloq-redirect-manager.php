@@ -19,6 +19,11 @@ class Siloq_Redirect_Manager {
      * Singleton instance
      */
     private static $instance = null;
+
+    /**
+     * Last DB error from add_redirect() — surfaced in AJAX responses for debugging
+     */
+    public static $last_error = '';
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -46,32 +51,37 @@ class Siloq_Redirect_Manager {
         
         $charset_collate = $wpdb->get_charset_collate();
         
+        // NOTE: Do NOT use ON UPDATE CURRENT_TIMESTAMP — dbDelta() has a known bug
+        // where it misparses that syntax and silently skips table creation entirely.
+        // We update `updated_at` manually in update_redirect() instead.
         $sql = "CREATE TABLE IF NOT EXISTS $table_name (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
             source_url varchar(500) NOT NULL,
             target_url varchar(500) NOT NULL,
-            status_code int(3) DEFAULT 301,
-            enabled tinyint(1) DEFAULT 1,
-            hits bigint(20) unsigned DEFAULT 0,
-            redirect_type varchar(20) DEFAULT 'manual',
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
+            status_code int(3) NOT NULL DEFAULT 301,
+            enabled tinyint(1) NOT NULL DEFAULT 1,
+            hits bigint(20) unsigned NOT NULL DEFAULT 0,
+            redirect_type varchar(20) NOT NULL DEFAULT 'manual',
+            created_at datetime NOT NULL DEFAULT '2000-01-01 00:00:00',
+            updated_at datetime NOT NULL DEFAULT '2000-01-01 00:00:00',
+            PRIMARY KEY  (id),
             UNIQUE KEY source_url (source_url(191)),
             KEY enabled (enabled)
         ) $charset_collate;";
-        
-        // Check if WordPress admin upgrade file exists
+
+        // Always try direct query first — more reliable than dbDelta for CREATE TABLE.
+        $created = $wpdb->query( $sql );
+
+        // dbDelta as secondary pass (handles ALTER TABLE for existing installs).
         $upgrade_file = ABSPATH . 'wp-admin/includes/upgrade.php';
-        if (file_exists($upgrade_file)) {
-            require_once($upgrade_file);
-            dbDelta($sql);
-        } else {
-            // Fallback: execute SQL directly if dbDelta is not available
-            $wpdb->query($sql);
+        if ( file_exists( $upgrade_file ) ) {
+            require_once( $upgrade_file );
+            dbDelta( $sql );
         }
-        
-        return true;
+
+        // Verify the table actually exists — return false if creation failed.
+        $exists = $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) === $table_name;
+        return $exists;
     }
     
     /**
@@ -123,30 +133,42 @@ class Siloq_Redirect_Manager {
      */
     public function add_redirect($source_url, $target_url, $status_code = 301) {
         global $wpdb;
-        
+
         $table_name = $wpdb->prefix . self::TABLE_NAME;
-        
+
+        // Self-heal: ensure the table exists before every insert.
+        // create_table() is cheap (SHOW TABLES check) and idempotent.
+        if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) !== $table_name ) {
+            self::create_table();
+        }
+
         // Normalize URLs
         $source_url = $this->normalize_url($source_url);
         $target_url = $this->normalize_url($target_url);
-        
+
         // Check if redirect already exists
         $existing = $this->get_redirect($source_url);
         if ($existing) {
             return $this->update_redirect($existing->id, $target_url, $status_code);
         }
-        
+
+        $now    = current_time('mysql');
         $result = $wpdb->insert(
             $table_name,
             array(
-                'source_url' => $source_url,
-                'target_url' => $target_url,
-                'status_code' => $status_code,
-                'enabled' => 1
+                'source_url'    => $source_url,
+                'target_url'    => $target_url,
+                'status_code'   => $status_code,
+                'enabled'       => 1,
+                'created_at'    => $now,
+                'updated_at'    => $now,
             ),
-            array('%s', '%s', '%d', '%d')
+            array('%s', '%s', '%d', '%d', '%s', '%s')
         );
-        
+
+        // Store last error for callers to surface in debug output
+        self::$last_error = $result === false ? $wpdb->last_error : '';
+
         return $result !== false;
     }
     
