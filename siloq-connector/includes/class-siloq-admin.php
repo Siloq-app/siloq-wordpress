@@ -3802,7 +3802,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                             var item = toApply[idx];
                             $.post(
                                 (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
-                                { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from_url: item.from, to_url: item.to, redirect_type: '301' },
+                                { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from: item.from, to: item.to, status_code: 301 },
                                 function(r) {
                                     if (r.success) done++; else errors++;
                                     // Mark row applied
@@ -6326,6 +6326,49 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 $skipped[] = [ 'title' => $post->post_title, 'reason' => 'Hub page — not moved' ];
                 continue;
             }
+
+            // ── City-page filter ─────────────────────────────────────────────
+            // Only suggest pages that are clearly geo/location pages.
+            // Service pages, utility pages, and site sections should NEVER be
+            // redirected under /service-areas/. We use two signals:
+            //
+            // 1. EXCLUDE known utility/service slugs unconditionally.
+            // 2. REQUIRE a geo indicator: either city_spoke type, or a US state
+            //    abbreviation / geo keyword in the slug.
+            //
+            // Pages like /contact/, /about-us/, /services/, /testimonials/,
+            // /industrial/, /residential/ etc. will be skipped.
+            $utility_slugs = [
+                'contact', 'contact-us', 'about', 'about-us', 'our-team', 'team',
+                'staff', 'testimonials', 'reviews', 'faq', 'faqs', 'blog',
+                'news', 'careers', 'jobs', 'privacy-policy', 'privacy',
+                'terms', 'terms-of-service', 'terms-and-conditions',
+                'sitemap', 'home', 'services', 'our-services', 'portfolio',
+                'gallery', 'pricing', 'financing', 'promotions', 'coupons',
+                'warranty', 'guaranty', 'maintenance', 'maintenance-works',
+                'industrial', 'residential', 'commercial', 'emergency',
+                'emergency-services', 'repair', 'installation', 'inspections',
+            ];
+
+            // Get the base slug (last segment) to check against utility list
+            $base_slug = basename( rtrim( $slug, '/' ) );
+
+            if ( in_array( $base_slug, $utility_slugs, true ) ) {
+                $skipped[] = [ 'title' => $post->post_title, 'reason' => 'Utility/service page — not a city page' ];
+                continue;
+            }
+
+            // Require a geo indicator: city_spoke type OR a US state abbreviation
+            // in the slug (e.g. -mo-, -ks-, -tx-, -il-, -ok-, etc.)
+            $us_state_pattern = '/[\-_](al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy)([\-_\/]|$)/i';
+            $has_geo_indicator = ( $page_type === 'city_spoke' )
+                || preg_match( $us_state_pattern, '-' . $slug );
+
+            if ( ! $has_geo_indicator ) {
+                $skipped[] = [ 'title' => $post->post_title, 'reason' => 'No geo indicator — not a city page' ];
+                continue;
+            }
+            // ── /City-page filter ────────────────────────────────────────────
 
             // Build new slug by prepending target prefix
             $new_slug      = ltrim( $target_prefix, '/' ) . $slug;
