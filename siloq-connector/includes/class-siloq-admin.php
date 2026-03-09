@@ -5549,14 +5549,34 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
 
-        return [
-            ['key' => 'business_name',    'label' => 'Business Name',    'weight' => 15, 'filled' => !empty($business_name)],
-            ['key' => 'business_type',    'label' => 'Business Type',    'weight' => 15, 'filled' => !empty($business_type)],
-            ['key' => 'phone',            'label' => 'Phone',            'weight' => 10, 'filled' => !empty($phone)],
-            ['key' => 'address',          'label' => 'Address',          'weight' => 20, 'filled' => $address_filled],
-            ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)],
-            ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)],
+        // Build completeness fields dynamically by business type.
+        // Local-service-specific fields (service areas) must not penalize ecommerce/event sites.
+        $eff_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
+        $is_local_service = in_array($eff_biz_type, ['local_service', 'local_service_multi'], true);
+
+        $fields = [
+            ['key' => 'business_name', 'label' => 'Business Name', 'weight' => 15, 'filled' => !empty($business_name)],
+            ['key' => 'business_type', 'label' => 'Business Type', 'weight' => 15, 'filled' => !empty($business_type)],
+            ['key' => 'phone',         'label' => 'Phone',         'weight' => 10, 'filled' => !empty($phone)],
+            ['key' => 'address',       'label' => 'Address',       'weight' => 20, 'filled' => $address_filled],
         ];
+
+        if ($is_local_service) {
+            // Local service: services + service areas both matter
+            $fields[] = ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 25, 'filled' => is_array($services) && !empty($services)];
+            $fields[] = ['key' => 'service_areas',    'label' => 'Service Areas',    'weight' => 15, 'filled' => is_array($areas) && !empty($areas)];
+        } elseif ($eff_biz_type === 'ecommerce') {
+            // Ecommerce: services less critical; address less critical; WooCommerce presence matters
+            $fields[] = ['key' => 'primary_services', 'label' => 'Product Categories', 'weight' => 40, 'filled' => function_exists('wc_get_product') && get_terms(['taxonomy'=>'product_cat','hide_empty'=>true,'number'=>1]) ? true : (is_array($services) && !empty($services))];
+        } elseif ($eff_biz_type === 'event_venue') {
+            // Event venue: services = event types; no service areas
+            $fields[] = ['key' => 'primary_services', 'label' => 'Event Types Offered', 'weight' => 40, 'filled' => is_array($services) && !empty($services)];
+        } else {
+            // General: services only, no areas
+            $fields[] = ['key' => 'primary_services', 'label' => 'Primary Services', 'weight' => 40, 'filled' => is_array($services) && !empty($services)];
+        }
+
+        return $fields;
     }
 
     /**
