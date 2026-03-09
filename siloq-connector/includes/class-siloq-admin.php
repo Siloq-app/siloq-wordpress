@@ -3214,7 +3214,113 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
                     </div>
                     <div id="siloq-fix-all-summary" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:8px;font-size:13px;"></div>
 
-                    <!-- Section 2: Priority Actions -->
+                    <?php
+// ── URL Restructure Recommendation ──────────────────────────────────────────
+// Detect hub page + spoke pages whose URLs aren't yet nested under /service-areas/
+$_plan_sa_hub   = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+$_plan_sa_spokes_count = 0;
+if ( $_plan_sa_hub ) {
+    $_plan_spokes = get_posts([
+        'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
+        'post_status' => 'publish',
+        'numberposts' => -1,
+        'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
+    ]);
+    foreach ( $_plan_spokes as $_ps ) {
+        $slug = get_page_uri($_ps);
+        if ( strpos($slug, 'service-area') === false ) $_plan_sa_spokes_count++;
+    }
+}
+if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
+?>
+<div class="siloq-card" style="margin-bottom:16px;border-left:4px solid #f59e0b;background:#fffbeb;">
+  <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+    <div style="font-size:22px;flex-shrink:0;">🔀</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:4px;">
+        URL Restructure Available — <?php echo $_plan_sa_spokes_count; ?> city page<?php echo $_plan_sa_spokes_count !== 1 ? 's' : ''; ?> need nesting
+      </div>
+      <p style="font-size:12px;color:#78350f;margin:0 0 10px;line-height:1.5;">
+        Your <strong><?php echo esc_html($_plan_sa_hub->post_title); ?></strong> hub has been detected.
+        <?php echo $_plan_sa_spokes_count; ?> spoke page<?php echo $_plan_sa_spokes_count !== 1 ? 's' : ''; ?> should move to
+        <code style="background:#fef3c7;padding:1px 4px;border-radius:3px;">/service-areas/[city-slug]/</code>
+        to complete your silo architecture. Siloq will create 301 redirects automatically — old URLs keep working.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button type="button" id="siloq-plan-apply-restructure" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="background:#d97706;border-color:#d97706;">
+          ⚡ Apply All Redirects Now
+        </button>
+        <a href="#siloq-tab-redirects" class="siloq-tab-btn siloq-btn siloq-btn--outline siloq-btn--sm" aria-controls="siloq-tab-redirects" style="font-size:11px;">
+          Preview First →
+        </a>
+      </div>
+      <div id="siloq-plan-restructure-status" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:5px;"></div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript">
+(function($){
+    $('#siloq-plan-apply-restructure').on('click', function() {
+        var $btn = $(this);
+        var $status = $('#siloq-plan-restructure-status');
+        $btn.prop('disabled', true).text('Loading…');
+        $status.hide();
+
+        // Step 1: preview to get the list
+        $.post(
+            (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+            { action: 'siloq_preview_city_redirects', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), target_prefix: '/service-areas/' },
+            function(r) {
+                if (!r.success || !r.data.suggestions || !r.data.suggestions.length) {
+                    $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
+                    $status.css({'background':'#fee2e2','color':'#991b1b','border':'1px solid #fca5a5'})
+                           .text('No redirects needed — city pages may already be nested correctly.').show();
+                    return;
+                }
+
+                var suggestions = r.data.suggestions.filter(function(s){ return !s.already_exists; });
+                if (!suggestions.length) {
+                    $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
+                    $status.css({'background':'#dcfce7','color':'#166534','border':'1px solid #bbf7d0'})
+                           .text('✓ All redirects already exist — nothing to apply.').show();
+                    return;
+                }
+
+                // Step 2: apply each redirect sequentially
+                $btn.text('Applying ' + suggestions.length + ' redirect' + (suggestions.length !== 1 ? 's' : '') + '…');
+                var done = 0, errors = 0;
+
+                function applyNext(idx) {
+                    if (idx >= suggestions.length) {
+                        $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
+                        var msg = '✓ ' + done + ' redirect' + (done !== 1 ? 's' : '') + ' created. Old URLs still work — now update each city page\'s parent to "' + <?php echo json_encode($_plan_sa_hub->post_title); ?> + '" in WordPress to complete the URL change.';
+                        if (errors) msg += ' (' + errors + ' failed)';
+                        $status.css({'background': errors ? '#fee2e2' : '#dcfce7','color': errors ? '#991b1b' : '#166534','border': '1px solid ' + (errors ? '#fca5a5' : '#bbf7d0')})
+                               .text(msg).show();
+                        // Reload the redirects tab list if it's been opened
+                        if (typeof loadSiloqRedirects === 'function') loadSiloqRedirects();
+                        return;
+                    }
+                    var s = suggestions[idx];
+                    $.post(
+                        (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+                        { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from_url: s.from, to_url: s.to, redirect_type: '301' },
+                        function(res) { if (res.success) done++; else errors++; applyNext(idx + 1); }
+                    ).fail(function(){ errors++; applyNext(idx + 1); });
+                }
+                applyNext(0);
+            }
+        ).fail(function(){
+            $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
+            $status.css({'background':'#fee2e2','color':'#991b1b'}).text('Request failed. Try again.').show();
+        });
+    });
+}(jQuery));
+</script>
+<?php endif; ?>
+<!-- ── /URL Restructure ─────────────────────────────────────────────────── -->
+
+<!-- Section 2: Priority Actions -->
                     <div class="siloq-card" style="margin-bottom:16px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                             <h3 style="font-size:15px;font-weight:700;margin:0;">Priority Actions</h3>
