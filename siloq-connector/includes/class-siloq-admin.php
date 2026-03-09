@@ -3304,7 +3304,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     var s = suggestions[idx];
                     $.post(
                         (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
-                        { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from_url: s.from, to_url: s.to, redirect_type: '301' },
+                        { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from: s.from, to: s.to, status_code: 301 },
                         function(res) { if (res.success) done++; else errors++; applyNext(idx + 1); }
                     ).fail(function(){ errors++; applyNext(idx + 1); });
                 }
