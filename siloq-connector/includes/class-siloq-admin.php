@@ -3714,10 +3714,7 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 $_rt_biz_type = get_option('siloq_business_type', get_option('siloq_business_type_auto', 'general'));
                 $_rt_allowed  = in_array($_rt_biz_type, ['local_service', 'local_service_multi'], true);
 
-                if ( ! $_rt_allowed ) {
-                    // Non-local-service site — completely suppress the restructure section
-                    // to prevent catastrophic wrong recommendations
-                } else :
+                if ( $_rt_allowed ) :
 
                 // Detect service-areas hub page and city spokes for restructure suggestion
                 $_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
@@ -3917,8 +3914,7 @@ if ( $_restructure_allowed && $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     function siloqEsc(str) { return $('<div>').text(str || '').html(); }
                 }(jQuery));
                 </script>
-                <?php endif; // end restructure section ?>
-                <?php endif; // end business type gate ?>
+                <?php endif; // end URL restructure (local_service only) ?>
                 <!-- ═══ /URL RESTRUCTURE ═══ -->
 
                 <!-- Add New Redirect -->
