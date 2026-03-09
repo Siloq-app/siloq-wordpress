@@ -101,33 +101,58 @@ class Siloq_Sync_Engine {
      * Sync all pages
      */
     public function sync_all_pages($offset = 0, $batch_size = 50) {
-        // Extend PHP execution time so large sites (80-500 pages) don't hit the
-        // shared-hosting 30s limit mid-batch. 300s = 5 min, well above any real need.
+        // Extend PHP execution time for the duration of this batch.
         if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 300 );
+            @set_time_limit( 120 );
         }
 
-        // BUG 4 FIX: Fetch ALL posts with numberposts=-1 to sync every page
-        // Include drafts so Siloq-created hub/service-area pages get synced even if not manually published
-        $all_posts = get_posts( array(
-            'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
-            'post_type__not_in'  => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [],
-            'post_status'        => array( 'publish', 'draft' ),
-            'numberposts'        => -1,
-            'fields'             => 'ids',
+        $post_types = function_exists('get_siloq_crawlable_post_types')
+            ? get_siloq_crawlable_post_types()
+            : array('page', 'post');
+
+        $site_url = get_site_url();
+
+        // Fetch one batch of posts at the given offset.
+        // Using get_posts with numberposts + offset for real pagination.
+        $batch_ids = get_posts( array(
+            'post_type'              => $post_types,
+            'post_status'            => array( 'publish', 'draft' ),
+            'numberposts'            => $batch_size,
+            'offset'                 => $offset,
+            'fields'                 => 'ids',
+            'orderby'                => 'ID',
+            'order'                  => 'ASC',
+            'no_found_rows'          => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
         ) );
 
-        // Auto-publish any draft hub or service-areas pages before syncing
-        // These were created by Siloq and should be live (user may not have manually published them)
-        foreach ( $all_posts as $pid ) {
+        // Also get total count (separate lightweight query, only on first batch)
+        $total = 0;
+        if ( $offset === 0 ) {
+            $count_query = new WP_Query( array(
+                'post_type'              => $post_types,
+                'post_status'            => array( 'publish', 'draft' ),
+                'posts_per_page'         => 1,
+                'fields'                 => 'ids',
+                'no_found_rows'          => false,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            ) );
+            $total = $count_query->found_posts;
+            update_option( 'siloq_sync_total', $total );
+        } else {
+            $total = intval( get_option( 'siloq_sync_total', 0 ) );
+        }
+
+        // Auto-publish Siloq-created hub/service-area drafts in this batch
+        foreach ( $batch_ids as $pid ) {
             $p = get_post( $pid );
             if ( ! $p || $p->post_status !== 'draft' ) continue;
-            $slug      = $p->post_name;
             $page_role = get_post_meta( $pid, '_siloq_page_role', true );
-            // Publish if it's a service-areas/hub page created by Siloq
             if (
                 in_array( $page_role, array( 'hub', 'apex_hub', 'service_areas' ) ) ||
-                strpos( $slug, 'service-area' ) !== false ||
+                strpos( $p->post_name, 'service-area' ) !== false ||
                 strpos( strtolower( $p->post_title ), 'service area' ) !== false
             ) {
                 wp_update_post( array( 'ID' => $pid, 'post_status' => 'publish' ) );
@@ -138,39 +163,35 @@ class Siloq_Sync_Engine {
         $error_count  = 0;
         $results      = array();
 
-        foreach ($all_posts as $post_id) {
-            $post = get_post($post_id);
+        foreach ( $batch_ids as $post_id ) {
+            $post = get_post( $post_id );
 
-            // Safety net: skip posts with no title and no public URL.
-            // These are WC order placeholders, cached items, or other
-            // internal CPT records that slipped through the exclusion list.
+            // Safety net: skip untitled posts with no real public URL.
             if ( $post ) {
-                $permalink = get_permalink( $post_id );
-                $site_url  = get_site_url();
-                // A "real" page must have a title or a URL that's different from
-                // the base site URL (i.e. not /?p=123 admin-only links).
+                $permalink    = get_permalink( $post_id );
                 $is_real_page = ! empty( $post->post_title )
                     || ( $permalink && $permalink !== $site_url && strpos( $permalink, '?p=' ) === false );
-                if ( ! $is_real_page ) {
-                    continue; // skip — not indexable content
-                }
+                if ( ! $is_real_page ) continue;
             }
 
-            $result = $this->sync_page($post_id);
+            $result    = $this->sync_page( $post_id );
             $results[] = array(
                 'post_id' => $post_id,
                 'title'   => $post ? $post->post_title : '',
                 'result'  => $result,
             );
 
-            if ($result['success']) {
+            if ( $result['success'] ) {
                 $synced_count++;
             } else {
                 $error_count++;
             }
 
-            usleep(100000); // 0.1 seconds
+            usleep( 50000 ); // 0.05s — halved from 0.1s to keep batches fast
         }
+
+        $has_more     = count( $batch_ids ) === $batch_size;
+        $next_offset  = $offset + count( $batch_ids );
 
         // BUG 4 FIX: Schedule auto-analysis for unanalyzed pages
         $unanalyzed = get_posts( array(
@@ -192,13 +213,37 @@ class Siloq_Sync_Engine {
             }
         }
 
+        // Only run post-sync tasks on the final batch
+        if ( ! $has_more ) {
+            $unanalyzed = get_posts( array(
+                'post_type'   => $post_types,
+                'post_status' => 'publish',
+                'numberposts' => -1,
+                'fields'      => 'ids',
+                'meta_query'  => array(
+                    'relation' => 'AND',
+                    array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
+                    array( 'key' => '_siloq_analysis_score', 'compare' => 'NOT EXISTS' ),
+                ),
+            ) );
+            if ( ! empty( $unanalyzed ) ) {
+                update_option( 'siloq_analysis_queue_count', count( $unanalyzed ) );
+                if ( ! wp_next_scheduled( 'siloq_analyze_batch' ) ) {
+                    wp_schedule_single_event( time() + 30, 'siloq_analyze_batch' );
+                }
+            }
+        }
+
         return array(
-            'success'  => $synced_count > 0,
-            'synced'   => $synced_count,
-            'errors'   => $error_count,
-            'total'    => count($all_posts),
-            'results'  => $results,
-            'has_more' => false, // all pages synced in one pass
+            'success'     => $synced_count > 0 || $error_count === 0,
+            'synced'      => $synced_count,
+            'errors'      => $error_count,
+            'total'       => $total,
+            'batch_size'  => $batch_size,
+            'offset'      => $offset,
+            'next_offset' => $next_offset,
+            'has_more'    => $has_more,
+            'results'     => $results,
         );
     }
     

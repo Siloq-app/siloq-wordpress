@@ -136,15 +136,17 @@ class Siloq_API_Client {
         // AIOSEO 4.x stores meta in wp_aioseo_posts, NOT in standard post_meta.
         // Guard: only query the AIOSEO table if it actually exists — avoids MySQL
         // errors (and broken JSON responses) on sites that don't use AIOSEO.
+        // Cache the existence check as a static so it only runs once per request,
+        // not once per page during a 700-page batch sync.
         global $wpdb;
         $aioseo = null;
+        static $aioseo_exists_cache = null;
+        if ( $aioseo_exists_cache === null ) {
+            $aioseo_table        = $wpdb->prefix . 'aioseo_posts';
+            $aioseo_exists_cache = ( $wpdb->get_var( "SHOW TABLES LIKE '{$aioseo_table}'" ) === $aioseo_table );
+        }
         $aioseo_table = $wpdb->prefix . 'aioseo_posts';
-        $aioseo_exists = (bool) $wpdb->get_var( $wpdb->prepare(
-            "SELECT COUNT(1) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s LIMIT 1",
-            DB_NAME,
-            $aioseo_table
-        ) );
-        if ( $aioseo_exists ) {
+        if ( $aioseo_exists_cache ) {
             $aioseo = $wpdb->get_row( $wpdb->prepare(
                 "SELECT title, description FROM {$aioseo_table} WHERE post_id = %d",
                 $post->ID

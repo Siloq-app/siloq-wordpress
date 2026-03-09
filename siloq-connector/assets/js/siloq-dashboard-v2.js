@@ -691,23 +691,48 @@
       loadPages(true);
     });
 
-    // Sync All (reuse existing AJAX action)
+    // Sync All — paginated batch loop so large sites (700+ pages) don't timeout
     $(document).on('click', '#siloq-pages-sync-all', function () {
       var $btn = $(this);
-      $btn.prop('disabled', true).html('<span class="siloq-spinner"></span> Syncing...');
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_sync_all_pages',
-        nonce: cfg.nonce
-      }, function (resp) {
-        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
-        if (resp.success) {
-          pagesOffset = 0;
-          pagesLoaded = false;
-          loadPages(false);
-        }
-      }).fail(function () {
-        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
-      });
+      var totalSynced = 0;
+      var batchOffset = 0;
+      var grandTotal  = 0;
+
+      function runBatch(offset) {
+        $btn.prop('disabled', true).html('<span class="siloq-spinner"></span> Syncing ' + (grandTotal ? totalSynced + '/' + grandTotal : '...') + ' pages');
+
+        $.post(cfg.ajaxUrl, {
+          action: 'siloq_sync_all_pages',
+          nonce:  cfg.nonce,
+          offset: offset
+        }, function (resp) {
+          if (resp.success && resp.data) {
+            totalSynced += (resp.data.synced || 0);
+            if (resp.data.total) grandTotal = resp.data.total;
+
+            if (resp.data.has_more) {
+              // More batches — keep going
+              runBatch(resp.data.next_offset);
+            } else {
+              // Done — reload page list
+              $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+              pagesOffset = 0;
+              pagesLoaded = false;
+              loadPages(false);
+            }
+          } else {
+            // Batch failed — stop and reload whatever synced so far
+            $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+            pagesOffset = 0;
+            pagesLoaded = false;
+            loadPages(false);
+          }
+        }).fail(function () {
+          $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+        });
+      }
+
+      runBatch(0);
     });
 
     // View Issues toggle

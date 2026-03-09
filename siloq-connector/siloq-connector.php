@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.150
+* Version: 1.5.151
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.150');
+define('SILOQ_VERSION', '1.5.151');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -662,8 +662,12 @@ class Siloq_Connector {
             return;
         }
 
+        // Support paginated sync — JS passes offset for each batch
+        $offset     = isset( $_POST['offset'] ) ? intval( $_POST['offset'] ) : 0;
+        $batch_size = 50; // 50 pages per AJAX call — safe for all shared hosts
+
         $sync_engine = new Siloq_Sync_Engine();
-        $result = $sync_engine->sync_all_pages();
+        $result = $sync_engine->sync_all_pages( $offset, $batch_size );
 
         // After a successful full sync, purge stale pages from Siloq DB.
         // Collect ALL current published/draft post IDs so the API knows what's still live.

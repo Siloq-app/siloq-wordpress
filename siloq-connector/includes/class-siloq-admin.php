@@ -1683,8 +1683,12 @@ class Siloq_Admin {
                 function loadDebugLog() {
                     $.post(ajaxurl, {action: 'siloq_get_debug_log', nonce: nonce}, function(r) {
                         if (r.success) {
-                            $('#siloq-debug-log-viewer').text(r.data.log || '(empty)');
+                            $('#siloq-debug-log-viewer').text(r.data.log || '(no log entries yet — enable debug mode and try syncing a page)');
+                        } else {
+                            $('#siloq-debug-log-viewer').text('(error loading log: ' + (r.data || 'unknown error') + ')');
                         }
+                    }).fail(function(xhr) {
+                        $('#siloq-debug-log-viewer').text('(request failed — HTTP ' + xhr.status + '. Check that debug nonce is valid.)');
                     });
                 }
 
