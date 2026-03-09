@@ -3496,6 +3496,209 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
             <!-- ═══════ REDIRECTS TAB ═══════ -->
             <div id="siloq-tab-redirects" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
 
+                <!-- ═══ URL RESTRUCTURE — Service Area Hub Detection ═══ -->
+                <?php
+                // Detect service-areas hub page and city spokes for restructure suggestion
+                $_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
+                $_sa_spokes = [];
+                if ( $_sa_hub ) {
+                    $_synced_posts = get_posts([
+                        'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : ['page','post'],
+                        'post_status' => 'publish',
+                        'numberposts' => -1,
+                        'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
+                    ]);
+                    foreach ( $_synced_posts as $_sp ) {
+                        $slug = get_page_uri($_sp);
+                        if ( strpos($slug, 'service-area') === false ) {
+                            $_sa_spokes[] = ['id'=>$_sp->ID,'title'=>$_sp->post_title,'slug'=>$slug,'url'=>get_permalink($_sp->ID)];
+                        }
+                    }
+                }
+                if ( $_sa_hub && !empty($_sa_spokes) ) :
+                ?>
+                <div class="siloq-card" id="siloq-restructure-card" style="margin-bottom:16px;border:2px solid #e0e7ff;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+                        <div>
+                            <h3 style="font-size:15px;font-weight:700;margin:0 0 6px;color:#1e293b;">🔀 URL Restructure Recommendation</h3>
+                            <p style="font-size:12px;color:#64748b;margin:0;">
+                                Siloq detected <strong><?php echo count($_sa_spokes); ?> city/spoke pages</strong> that should be nested under your
+                                <strong><a href="<?php echo esc_url(get_permalink($_sa_hub->ID)); ?>" target="_blank"><?php echo esc_html($_sa_hub->post_title); ?></a></strong> hub.
+                                Moving them to <code>/service-areas/[city-slug]/</code> strengthens your silo architecture and signals topical authority to search engines.
+                            </p>
+                        </div>
+                        <button type="button" id="siloq-preview-restructure-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm">
+                            Preview URL Changes
+                        </button>
+                    </div>
+
+                    <!-- Preview table (hidden until button clicked) -->
+                    <div id="siloq-restructure-preview" style="display:none;">
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;width:32px;">
+                                            <input type="checkbox" id="siloq-restructure-select-all" checked style="cursor:pointer;">
+                                        </th>
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;">Page</th>
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;">Current URL</th>
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;width:30px;"></th>
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;">New URL (301 Redirect)</th>
+                                        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#374151;width:80px;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="siloq-restructure-tbody">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #e2e8f0;">
+                            <p style="font-size:11px;color:#94a3b8;margin:0;">
+                                ⚠️ Redirects are added to Siloq's redirect manager. You still need to manually update the WordPress parent page for each page to change the live URL.
+                            </p>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" id="siloq-restructure-cancel-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm">Cancel</button>
+                                <button type="button" id="siloq-restructure-apply-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm">
+                                    ✓ Apply Selected Redirects
+                                </button>
+                            </div>
+                        </div>
+                        <div id="siloq-restructure-msg" style="display:none;margin-top:10px;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
+                    </div>
+
+                    <div id="siloq-restructure-loading" style="display:none;padding:12px 0;font-size:12px;color:#64748b;">
+                        <span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span>
+                        Loading suggestions…
+                    </div>
+                </div>
+
+                <script type="text/javascript">
+                (function($) {
+                    var _restructureData = null;
+
+                    // Preview button
+                    $('#siloq-preview-restructure-btn').on('click', function() {
+                        var $btn = $(this);
+                        var $loading = $('#siloq-restructure-loading');
+                        var $preview = $('#siloq-restructure-preview');
+                        $btn.prop('disabled', true).text('Loading…');
+                        $loading.show();
+                        $preview.hide();
+
+                        $.post(
+                            (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+                            { action: 'siloq_preview_city_redirects', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), target_prefix: '/service-areas/' },
+                            function(r) {
+                                $btn.prop('disabled', false).text('Refresh Preview');
+                                $loading.hide();
+                                if (!r.success) { alert('Error loading suggestions.'); return; }
+                                _restructureData = r.data.suggestions;
+                                renderRestructureTable(_restructureData);
+                                $preview.show();
+                            }
+                        );
+                    });
+
+                    function renderRestructureTable(suggestions) {
+                        var html = '';
+                        if (!suggestions || !suggestions.length) {
+                            html = '<tr><td colspan="6" style="padding:16px;text-align:center;color:#94a3b8;">All city pages are already under /service-areas/ — nothing to restructure.</td></tr>';
+                        } else {
+                            $.each(suggestions, function(i, s) {
+                                var statusHtml = s.already_exists
+                                    ? '<span style="color:#16a34a;font-weight:600;">✓ Exists</span>'
+                                    : '<span style="color:#94a3b8;">New</span>';
+                                var typeColor = s.page_type === 'city_spoke' ? '#6366f1' : '#64748b';
+                                html += '<tr style="border-bottom:1px solid #f1f5f9;" data-from="' + siloqEsc(s.from) + '" data-to="' + siloqEsc(s.to) + '">';
+                                html += '<td style="padding:8px 10px;"><input type="checkbox" class="siloq-restructure-row-cb"' + (s.already_exists ? ' disabled' : ' checked') + '></td>';
+                                html += '<td style="padding:8px 10px;"><div style="font-weight:600;color:#1e293b;">' + siloqEsc(s.title) + '</div><div style="font-size:10px;color:' + typeColor + ';margin-top:2px;">' + siloqEsc(s.page_type) + '</div></td>';
+                                html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#6b7280;">' + siloqEsc(s.from) + '</td>';
+                                html += '<td style="padding:8px 10px;text-align:center;color:#94a3b8;">→</td>';
+                                html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#6366f1;">' + siloqEsc(s.to) + '</td>';
+                                html += '<td style="padding:8px 10px;">' + statusHtml + '</td>';
+                                html += '</tr>';
+                            });
+                        }
+                        $('#siloq-restructure-tbody').html(html);
+                    }
+
+                    // Select all checkbox
+                    $(document).on('change', '#siloq-restructure-select-all', function() {
+                        var checked = $(this).is(':checked');
+                        $('.siloq-restructure-row-cb:not(:disabled)').prop('checked', checked);
+                    });
+
+                    // Cancel
+                    $('#siloq-restructure-cancel-btn').on('click', function() {
+                        $('#siloq-restructure-preview').hide();
+                        $('#siloq-preview-restructure-btn').text('Preview URL Changes');
+                    });
+
+                    // Apply selected
+                    $('#siloq-restructure-apply-btn').on('click', function() {
+                        var $btn = $(this);
+                        var $msg = $('#siloq-restructure-msg');
+                        var toApply = [];
+
+                        $('#siloq-restructure-tbody tr').each(function() {
+                            var $row = $(this);
+                            if ($row.find('.siloq-restructure-row-cb').is(':checked')) {
+                                toApply.push({ from: $row.data('from'), to: $row.data('to') });
+                            }
+                        });
+
+                        if (!toApply.length) {
+                            $msg.css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fde68a'}).text('No redirects selected.').show();
+                            return;
+                        }
+
+                        $btn.prop('disabled', true).text('Applying…');
+                        $msg.hide();
+
+                        var done = 0, errors = 0;
+                        var total = toApply.length;
+
+                        function applyNext(idx) {
+                            if (idx >= toApply.length) {
+                                $btn.prop('disabled', false).text('✓ Apply Selected Redirects');
+                                var msg = done + ' redirect' + (done !== 1 ? 's' : '') + ' added successfully.';
+                                if (errors) msg += ' ' + errors + ' failed.';
+                                $msg.css({
+                                    'background': errors ? '#fee2e2' : '#dcfce7',
+                                    'color': errors ? '#991b1b' : '#166534',
+                                    'border': '1px solid ' + (errors ? '#fca5a5' : '#bbf7d0')
+                                }).text(msg).show();
+                                // Reload the redirects list
+                                if (typeof loadSiloqRedirects === 'function') loadSiloqRedirects();
+                                return;
+                            }
+                            var item = toApply[idx];
+                            $.post(
+                                (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
+                                { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from_url: item.from, to_url: item.to, redirect_type: '301' },
+                                function(r) {
+                                    if (r.success) done++; else errors++;
+                                    // Mark row applied
+                                    var $tr = $('#siloq-restructure-tbody tr[data-from="' + item.from + '"]');
+                                    $tr.find('td:last').html(r.success
+                                        ? '<span style="color:#16a34a;font-weight:600;">✓ Applied</span>'
+                                        : '<span style="color:#dc2626;">✗ Error</span>');
+                                    $tr.find('.siloq-restructure-row-cb').prop('disabled', true).prop('checked', false);
+                                    applyNext(idx + 1);
+                                }
+                            ).fail(function() { errors++; applyNext(idx + 1); });
+                        }
+                        applyNext(0);
+                    });
+
+                    function siloqEsc(str) { return $('<div>').text(str || '').html(); }
+                }(jQuery));
+                </script>
+                <?php endif; ?>
+                <!-- ═══ /URL RESTRUCTURE ═══ -->
+
                 <!-- Add New Redirect -->
                 <div class="siloq-card" style="margin-bottom:16px;">
                     <div class="siloq-card-header" style="margin-bottom:14px;">
