@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.151
+* Version: 1.5.152
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.151');
+define('SILOQ_VERSION', '1.5.152');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -734,9 +734,11 @@ class Siloq_Connector {
                 Siloq_Agent_Ready::on_sync_complete();
             }
 
+            // Always send success so JS can read has_more + next_offset
+            // and continue the batch loop regardless of per-page errors.
             wp_send_json_success($result);
         } else {
-            wp_send_json_error($result);
+            wp_send_json_success($result);
         }
     }
     

@@ -235,7 +235,7 @@ class Siloq_Sync_Engine {
         }
 
         return array(
-            'success'     => $synced_count > 0 || $error_count === 0,
+            'success'     => true, // always true — let JS decide based on has_more + counts
             'synced'      => $synced_count,
             'errors'      => $error_count,
             'total'       => $total,

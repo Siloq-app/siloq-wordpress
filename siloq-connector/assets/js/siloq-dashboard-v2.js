@@ -706,29 +706,28 @@
           nonce:  cfg.nonce,
           offset: offset
         }, function (resp) {
-          if (resp.success && resp.data) {
-            totalSynced += (resp.data.synced || 0);
-            if (resp.data.total) grandTotal = resp.data.total;
+          // Use resp.data regardless of resp.success — a batch may have API errors
+          // for some pages but still return has_more for the next batch.
+          var d = resp.data || {};
+          totalSynced += (d.synced || 0);
+          if (d.total) grandTotal = d.total;
 
-            if (resp.data.has_more) {
-              // More batches — keep going
-              runBatch(resp.data.next_offset);
-            } else {
-              // Done — reload page list
-              $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
-              pagesOffset = 0;
-              pagesLoaded = false;
-              loadPages(false);
-            }
+          if (d.has_more && d.next_offset !== undefined) {
+            // More batches to process — keep going
+            runBatch(d.next_offset);
           } else {
-            // Batch failed — stop and reload whatever synced so far
+            // All done (or no data returned at all)
             $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
             pagesOffset = 0;
             pagesLoaded = false;
             loadPages(false);
           }
         }).fail(function () {
-          $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+          // Network/PHP fatal — stop and show what synced so far
+          $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All (' + totalSynced + ' synced)');
+          pagesOffset = 0;
+          pagesLoaded = false;
+          loadPages(false);
         });
       }
 
