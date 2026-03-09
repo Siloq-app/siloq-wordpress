@@ -290,4 +290,73 @@ class Siloq_API_Client {
             'active_wp_post_ids' => array_values(array_map('intval', $active_wp_post_ids)),
         ));
     }
+
+    /**
+     * Generate intelligence analysis (POST /api/v1/sites/{site_id}/intelligence/)
+     */
+    public static function generate_intelligence($site_id) {
+        $api_key = get_option('siloq_api_key');
+        if (!$api_key) {
+            return new WP_Error('no_api_key', 'API key not configured.');
+        }
+
+        $api_base = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+
+        $response = wp_remote_post(
+            $api_base . '/sites/' . intval($site_id) . '/intelligence/',
+            array(
+                'timeout' => 30,
+                'headers' => array(
+                    'Authorization' => 'Token ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                ),
+                'body' => wp_json_encode(array('trigger' => 'manual')),
+            )
+        );
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200 || empty($body['success'])) {
+            $msg = isset($body['error']) ? $body['error'] : 'Intelligence generation failed (HTTP ' . $code . ')';
+            return new WP_Error('api_error', $msg);
+        }
+
+        return $body;
+    }
+
+    /**
+     * Get cached intelligence analysis (GET /api/v1/sites/{site_id}/intelligence/)
+     */
+    public static function get_intelligence($site_id) {
+        $api_key = get_option('siloq_api_key');
+        if (!$api_key) {
+            return new WP_Error('no_api_key', 'API key not configured.');
+        }
+
+        $api_base = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+
+        $response = wp_remote_get(
+            $api_base . '/sites/' . intval($site_id) . '/intelligence/',
+            array(
+                'timeout' => 15,
+                'headers' => array(
+                    'Authorization' => 'Token ' . $api_key,
+                    'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                ),
+            )
+        );
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        return $body;
+    }
 }

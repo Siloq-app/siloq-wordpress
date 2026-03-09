@@ -398,6 +398,9 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_clear_debug_log',    array('Siloq_Admin', 'ajax_clear_debug_log'));
         add_action('wp_ajax_siloq_download_debug_log', array('Siloq_Admin', 'ajax_download_debug_log'));
 
+        // Intelligence API
+        add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));
+
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -554,6 +557,8 @@ class Siloq_Connector {
                 'siteId'          => get_option('siloq_site_id', ''),
                 'hasAnthropicKey' => ! empty( get_option('siloq_anthropic_api_key', '') ) ? '1' : '',
                 'qwCompleted'     => $qw_completed,
+                'settingsUrl'     => admin_url('admin.php?page=siloq-settings'),
+                'businessType'    => get_option('siloq_business_type', get_option('siloq_business_type_auto', '')),
             ));
         }
 
