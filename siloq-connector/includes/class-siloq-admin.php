@@ -259,7 +259,17 @@ class Siloq_Admin {
     public static function render_settings_page() {
         // Onboarding wizard gate
         $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
         $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+
+        // Auto-recover: if the site already has api_key + site_id, it was previously
+        // set up. A plugin update or option wipe should not strand it on the wizard.
+        // Mark onboarding complete automatically so the real dashboard loads.
+        if ( ! empty( $api_key ) && ! empty( $site_id ) && $onboarding_done !== 'yes' ) {
+            update_option( 'siloq_onboarding_complete', 'yes' );
+            $onboarding_done = 'yes';
+        }
+
         if ($onboarding_done !== 'yes' || empty($api_key)) {
             self::render_onboarding_wizard();
             return;
@@ -1958,7 +1968,16 @@ class Siloq_Admin {
     public static function render_dashboard_page() {
         // Onboarding wizard gate
         $api_key = get_option('siloq_api_key', '');
+        $site_id = get_option('siloq_site_id', '');
         $onboarding_done = get_option('siloq_onboarding_complete', 'no');
+
+        // Auto-recover: if the site is already connected (has api_key + site_id),
+        // skip the wizard. Plugin updates should never strand a live site on setup.
+        if ( ! empty( $api_key ) && ! empty( $site_id ) && $onboarding_done !== 'yes' ) {
+            update_option( 'siloq_onboarding_complete', 'yes' );
+            $onboarding_done = 'yes';
+        }
+
         if ($onboarding_done !== 'yes' || empty($api_key)) {
             self::render_onboarding_wizard();
             return;
@@ -4860,7 +4879,18 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
             var ajaxUrl = '<?php echo esc_js(admin_url('admin-ajax.php')); ?>';
             var nonce = '<?php echo esc_js($nonce); ?>';
             var apiUrl = '<?php echo esc_js($api_url); ?>';
-            var currentStep = 1;
+            var currentStep = <?php echo intval($saved_step); ?>;
+
+            // If resuming at step 3, auto-start sync immediately on page load.
+            // Without this, siloqWizardStartSync() is never called and the
+            // Continue button stays permanently disabled.
+            document.addEventListener('DOMContentLoaded', function() {
+                if (currentStep === 3) {
+                    if (typeof siloqWizardStartSync === 'function') {
+                        siloqWizardStartSync();
+                    }
+                }
+            });
 
             function setLoading(btn, loading) {
                 if (loading) {
