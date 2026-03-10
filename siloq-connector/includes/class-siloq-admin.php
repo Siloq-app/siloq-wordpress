@@ -3891,6 +3891,139 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     </div>
                 </div><!-- /brand voice -->
 
+                <!-- ═══ SITE GOALS ═══ -->
+                <?php
+                $goals_data        = Siloq_Goals::get_goals();
+                $current_goal      = isset( $goals_data['primary_goal'] ) ? $goals_data['primary_goal'] : 'local_leads';
+                $current_geo_pages = isset( $goals_data['geo_priority_pages'] ) ? (array) $goals_data['geo_priority_pages'] : array();
+                $goal_labels       = array(
+                    'local_leads'    => __( 'Get more phone calls / local leads', 'siloq-connector' ),
+                    'ecommerce_sales'=> __( 'Drive more e-commerce sales', 'siloq-connector' ),
+                    'topic_authority'=> __( 'Build authority on a specific topic', 'siloq-connector' ),
+                    'multi_location' => __( 'Rank in multiple cities', 'siloq-connector' ),
+                    'geo_citations'  => __( 'Be cited by AI assistants (ChatGPT, Perplexity)', 'siloq-connector' ),
+                    'organic_growth' => __( 'Grow overall organic traffic', 'siloq-connector' ),
+                );
+                ?>
+                <div class="siloq-card" id="siloq-goals-card" style="margin-top:16px;">
+                    <div class="siloq-card-header" style="cursor:pointer;user-select:none;" onclick="var b=document.getElementById('siloq-goals-body');b.style.display=b.style.display==='none'?'block':'none';var a=document.getElementById('siloq-goals-arrow');a.textContent=b.style.display==='none'?'&#9654;':'&#9660;';">
+                        <h3 class="siloq-card-title"><span id="siloq-goals-arrow">&#9660;</span> &#127919; Site Goals</h3>
+                    </div>
+                    <div id="siloq-goals-body">
+
+                        <!-- Primary Goal -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label style="font-weight:600;display:block;margin-bottom:8px;"><?php _e( 'Primary Goal', 'siloq-connector' ); ?></label>
+                            <?php foreach ( $goal_labels as $val => $label ) : ?>
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;margin-bottom:6px;">
+                                <input type="radio" name="siloq_goals_primary" value="<?php echo esc_attr( $val ); ?>" <?php checked( $current_goal, $val ); ?> style="accent-color:#6366f1;">
+                                <?php echo esc_html( $label ); ?>
+                            </label>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <!-- GEO Priority Pages -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label style="font-weight:600;display:block;margin-bottom:4px;"><?php _e( 'GEO Priority Pages', 'siloq-connector' ); ?></label>
+                            <p style="font-size:12px;color:#64748b;margin-bottom:8px;"><?php _e( 'Select up to 3 pages you most want AI assistants to cite.', 'siloq-connector' ); ?></p>
+                            <div id="siloq-goals-page-selector" style="max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
+                                <p style="color:#9ca3af;font-size:13px;"><?php _e( 'Loading pages...', 'siloq-connector' ); ?></p>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+                            <button type="button" id="siloq-goals-save-btn" class="siloq-btn siloq-btn--primary"><?php _e( 'Save & Sync Goals', 'siloq-connector' ); ?></button>
+                        </div>
+                        <span id="siloq-goals-msg" style="display:none;margin-top:8px;font-size:13px;color:#16a34a;font-weight:500;"></span>
+
+                        <script>
+                        (function(){
+                            var preselected = <?php echo wp_json_encode( array_map( 'intval', $current_geo_pages ) ); ?>;
+
+                            function loadGoalsPages() {
+                                var container = document.getElementById('siloq-goals-page-selector');
+                                if (!container) return;
+                                var fd = new FormData();
+                                fd.append('action', 'siloq_get_pages_for_selector');
+                                fd.append('nonce', '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>');
+                                fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(res){
+                                        if (!res.success || !res.data || !res.data.pages) {
+                                            container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js( __( 'Could not load pages.', 'siloq-connector' ) ); ?></p>';
+                                            return;
+                                        }
+                                        var pages = res.data.pages;
+                                        var html = '';
+                                        for (var i = 0; i < pages.length; i++) {
+                                            var p = pages[i];
+                                            var chk = preselected.indexOf(parseInt(p.ID)) !== -1 ? 'checked' : '';
+                                            html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;">'
+                                                  + '<input type="checkbox" class="siloq-goals-page-cb" value="' + p.ID + '" ' + chk + ' style="accent-color:#6366f1;">'
+                                                  + '<span>' + p.post_title + '</span>'
+                                                  + '</label>';
+                                        }
+                                        container.innerHTML = html || '<p style="color:#9ca3af;font-size:13px;"><?php echo esc_js( __( 'No published pages found.', 'siloq-connector' ) ); ?></p>';
+
+                                        container.addEventListener('change', function(e) {
+                                            if (e.target && e.target.classList.contains('siloq-goals-page-cb')) {
+                                                var checked = container.querySelectorAll('.siloq-goals-page-cb:checked');
+                                                if (checked.length > 3) { e.target.checked = false; }
+                                            }
+                                        });
+                                    })
+                                    .catch(function(){
+                                        container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js( __( 'Error loading pages.', 'siloq-connector' ) ); ?></p>';
+                                    });
+                            }
+
+                            loadGoalsPages();
+
+                            document.getElementById('siloq-goals-save-btn').addEventListener('click', function() {
+                                var btn = this;
+                                btn.disabled = true;
+                                btn.textContent = '<?php echo esc_js( __( 'Saving...', 'siloq-connector' ) ); ?>';
+
+                                var primaryEl = document.querySelector('input[name="siloq_goals_primary"]:checked');
+                                var primaryGoal = primaryEl ? primaryEl.value : 'local_leads';
+
+                                var geoPages = [];
+                                var cbs = document.querySelectorAll('.siloq-goals-page-cb:checked');
+                                for (var i = 0; i < cbs.length; i++) { geoPages.push(cbs[i].value); }
+
+                                var fd = new FormData();
+                                fd.append('action', 'siloq_save_goals');
+                                fd.append('nonce', '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>');
+                                fd.append('primary_goal', primaryGoal);
+                                for (var j = 0; j < geoPages.length; j++) { fd.append('geo_priority_pages[]', geoPages[j]); }
+
+                                fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(res){
+                                        btn.disabled = false;
+                                        btn.textContent = '<?php echo esc_js( __( 'Save & Sync Goals', 'siloq-connector' ) ); ?>';
+                                        var msg = document.getElementById('siloq-goals-msg');
+                                        if (res.success) {
+                                            msg.textContent = '<?php echo esc_js( __( 'Goals saved and synced.', 'siloq-connector' ) ); ?>';
+                                            msg.style.color = '#16a34a';
+                                        } else {
+                                            msg.textContent = (res.data && res.data.message) ? res.data.message : '<?php echo esc_js( __( 'Error saving goals.', 'siloq-connector' ) ); ?>';
+                                            msg.style.color = '#ef4444';
+                                        }
+                                        msg.style.display = 'inline-block';
+                                        setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+                                    })
+                                    .catch(function(){
+                                        btn.disabled = false;
+                                        btn.textContent = '<?php echo esc_js( __( 'Save & Sync Goals', 'siloq-connector' ) ); ?>';
+                                    });
+                            });
+                        })();
+                        </script>
+
+                    </div>
+                </div><!-- /goals -->
+
             </div><!-- /settings tab -->
 
             <!-- ═══════ REDIRECTS TAB ═══════ -->
@@ -5005,6 +5138,8 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <div class="siloq-wizard-step-dot <?php echo $saved_step >= 2 ? 'active' : ''; ?>" data-step="2"></div>
                     <div class="siloq-wizard-step-dot <?php echo $saved_step >= 3 ? 'active' : ''; ?>" data-step="3"></div>
                     <div class="siloq-wizard-step-dot <?php echo $saved_step >= 4 ? 'active' : ''; ?>" data-step="4"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 5 ? 'active' : ''; ?>" data-step="5"></div>
+                    <div class="siloq-wizard-step-dot <?php echo $saved_step >= 6 ? 'active' : ''; ?>" data-step="6"></div>
                 </div>
 
                 <!-- STEP 1: Connect to Siloq -->
@@ -5129,8 +5264,79 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     </div>
                 </div>
 
-                <!-- STEP 4: All Set -->
+                <!-- STEP 4: Primary Goal -->
+                <div class="siloq-wizard-step" id="siloq-step-goal">
+                </div>
                 <div class="siloq-wizard-panel" id="siloq-wizard-step-4">
+                    <h2><?php _e( 'Your #1 Goal', 'siloq-connector' ); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e( 'Help Siloq focus on what matters most to your business.', 'siloq-connector' ); ?></p>
+
+                    <div class="siloq-goal-options" style="display:flex;flex-direction:column;gap:10px;margin:20px 0;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="local_leads" checked style="accent-color:#6366f1;">
+                            <?php _e( 'Get more phone calls / local leads', 'siloq-connector' ); ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="ecommerce_sales" style="accent-color:#6366f1;">
+                            <?php _e( 'Drive more e-commerce sales', 'siloq-connector' ); ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="topic_authority" style="accent-color:#6366f1;">
+                            <?php _e( 'Build authority on a specific topic', 'siloq-connector' ); ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="multi_location" style="accent-color:#6366f1;">
+                            <?php _e( 'Rank in multiple cities', 'siloq-connector' ); ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="geo_citations" style="accent-color:#6366f1;">
+                            <?php _e( 'Be cited by AI assistants (ChatGPT, Perplexity)', 'siloq-connector' ); ?>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                            <input type="radio" name="siloq_primary_goal" value="organic_growth" style="accent-color:#6366f1;">
+                            <?php _e( 'Grow overall organic traffic', 'siloq-connector' ); ?>
+                        </label>
+                    </div>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-goal-btn" onclick="siloqWizardGoTo(5)">
+                        <?php _e( 'Continue', 'siloq-connector' ); ?>
+                    </button>
+
+                    <div class="siloq-wizard-skip">
+                        <a onclick="siloqWizardGoTo(5)"><?php _e( 'Skip for now', 'siloq-connector' ); ?></a>
+                    </div>
+                </div>
+
+                <!-- STEP 5: GEO Priority Pages -->
+                <div class="siloq-wizard-step" id="siloq-step-geo">
+                </div>
+                <div class="siloq-wizard-panel" id="siloq-wizard-step-5">
+                    <h2><?php _e( 'GEO Priority Pages', 'siloq-connector' ); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e( 'Which pages do you most want AI assistants to cite?', 'siloq-connector' ); ?></p>
+                    <p style="font-size:13px;color:#64748b;margin-bottom:16px;"><?php _e( 'Select up to 3 pages. These become your GEO priority pages.', 'siloq-connector' ); ?></p>
+
+                    <div class="siloq-wizard-error" id="siloq-wizard-error-5"></div>
+
+                    <div id="siloq-geo-page-selector" style="max-height:260px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
+                        <p style="color:#9ca3af;font-size:13px;"><?php _e( 'Loading pages...', 'siloq-connector' ); ?></p>
+                    </div>
+
+                    <p class="siloq-hint" style="font-size:12px;color:#64748b;margin-top:12px;">
+                        <?php _e( 'AI assistants like ChatGPT and Perplexity cite pages that are well-structured and authoritative. Siloq will help optimize these pages for AI visibility.', 'siloq-connector' ); ?>
+                    </p>
+
+                    <button type="button" class="siloq-wizard-btn" id="siloq-wizard-geo-btn" onclick="siloqWizardSaveGoals()" style="margin-top:16px;">
+                        <span class="spinner-dot"></span>
+                        <?php _e( 'Save & Continue', 'siloq-connector' ); ?>
+                    </button>
+
+                    <div class="siloq-wizard-skip">
+                        <a onclick="siloqWizardGoTo(6)"><?php _e( 'Skip for now', 'siloq-connector' ); ?></a>
+                    </div>
+                </div>
+
+                <!-- STEP 6: All Set -->
+                <div class="siloq-wizard-panel" id="siloq-wizard-step-6">
                     <div class="siloq-wizard-done">
                         <div class="done-check">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -5169,6 +5375,11 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 if (currentStep === 3) {
                     if (typeof siloqWizardStartSync === 'function') {
                         siloqWizardStartSync();
+                    }
+                }
+                if (currentStep === 5) {
+                    if (typeof siloqWizardLoadGeoPages === 'function') {
+                        siloqWizardLoadGeoPages();
                     }
                 }
             });
@@ -5218,6 +5429,90 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
                 // Auto-trigger sync on step 3
                 if (step === 3) siloqWizardStartSync();
+
+                // Auto-load pages selector on step 5
+                if (step === 5) siloqWizardLoadGeoPages();
+            };
+
+            window.siloqWizardLoadGeoPages = function() {
+                var container = document.getElementById('siloq-geo-page-selector');
+                if (!container) return;
+                // Avoid reloading if already populated
+                if (container.getAttribute('data-loaded') === '1') return;
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_get_pages_for_selector');
+                fd.append('nonce', nonce);
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (!res.success || !res.data || !res.data.pages) {
+                            container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js(__('Could not load pages.', 'siloq-connector')); ?></p>';
+                            return;
+                        }
+                        var pages = res.data.pages;
+                        if (!pages.length) {
+                            container.innerHTML = '<p style="color:#9ca3af;font-size:13px;"><?php echo esc_js(__('No published pages found.', 'siloq-connector')); ?></p>';
+                            return;
+                        }
+                        var html = '';
+                        for (var i = 0; i < pages.length; i++) {
+                            var p = pages[i];
+                            html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;">'
+                                  + '<input type="checkbox" class="siloq-geo-page-cb" value="' + p.ID + '" style="accent-color:#6366f1;">'
+                                  + '<span>' + p.post_title + '</span>'
+                                  + '</label>';
+                        }
+                        container.innerHTML = html;
+                        container.setAttribute('data-loaded', '1');
+
+                        // Limit to 3 selections
+                        container.addEventListener('change', function(e) {
+                            if (e.target && e.target.classList.contains('siloq-geo-page-cb')) {
+                                var checked = container.querySelectorAll('.siloq-geo-page-cb:checked');
+                                if (checked.length > 3) {
+                                    e.target.checked = false;
+                                }
+                            }
+                        });
+                    })
+                    .catch(function() {
+                        container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js(__('Error loading pages.', 'siloq-connector')); ?></p>';
+                    });
+            };
+
+            window.siloqWizardSaveGoals = function() {
+                var btn = document.getElementById('siloq-wizard-geo-btn');
+                if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+
+                var primaryGoalEl = document.querySelector('input[name="siloq_primary_goal"]:checked');
+                var primaryGoal = primaryGoalEl ? primaryGoalEl.value : 'local_leads';
+
+                var geoPages = [];
+                var checked = document.querySelectorAll('.siloq-geo-page-cb:checked');
+                for (var i = 0; i < checked.length; i++) {
+                    geoPages.push(checked[i].value);
+                }
+
+                var fd = new FormData();
+                fd.append('action', 'siloq_save_goals');
+                fd.append('nonce', nonce);
+                fd.append('primary_goal', primaryGoal);
+                for (var j = 0; j < geoPages.length; j++) {
+                    fd.append('geo_priority_pages[]', geoPages[j]);
+                }
+
+                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
+                        siloqWizardGoTo(6);
+                    })
+                    .catch(function() {
+                        if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
+                        siloqWizardGoTo(6);
+                    });
             };
 
             window.siloqWizardToggleKey = function() {
@@ -6916,5 +7211,46 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         }
 
         wp_send_json_success( $data );
+    }
+
+    /**
+     * AJAX: Return published pages/posts for the GEO page selector.
+     */
+    public static function ajax_get_pages_for_selector() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        global $wpdb;
+        $pages = $wpdb->get_results(
+            "SELECT ID, post_title, guid FROM {$wpdb->posts}
+             WHERE post_status = 'publish' AND post_type IN ('page','post')
+             ORDER BY post_title ASC LIMIT 200",
+            ARRAY_A
+        );
+        wp_send_json_success( array( 'pages' => $pages ) );
+    }
+
+    /**
+     * AJAX: Save goals (primary goal + GEO priority pages) and sync to API.
+     */
+    public static function ajax_save_goals() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        $primary_goal   = isset( $_POST['primary_goal'] ) ? sanitize_text_field( $_POST['primary_goal'] ) : 'local_leads';
+        $geo_pages_raw  = isset( $_POST['geo_priority_pages'] ) ? (array) $_POST['geo_priority_pages'] : array();
+        $geo_pages      = array_map( 'intval', $geo_pages_raw );
+
+        $goals = array(
+            'primary_goal'       => $primary_goal,
+            'geo_priority_pages' => $geo_pages,
+        );
+        Siloq_Goals::save_goals( $goals );
+
+        // Sync to API
+        $site_id = get_option( 'siloq_site_id' );
+        if ( $site_id ) {
+            $api_client = new Siloq_API_Client();
+            Siloq_Goals::sync_to_api( $site_id, $api_client );
+        }
+
+        wp_send_json_success( array( 'message' => 'Goals saved' ) );
     }
 }

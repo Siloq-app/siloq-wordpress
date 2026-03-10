@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.169
+* Version: 1.5.170
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.169');
+define('SILOQ_VERSION', '1.5.170');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -184,6 +184,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-rules.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-scanner-shortcode.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-goals.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -352,6 +353,9 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_wizard_connect', array($this, 'ajax_wizard_connect'));
         add_action('wp_ajax_siloq_wizard_save_profile', array($this, 'ajax_wizard_save_profile'));
         add_action('wp_ajax_siloq_wizard_complete', array($this, 'ajax_wizard_complete'));
+        // Goals handlers
+        add_action('wp_ajax_siloq_get_pages_for_selector', array('Siloq_Admin', 'ajax_get_pages_for_selector'));
+        add_action('wp_ajax_siloq_save_goals', array('Siloq_Admin', 'ajax_save_goals'));
         // Schema tab handlers
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
