@@ -167,17 +167,29 @@ class Siloq_Redirect_Manager {
         // Self-heal: ensure the table exists before every insert.
         // create_table() is cheap (SHOW TABLES check) and idempotent.
         if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) !== $table_name ) {
-            self::create_table();
+            $table_created = self::create_table();
+            // Verify the table actually got created — surface the failure immediately
+            // rather than letting the INSERT produce a cryptic "Table doesn't exist" error.
+            if ( ! $table_created ) {
+                self::$last_error = 'Redirect table could not be created. DB error: ' . $wpdb->last_error;
+                return false;
+            }
         }
 
         // Normalize URLs
         $source_url = $this->normalize_url($source_url);
         $target_url = $this->normalize_url($target_url);
 
-        // Check if redirect already exists
-        $existing = $this->get_redirect($source_url);
-        if ($existing) {
-            return $this->update_redirect($existing->id, $target_url, $status_code);
+        // Check if redirect already exists (regardless of enabled status so we
+        // don't hit a UNIQUE KEY violation when re-inserting a disabled redirect).
+        $existing = $wpdb->get_row( $wpdb->prepare(
+            "SELECT * FROM {$table_name} WHERE source_url = %s",
+            $source_url
+        ) );
+
+        if ( $existing ) {
+            // Re-enable and update if it was disabled or points to a different target.
+            return $this->update_redirect( $existing->id, $target_url, $status_code );
         }
 
         $now    = current_time('mysql');

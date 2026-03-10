@@ -316,7 +316,11 @@
                     showNotification('success', 'Content generation started');
                     checkJobStatus(result.data.job_id);
                 } else {
-                    showNotification('error', result.data.message || 'Generation failed');
+                    var errMsg = (result.data && result.data.message)
+                        ? result.data.message
+                        : 'Generation failed';
+                    var notifType = (result.data && result.data.coming_soon) ? 'info' : 'error';
+                    showNotification(notifType, errMsg);
                     state.isGenerating = false;
                     updateUI();
                 }

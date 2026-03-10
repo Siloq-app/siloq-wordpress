@@ -6577,21 +6577,39 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         $mgr     = Siloq_Redirect_Manager::get_instance();
         $added   = 0;
+        $failed  = 0;
         $skipped = 0;
+        $errors  = array();
 
         foreach ( $pairs as $pair ) {
-            $from = sanitize_text_field( $pair['from'] ?? '' );
-            $to   = sanitize_text_field( $pair['to']   ?? '' );
+            $from = sanitize_text_field( isset( $pair['from'] ) ? $pair['from'] : '' );
+            $to   = sanitize_text_field( isset( $pair['to'] )   ? $pair['to']   : '' );
             if ( ! $from || ! $to || $from === $to ) { $skipped++; continue; }
-            $mgr->add_redirect( $from, $to, 301 ) ? $added++ : $skipped++;
+            if ( $mgr->add_redirect( $from, $to, 301 ) ) {
+                $added++;
+            } else {
+                $failed++;
+                $db_err = Siloq_Redirect_Manager::$last_error;
+                $errors[] = array(
+                    'from'     => $from,
+                    'to'       => $to,
+                    'db_error' => $db_err ? $db_err : 'Unknown error',
+                );
+            }
         }
 
-        wp_send_json_success( [
+        $msg = "Added {$added} redirect" . ( $added !== 1 ? 's' : '' );
+        if ( $failed )  { $msg .= ", {$failed} failed"; }
+        if ( $skipped ) { $msg .= ", {$skipped} skipped (duplicates or invalid)"; }
+        $msg .= '.';
+
+        wp_send_json_success( array(
             'added'   => $added,
+            'failed'  => $failed,
             'skipped' => $skipped,
-            'message' => "Added {$added} redirect" . ( $added !== 1 ? 's' : '' )
-                       . ( $skipped ? ", skipped {$skipped} (duplicates or invalid)." : '.' ),
-        ] );
+            'errors'  => $errors,
+            'message' => $msg,
+        ) );
     }
 
     /**

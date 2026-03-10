@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.167
+* Version: 1.5.168
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.167');
+define('SILOQ_VERSION', '1.5.168');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -848,14 +848,31 @@ class Siloq_Connector {
         
         $api_client = new Siloq_API_Client();
         $result = $api_client->create_content_job($post_id);
-        
+
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
-            wp_send_json_error($result);
+            // If the content-generation API endpoint doesn't exist yet (HTTP 404
+            // or "not found" / "endpoint not found" message), show a friendly
+            // "coming soon" notice instead of a raw error.
+            $msg = isset($result['message']) ? strtolower($result['message']) : '';
+            $is_not_found = (
+                strpos($msg, '404')          !== false ||
+                strpos($msg, 'not found')    !== false ||
+                strpos($msg, 'no route')     !== false ||
+                strpos($msg, 'endpoint')     !== false
+            );
+            if ($is_not_found) {
+                wp_send_json_error(array(
+                    'message'     => 'Content generation coming soon — this feature is being built.',
+                    'coming_soon' => true,
+                ));
+            } else {
+                wp_send_json_error($result);
+            }
         }
     }
-    
+
     /**
      * AJAX: Check job status
      */
@@ -876,14 +893,28 @@ class Siloq_Connector {
         
         $api_client = new Siloq_API_Client();
         $result = $api_client->get_job_status($job_id);
-        
+
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
-            wp_send_json_error($result);
+            $msg = isset($result['message']) ? strtolower($result['message']) : '';
+            $is_not_found = (
+                strpos($msg, '404')          !== false ||
+                strpos($msg, 'not found')    !== false ||
+                strpos($msg, 'no route')     !== false ||
+                strpos($msg, 'endpoint')     !== false
+            );
+            if ($is_not_found) {
+                wp_send_json_error(array(
+                    'message'     => 'Content generation coming soon — this feature is being built.',
+                    'coming_soon' => true,
+                ));
+            } else {
+                wp_send_json_error($result);
+            }
         }
     }
-    
+
     /**
      * AJAX: AI Insert Content
      * Called by siloq-ai-generator.js insertContent()
