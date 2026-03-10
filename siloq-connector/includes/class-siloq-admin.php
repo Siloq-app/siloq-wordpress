@@ -5454,8 +5454,13 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
             }
 
             // ── Schema ──────────────────────────────────────────────────────
-            $schema = get_post_meta($post_id, '_siloq_applied_types', true);
-            if (empty($schema)) {
+            global $wpdb;
+            $schema_table = $wpdb->prefix . "siloq_schema";
+            $active_types = $wpdb->get_col($wpdb->prepare(
+                "SELECT schema_type FROM {$schema_table} WHERE post_id = %d AND is_active = 1",
+                $p->ID
+            ));
+            if (empty($active_types)) {
                 $score -= 20;
                 $actions[] = array('headline' => 'Add schema markup to "' . $title . '"',
                     'detail' => 'No structured data. Schema helps AI cite this page and improves rich results.',
@@ -5583,12 +5588,25 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 }
             }
 
-            // Schema types from stored meta
-            $schema_types = array();
-            $applied_types = get_post_meta($p->ID, '_siloq_applied_types', true);
-            if (!empty($applied_types)) {
-                $schema_types = is_array($applied_types) ? $applied_types : json_decode($applied_types, true);
-                if (!is_array($schema_types)) $schema_types = array();
+            // Schema types from DB (active rows)
+            global $wpdb;
+            $schema_table = $wpdb->prefix . "siloq_schema";
+            $active_types = $wpdb->get_col($wpdb->prepare(
+                "SELECT schema_type FROM {$schema_table} WHERE post_id = %d AND is_active = 1",
+                $p->ID
+            ));
+            $inactive_types = $wpdb->get_col($wpdb->prepare(
+                "SELECT schema_type FROM {$schema_table} WHERE post_id = %d AND is_active = 0",
+                $p->ID
+            ));
+            $schema_types = !empty($active_types) ? $active_types : array();
+
+            if (!empty($active_types)) {
+                $schema_status = 'live';
+            } elseif (!empty($inactive_types)) {
+                $schema_status = 'generated';
+            } else {
+                $schema_status = 'none';
             }
 
             $has_dup = ($title_counts[strtolower(trim($title))] ?? 0) > 1;
@@ -5605,6 +5623,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 'inbound_links'          => $inbound_counts[$p->ID] ?? 0,
                 'outbound_links'         => $outbound_links,
                 'schema_types'           => $schema_types,
+                'schema_status'          => $schema_status,
                 'images_missing_alt'     => $images_missing_alt,
                 'has_duplicate_title'    => $has_dup,
             );

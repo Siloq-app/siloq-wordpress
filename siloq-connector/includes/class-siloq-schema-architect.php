@@ -91,7 +91,7 @@ class Siloq_Schema_Architect {
                 'auto_breadcrumbs'   => 'true',
                 'auto_faq_detection' => 'true',
                 'auto_apply'         => 'false',
-                'conflict_mode'      => 'warn',
+                'conflict_mode'      => 'replace',
             );
             foreach ( $defaults as $key => $value ) {
                 $wpdb->query( $wpdb->prepare(
@@ -147,7 +147,7 @@ class Siloq_Schema_Architect {
         if ( empty( $schemas ) ) return;
 
         $external       = self::detect_external_schema( $post_id );
-        $conflict_mode  = self::get_setting( 'conflict_mode', 'warn' );
+        $conflict_mode  = self::get_setting( 'conflict_mode', 'replace' );
 
         foreach ( $schemas as $schema ) {
             $json_ld = json_decode( $schema->schema_json, true );
@@ -215,7 +215,7 @@ class Siloq_Schema_Architect {
     public static function conflict_check() {
         if ( ! is_singular() ) return;
         global $post;
-        $mode = self::get_setting( 'conflict_mode', 'warn' );
+        $mode = self::get_setting( 'conflict_mode', 'replace' );
         if ( $mode !== 'override' ) return;
 
         $external = self::detect_external_schema( $post->ID );
