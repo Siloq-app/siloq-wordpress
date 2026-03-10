@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.168
+* Version: 1.5.169
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.168');
+define('SILOQ_VERSION', '1.5.169');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -850,26 +850,29 @@ class Siloq_Connector {
         $result = $api_client->create_content_job($post_id);
 
         if ($result['success']) {
-            wp_send_json_success($result);
-        } else {
-            // If the content-generation API endpoint doesn't exist yet (HTTP 404
-            // or "not found" / "endpoint not found" message), show a friendly
-            // "coming soon" notice instead of a raw error.
-            $msg = isset($result['message']) ? strtolower($result['message']) : '';
-            $is_not_found = (
-                strpos($msg, '404')          !== false ||
-                strpos($msg, 'not found')    !== false ||
-                strpos($msg, 'no route')     !== false ||
-                strpos($msg, 'endpoint')     !== false
-            );
-            if ($is_not_found) {
+            $data   = isset($result['data']) ? $result['data'] : array();
+            $status = isset($data['status']) ? $data['status'] : '';
+
+            if ($status === 'complete' && isset($data['result'])) {
+                wp_send_json_success(array(
+                    'status'  => 'complete',
+                    'content' => $data['result'],
+                ));
+            } elseif ($status === 'pending') {
+                wp_send_json_success(array(
+                    'status' => 'pending',
+                    'job_id' => isset($data['job_id']) ? $data['job_id'] : '',
+                ));
+            } elseif ($status === 'failed') {
                 wp_send_json_error(array(
-                    'message'     => 'Content generation coming soon — this feature is being built.',
-                    'coming_soon' => true,
+                    'message' => isset($data['error']) ? $data['error'] : 'Content generation failed.',
                 ));
             } else {
-                wp_send_json_error($result);
+                // Unknown/unexpected response — pass it through
+                wp_send_json_success($result);
             }
+        } else {
+            wp_send_json_error($result);
         }
     }
 
@@ -897,21 +900,7 @@ class Siloq_Connector {
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
-            $msg = isset($result['message']) ? strtolower($result['message']) : '';
-            $is_not_found = (
-                strpos($msg, '404')          !== false ||
-                strpos($msg, 'not found')    !== false ||
-                strpos($msg, 'no route')     !== false ||
-                strpos($msg, 'endpoint')     !== false
-            );
-            if ($is_not_found) {
-                wp_send_json_error(array(
-                    'message'     => 'Content generation coming soon — this feature is being built.',
-                    'coming_soon' => true,
-                ));
-            } else {
-                wp_send_json_error($result);
-            }
+            wp_send_json_error($result);
         }
     }
 

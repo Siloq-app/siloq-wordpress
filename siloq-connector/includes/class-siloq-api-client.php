@@ -81,21 +81,21 @@ class Siloq_API_Client {
         }
         
         $data = array(
-            'post_id' => $post_id,
-            'title' => $post->post_title,
-            'content' => $post->post_content,
-            'url' => get_permalink($post_id),
-            'type' => $post->post_type
+            'page_id'    => (string) $post_id,
+            'wp_post_id' => (int) $post_id,
+            'job_type'   => 'content_generation',
+            'title'      => $post->post_title,
+            'url'        => get_permalink($post_id),
         );
         
-        return $this->make_request('/content/jobs', 'POST', $data);
+        return $this->make_request('/content-jobs', 'POST', $data);
     }
     
     /**
      * Get job status
      */
     public function get_job_status($job_id) {
-        return $this->make_request('/content/jobs/' . $job_id, 'GET');
+        return $this->make_request('/content-jobs/' . $job_id, 'GET');
     }
     
     /**
