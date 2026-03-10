@@ -6726,4 +6726,59 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         update_option( 'siloq_brand_voice', wp_json_encode( $brand_voice ) );
         wp_send_json_success( array( 'message' => 'Brand voice saved.', 'brand_voice' => $brand_voice ) );
     }
+
+    /**
+     * AJAX: Generate SEO Plan via the intelligence endpoint.
+     * Calls POST /api/v1/sites/{site_id}/intelligence/ and returns the result.
+     *
+     * @since 1.5.164
+     */
+    public static function ajax_generate_intelligence() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        $api_key = get_option( 'siloq_api_key', '' );
+        $api_url = get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' );
+
+        if ( empty( $site_id ) || empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => 'Siloq is not connected. Please add your API key and site ID in Settings.' ) );
+        }
+
+        $endpoint = $api_url . '/sites/' . $site_id . '/intelligence/';
+
+        $response = wp_remote_post( $endpoint, array(
+            'timeout' => 60,
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+            ),
+            'body' => wp_json_encode( array(
+                'site_id' => $site_id,
+            ) ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( array( 'message' => 'API request failed: ' . $response->get_error_message() ) );
+        }
+
+        $status = wp_remote_retrieve_response_code( $response );
+        $body   = wp_remote_retrieve_body( $response );
+        $data   = json_decode( $body, true );
+
+        if ( $status < 200 || $status >= 300 ) {
+            $err = isset( $data['detail'] ) ? $data['detail'] : ( isset( $data['message'] ) ? $data['message'] : "HTTP {$status}" );
+            wp_send_json_error( array( 'message' => 'Intelligence API error: ' . $err ) );
+        }
+
+        // Persist plan data locally so the dashboard can reload it
+        if ( is_array( $data ) ) {
+            $data['generated_at'] = current_time( 'mysql' );
+            update_option( 'siloq_plan_data', wp_json_encode( $data ), false );
+        }
+
+        wp_send_json_success( $data );
+    }
 }
