@@ -3624,6 +3624,223 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     <br>
                     <a href="<?php echo admin_url('admin.php?page=siloq-settings'); ?>" class="siloq-btn siloq-btn--outline">Go to Full Settings &rarr;</a>
                 </div>
+
+                <!-- ═══ BRAND VOICE ═══ -->
+                <?php
+                $bv_raw = get_option('siloq_brand_voice', '');
+                $bv = $bv_raw ? json_decode($bv_raw, true) : array();
+                $bv = is_array($bv) ? $bv : array();
+                $bv_primary   = isset($bv['primary_tone']) ? $bv['primary_tone'] : 'confident_expert';
+                $bv_secondary = isset($bv['secondary_tone']) ? $bv['secondary_tone'] : '';
+                $bv_industry  = isset($bv['industry']) ? $bv['industry'] : '';
+                $bv_brands    = isset($bv['admired_brands']) ? $bv['admired_brands'] : '';
+                $bv_tagline   = isset($bv['tagline']) ? $bv['tagline'] : '';
+                $bv_smart     = !empty($bv['using_smart_default']);
+                ?>
+                <div class="siloq-card" id="siloq-brand-voice-card" style="margin-top:16px;">
+                    <div class="siloq-card-header" style="cursor:pointer;user-select:none;" onclick="var b=document.getElementById('siloq-bv-body');b.style.display=b.style.display==='none'?'block':'none';var a=document.getElementById('siloq-bv-arrow');a.textContent=b.style.display==='none'?'&#9654;':'&#9660;';">
+                        <h3 class="siloq-card-title"><span id="siloq-bv-arrow">&#9660;</span> &#127912; Brand Voice</h3>
+                    </div>
+                    <div id="siloq-bv-body">
+
+                        <!-- Industry -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label for="siloq-bv-industry" style="font-weight:600;display:block;margin-bottom:4px;">Industry</label>
+                            <select id="siloq-bv-industry" style="width:100%;max-width:400px;padding:6px 8px;">
+                                <option value="">Select your industry</option>
+                                <option value="professional_services" <?php selected($bv_industry, 'professional_services'); ?>>Professional Services</option>
+                                <option value="healthcare" <?php selected($bv_industry, 'healthcare'); ?>>Healthcare</option>
+                                <option value="tech_saas" <?php selected($bv_industry, 'tech_saas'); ?>>Tech / SaaS</option>
+                                <option value="ecommerce_retail" <?php selected($bv_industry, 'ecommerce_retail'); ?>>E-commerce / Retail</option>
+                                <option value="home_services" <?php selected($bv_industry, 'home_services'); ?>>Home Services</option>
+                                <option value="real_estate" <?php selected($bv_industry, 'real_estate'); ?>>Real Estate</option>
+                                <option value="agency_marketing" <?php selected($bv_industry, 'agency_marketing'); ?>>Agency / Marketing</option>
+                                <option value="education_training" <?php selected($bv_industry, 'education_training'); ?>>Education / Training</option>
+                                <option value="fitness_sports" <?php selected($bv_industry, 'fitness_sports'); ?>>Fitness / Sports</option>
+                                <option value="hospitality_events" <?php selected($bv_industry, 'hospitality_events'); ?>>Hospitality / Events</option>
+                                <option value="automotive" <?php selected($bv_industry, 'automotive'); ?>>Automotive</option>
+                                <option value="financial_insurance" <?php selected($bv_industry, 'financial_insurance'); ?>>Financial / Insurance</option>
+                                <option value="manufacturing_industrial" <?php selected($bv_industry, 'manufacturing_industrial'); ?>>Manufacturing / Industrial</option>
+                                <option value="nonprofit_government" <?php selected($bv_industry, 'nonprofit_government'); ?>>Nonprofit / Government</option>
+                                <option value="creative_media" <?php selected($bv_industry, 'creative_media'); ?>>Creative / Media</option>
+                                <option value="legal_compliance" <?php selected($bv_industry, 'legal_compliance'); ?>>Legal / Compliance</option>
+                                <option value="construction_trades" <?php selected($bv_industry, 'construction_trades'); ?>>Construction / Trades</option>
+                                <option value="pet_veterinary" <?php selected($bv_industry, 'pet_veterinary'); ?>>Pet / Veterinary</option>
+                            </select>
+                            <span id="siloq-bv-industry-note" style="display:none;font-size:12px;color:#6366f1;margin-top:4px;"></span>
+                        </div>
+
+                        <!-- Primary Tone -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label for="siloq-bv-primary" style="font-weight:600;display:block;margin-bottom:4px;">Primary Tone <span style="color:#ef4444;">*</span></label>
+                            <select id="siloq-bv-primary" style="width:100%;max-width:400px;padding:6px 8px;">
+                                <option value="confident_expert" title="Knows the answer, no fluff." <?php selected($bv_primary, 'confident_expert'); ?>>Confident Expert — Knows the answer, no fluff.</option>
+                                <option value="warm_advisor" title="Supportive and wise. Never condescending." <?php selected($bv_primary, 'warm_advisor'); ?>>Warm Advisor — Supportive and wise. Never condescending.</option>
+                                <option value="no_bs_truth_teller" title="Direct, punchy, bold." <?php selected($bv_primary, 'no_bs_truth_teller'); ?>>No-BS Truth Teller — Direct, punchy, bold.</option>
+                                <option value="sage_strategist" title="Big-picture, almost philosophical." <?php selected($bv_primary, 'sage_strategist'); ?>>Sage Strategist — Big-picture, almost philosophical.</option>
+                                <option value="tech_translator" title="Explains complex topics in plain language." <?php selected($bv_primary, 'tech_translator'); ?>>Tech Translator — Explains complex topics in plain language.</option>
+                                <option value="rebellious_challenger" title="Takes aim at industry norms." <?php selected($bv_primary, 'rebellious_challenger'); ?>>Rebellious Challenger — Takes aim at industry norms.</option>
+                            </select>
+                            <div id="siloq-bv-primary-example" style="margin-top:6px;padding:8px 12px;background:#f8fafc;border-left:3px solid #e2e8f0;border-radius:4px;font-style:italic;font-size:13px;color:#64748b;"></div>
+                        </div>
+
+                        <!-- Secondary Tone -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label for="siloq-bv-secondary" style="font-weight:600;display:block;margin-bottom:4px;">Secondary Tone</label>
+                            <select id="siloq-bv-secondary" style="width:100%;max-width:400px;padding:6px 8px;">
+                                <option value="">None</option>
+                                <option value="confident_expert" title="Knows the answer, no fluff." <?php selected($bv_secondary, 'confident_expert'); ?>>Confident Expert — Knows the answer, no fluff.</option>
+                                <option value="warm_advisor" title="Supportive and wise. Never condescending." <?php selected($bv_secondary, 'warm_advisor'); ?>>Warm Advisor — Supportive and wise. Never condescending.</option>
+                                <option value="no_bs_truth_teller" title="Direct, punchy, bold." <?php selected($bv_secondary, 'no_bs_truth_teller'); ?>>No-BS Truth Teller — Direct, punchy, bold.</option>
+                                <option value="sage_strategist" title="Big-picture, almost philosophical." <?php selected($bv_secondary, 'sage_strategist'); ?>>Sage Strategist — Big-picture, almost philosophical.</option>
+                                <option value="tech_translator" title="Explains complex topics in plain language." <?php selected($bv_secondary, 'tech_translator'); ?>>Tech Translator — Explains complex topics in plain language.</option>
+                                <option value="rebellious_challenger" title="Takes aim at industry norms." <?php selected($bv_secondary, 'rebellious_challenger'); ?>>Rebellious Challenger — Takes aim at industry norms.</option>
+                            </select>
+                            <div id="siloq-bv-secondary-example" style="margin-top:6px;padding:8px 12px;background:#f8fafc;border-left:3px solid #e2e8f0;border-radius:4px;font-style:italic;font-size:13px;color:#64748b;display:none;"></div>
+                        </div>
+
+                        <!-- Admired Brands -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label for="siloq-bv-brands" style="font-weight:600;display:block;margin-bottom:4px;">Admired Brands</label>
+                            <input type="text" id="siloq-bv-brands" value="<?php echo esc_attr($bv_brands); ?>" placeholder="e.g., Stripe, Notion, Apple, Mailchimp..." style="width:100%;max-width:400px;padding:6px 8px;">
+                        </div>
+
+                        <!-- Tagline -->
+                        <div class="siloq-settings-section" style="margin-bottom:16px;">
+                            <label for="siloq-bv-tagline" style="font-weight:600;display:block;margin-bottom:4px;">Tagline</label>
+                            <input type="text" id="siloq-bv-tagline" value="<?php echo esc_attr($bv_tagline); ?>" placeholder="e.g., From chaos to clarity." style="width:100%;max-width:400px;padding:6px 8px;">
+                        </div>
+
+                        <!-- Buttons -->
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+                            <button type="button" id="siloq-bv-save-btn" class="siloq-btn siloq-btn--primary">Save Brand Voice</button>
+                            <button type="button" disabled style="opacity:0.5;cursor:not-allowed;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;background:#f3f4f6;color:#9ca3af;font-size:13px;" title="Pending API update — available in the next release">Sync to Siloq Profile</button>
+                        </div>
+                        <span id="siloq-bv-msg" style="display:none;margin-top:8px;font-size:13px;color:#16a34a;font-weight:500;"></span>
+
+                        <script>
+                        (function(){
+                            var toneExamples = {
+                                confident_expert: "Here\u2019s exactly what\u2019s wrong\u2014and how to fix it.",
+                                warm_advisor: "You\u2019re not behind\u2014you just didn\u2019t have the right system.",
+                                no_bs_truth_teller: "You\u2019re not losing to better content. You\u2019re losing to better structure.",
+                                sage_strategist: "Chaos is the enemy. Architecture is the answer.",
+                                tech_translator: "We don\u2019t show you data. We show you decisions.",
+                                rebellious_challenger: "$5K/month for reports you can\u2019t understand? That ends here."
+                            };
+                            var smartDefaults = {
+                                professional_services: ["confident_expert","warm_advisor"],
+                                healthcare: ["warm_advisor","tech_translator"],
+                                tech_saas: ["tech_translator","confident_expert"],
+                                ecommerce_retail: ["warm_advisor","no_bs_truth_teller"],
+                                home_services: ["no_bs_truth_teller","warm_advisor"],
+                                real_estate: ["confident_expert","warm_advisor"],
+                                agency_marketing: ["rebellious_challenger","confident_expert"],
+                                education_training: ["tech_translator","warm_advisor"],
+                                fitness_sports: ["no_bs_truth_teller","warm_advisor"],
+                                hospitality_events: ["warm_advisor","confident_expert"],
+                                automotive: ["no_bs_truth_teller","tech_translator"],
+                                financial_insurance: ["tech_translator","confident_expert"],
+                                manufacturing_industrial: ["confident_expert","no_bs_truth_teller"],
+                                nonprofit_government: ["warm_advisor","sage_strategist"],
+                                creative_media: ["rebellious_challenger","sage_strategist"],
+                                legal_compliance: ["confident_expert","tech_translator"],
+                                construction_trades: ["no_bs_truth_teller","confident_expert"],
+                                pet_veterinary: ["warm_advisor","tech_translator"]
+                            };
+                            var industryLabels = {};
+                            var indSel = document.getElementById('siloq-bv-industry');
+                            for (var i = 0; i < indSel.options.length; i++) {
+                                if (indSel.options[i].value) industryLabels[indSel.options[i].value] = indSel.options[i].text;
+                            }
+
+                            var usingSmartDefault = <?php echo $bv_smart ? 'true' : 'false'; ?>;
+
+                            function updateExample(selectId, exampleId) {
+                                var val = document.getElementById(selectId).value;
+                                var el = document.getElementById(exampleId);
+                                if (val && toneExamples[val]) {
+                                    el.textContent = '\u201c' + toneExamples[val] + '\u201d';
+                                    el.style.display = 'block';
+                                } else {
+                                    el.style.display = 'none';
+                                }
+                            }
+
+                            document.getElementById('siloq-bv-primary').addEventListener('change', function() {
+                                updateExample('siloq-bv-primary','siloq-bv-primary-example');
+                                usingSmartDefault = false;
+                                document.getElementById('siloq-bv-industry-note').style.display = 'none';
+                            });
+                            document.getElementById('siloq-bv-secondary').addEventListener('change', function() {
+                                updateExample('siloq-bv-secondary','siloq-bv-secondary-example');
+                                usingSmartDefault = false;
+                                document.getElementById('siloq-bv-industry-note').style.display = 'none';
+                            });
+
+                            document.getElementById('siloq-bv-industry').addEventListener('change', function() {
+                                var v = this.value;
+                                if (v && smartDefaults[v]) {
+                                    document.getElementById('siloq-bv-primary').value = smartDefaults[v][0];
+                                    document.getElementById('siloq-bv-secondary').value = smartDefaults[v][1];
+                                    updateExample('siloq-bv-primary','siloq-bv-primary-example');
+                                    updateExample('siloq-bv-secondary','siloq-bv-secondary-example');
+                                    usingSmartDefault = true;
+                                    var note = document.getElementById('siloq-bv-industry-note');
+                                    note.textContent = 'Smart default for ' + (industryLabels[v] || v);
+                                    note.style.display = 'block';
+                                } else {
+                                    usingSmartDefault = false;
+                                    document.getElementById('siloq-bv-industry-note').style.display = 'none';
+                                }
+                            });
+
+                            // Init examples on load
+                            updateExample('siloq-bv-primary','siloq-bv-primary-example');
+                            updateExample('siloq-bv-secondary','siloq-bv-secondary-example');
+
+                            // Save handler
+                            document.getElementById('siloq-bv-save-btn').addEventListener('click', function() {
+                                var btn = this;
+                                btn.disabled = true;
+                                btn.textContent = 'Saving...';
+                                var data = new FormData();
+                                data.append('action', 'siloq_save_brand_voice');
+                                data.append('nonce', '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>');
+                                data.append('primary_tone', document.getElementById('siloq-bv-primary').value);
+                                data.append('secondary_tone', document.getElementById('siloq-bv-secondary').value);
+                                data.append('industry', document.getElementById('siloq-bv-industry').value);
+                                data.append('admired_brands', document.getElementById('siloq-bv-brands').value);
+                                data.append('tagline', document.getElementById('siloq-bv-tagline').value);
+                                data.append('using_smart_default', usingSmartDefault ? '1' : '0');
+
+                                fetch(ajaxurl, { method: 'POST', body: data, credentials: 'same-origin' })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(r){
+                                        btn.disabled = false;
+                                        btn.textContent = 'Save Brand Voice';
+                                        var msg = document.getElementById('siloq-bv-msg');
+                                        if (r.success) {
+                                            msg.textContent = 'Brand voice saved.';
+                                            msg.style.color = '#16a34a';
+                                        } else {
+                                            msg.textContent = (r.data && r.data.message) ? r.data.message : 'Error saving.';
+                                            msg.style.color = '#ef4444';
+                                        }
+                                        msg.style.display = 'inline-block';
+                                        setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+                                    })
+                                    .catch(function(){
+                                        btn.disabled = false;
+                                        btn.textContent = 'Save Brand Voice';
+                                    });
+                            });
+                        })();
+                        </script>
+
+                    </div>
+                </div><!-- /brand voice -->
+
             </div><!-- /settings tab -->
 
             <!-- ═══════ REDIRECTS TAB ═══════ -->
@@ -6474,5 +6691,39 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         $path   = $logger->get_file_path();
         $content = file_exists( $path ) ? file_get_contents( $path ) : '';
         wp_send_json_success( array( 'content' => $content ) );
+    }
+
+    /**
+     * AJAX: Save Brand Voice settings.
+     */
+    public static function ajax_save_brand_voice() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $allowed = array( 'confident_expert', 'warm_advisor', 'no_bs_truth_teller', 'sage_strategist', 'tech_translator', 'rebellious_challenger' );
+
+        $primary   = sanitize_text_field( isset( $_POST['primary_tone'] ) ? $_POST['primary_tone'] : 'confident_expert' );
+        $secondary = sanitize_text_field( isset( $_POST['secondary_tone'] ) ? $_POST['secondary_tone'] : '' );
+
+        if ( ! in_array( $primary, $allowed, true ) ) {
+            $primary = 'confident_expert';
+        }
+        if ( $secondary && ! in_array( $secondary, $allowed, true ) ) {
+            $secondary = '';
+        }
+
+        $brand_voice = array(
+            'primary_tone'        => $primary,
+            'secondary_tone'      => $secondary,
+            'industry'            => sanitize_text_field( isset( $_POST['industry'] ) ? $_POST['industry'] : '' ),
+            'admired_brands'      => sanitize_text_field( isset( $_POST['admired_brands'] ) ? $_POST['admired_brands'] : '' ),
+            'tagline'             => sanitize_text_field( isset( $_POST['tagline'] ) ? $_POST['tagline'] : '' ),
+            'using_smart_default' => (bool) ( isset( $_POST['using_smart_default'] ) ? $_POST['using_smart_default'] : false ),
+        );
+
+        update_option( 'siloq_brand_voice', wp_json_encode( $brand_voice ) );
+        wp_send_json_success( array( 'message' => 'Brand voice saved.', 'brand_voice' => $brand_voice ) );
     }
 }
