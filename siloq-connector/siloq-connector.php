@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.164
+* Version: 1.5.165
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.164');
+define('SILOQ_VERSION', '1.5.165');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -396,6 +396,7 @@ class Siloq_Connector {
 
         // Brand Voice settings
         add_action('wp_ajax_siloq_save_brand_voice', array('Siloq_Admin', 'ajax_save_brand_voice'));
+        add_action('wp_ajax_siloq_sync_brand_voice', array('Siloq_Admin', 'ajax_sync_brand_voice'));
 
         // Intelligence endpoint (Generate SEO Plan button)
         add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));

@@ -3714,7 +3714,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                         <!-- Buttons -->
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
                             <button type="button" id="siloq-bv-save-btn" class="siloq-btn siloq-btn--primary">Save Brand Voice</button>
-                            <button type="button" disabled style="opacity:0.5;cursor:not-allowed;padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;background:#f3f4f6;color:#9ca3af;font-size:13px;" title="Pending API update — available in the next release">Sync to Siloq Profile</button>
+                            <button type="button" id="siloq-bv-sync-btn" style="padding:8px 16px;border:1px solid #6366f1;border-radius:6px;background:#eef2ff;color:#4f46e5;font-size:13px;cursor:pointer;font-weight:500;" title="Push brand voice settings to your Siloq profile">Sync to Siloq Profile</button>
                         </div>
                         <span id="siloq-bv-msg" style="display:none;margin-top:8px;font-size:13px;color:#16a34a;font-weight:500;"></span>
 
@@ -3833,6 +3833,56 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                                     .catch(function(){
                                         btn.disabled = false;
                                         btn.textContent = 'Save Brand Voice';
+                                    });
+                            });
+
+                            // Sync to Siloq Profile handler
+                            document.getElementById('siloq-bv-sync-btn').addEventListener('click', function() {
+                                var btn = this;
+                                btn.disabled = true;
+                                btn.textContent = 'Syncing...';
+                                btn.style.opacity = '0.7';
+                                var data = new FormData();
+                                data.append('action', 'siloq_sync_brand_voice');
+                                data.append('nonce', '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>');
+
+                                fetch(ajaxurl, { method: 'POST', body: data, credentials: 'same-origin' })
+                                    .then(function(r){ return r.json(); })
+                                    .then(function(r){
+                                        btn.disabled = false;
+                                        btn.style.opacity = '1';
+                                        var msg = document.getElementById('siloq-bv-msg');
+                                        if (r.success) {
+                                            btn.textContent = '\u2714 Synced!';
+                                            btn.style.background = '#dcfce7';
+                                            btn.style.borderColor = '#16a34a';
+                                            btn.style.color = '#16a34a';
+                                            msg.textContent = (r.data && r.data.message) ? r.data.message : 'Synced!';
+                                            msg.style.color = '#16a34a';
+                                        } else {
+                                            btn.textContent = 'Sync Failed';
+                                            btn.style.background = '#fef2f2';
+                                            btn.style.borderColor = '#ef4444';
+                                            btn.style.color = '#ef4444';
+                                            msg.textContent = (r.data && r.data.message) ? r.data.message : 'Sync failed.';
+                                            msg.style.color = '#ef4444';
+                                        }
+                                        msg.style.display = 'inline-block';
+                                        setTimeout(function(){
+                                            btn.textContent = 'Sync to Siloq Profile';
+                                            btn.style.background = '#eef2ff';
+                                            btn.style.borderColor = '#6366f1';
+                                            btn.style.color = '#4f46e5';
+                                            msg.style.display = 'none';
+                                        }, 3000);
+                                    })
+                                    .catch(function(){
+                                        btn.disabled = false;
+                                        btn.style.opacity = '1';
+                                        btn.textContent = 'Sync to Siloq Profile';
+                                        btn.style.background = '#eef2ff';
+                                        btn.style.borderColor = '#6366f1';
+                                        btn.style.color = '#4f46e5';
                                     });
                             });
                         })();
@@ -6725,6 +6775,55 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
         update_option( 'siloq_brand_voice', wp_json_encode( $brand_voice ) );
         wp_send_json_success( array( 'message' => 'Brand voice saved.', 'brand_voice' => $brand_voice ) );
+    }
+
+    /**
+     * AJAX: Sync Brand Voice to Siloq Profile via API.
+     */
+    public static function ajax_sync_brand_voice() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        $api_key = get_option( 'siloq_api_key', '' );
+
+        if ( empty( $site_id ) || empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => 'Not connected to Siloq. Please complete setup first.' ) );
+        }
+
+        $bv_raw = get_option( 'siloq_brand_voice', '{}' );
+        $bv = json_decode( $bv_raw, true );
+
+        if ( empty( $bv ) || ! is_array( $bv ) ) {
+            wp_send_json_error( array( 'message' => 'No brand voice configured yet. Please set your brand voice first.' ) );
+        }
+
+        $url = 'https://api.siloq.ai/api/v1/sites/' . urlencode( $site_id ) . '/entity-profile/';
+
+        $response = wp_remote_request( $url, array(
+            'method'  => 'PATCH',
+            'timeout' => 15,
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+            ),
+            'body'    => wp_json_encode( array( 'brand_voice' => $bv ) ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( array( 'message' => 'Sync failed: ' . $response->get_error_message() ) );
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+
+        if ( $code === 200 ) {
+            wp_send_json_success( array( 'message' => 'Brand voice synced to Siloq profile!' ) );
+        } else {
+            $msg = wp_remote_retrieve_response_message( $response );
+            wp_send_json_error( array( 'message' => 'Sync failed: ' . $msg ) );
+        }
     }
 
     /**
