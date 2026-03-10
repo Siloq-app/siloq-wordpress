@@ -35,13 +35,15 @@ class Siloq_Schema_Architect {
 
     public static function create_tables() {
         global $wpdb;
-        $charset = $wpdb->get_charset_collate();
+        $charset        = $wpdb->get_charset_collate();
         $schema_table   = $wpdb->prefix . self::TABLE_SCHEMA;
         $settings_table = $wpdb->prefix . self::TABLE_SETTINGS;
 
-        $sql = "
-        CREATE TABLE IF NOT EXISTS {$schema_table} (
-            id BIGINT(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        // NOTE: Do NOT use ON UPDATE CURRENT_TIMESTAMP — dbDelta() has a known
+        // bug where it misparsed that clause and silently skips table creation.
+        // We set updated_at manually on writes instead.
+        $sql_schema = "CREATE TABLE IF NOT EXISTS {$schema_table} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             post_id BIGINT(20) UNSIGNED NOT NULL,
             schema_type VARCHAR(100) NOT NULL,
             schema_json LONGTEXT NOT NULL,
@@ -51,46 +53,78 @@ class Siloq_Schema_Architect {
             validation_status VARCHAR(20) DEFAULT 'pending',
             validation_errors TEXT DEFAULT NULL,
             is_active TINYINT(1) DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            INDEX idx_post_id (post_id),
-            INDEX idx_schema_type (schema_type),
-            INDEX idx_is_active (is_active),
-            UNIQUE KEY unique_post_type (post_id, schema_type)
-        ) {$charset};
+            created_at DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
+            updated_at DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
+            PRIMARY KEY  (id),
+            UNIQUE KEY unique_post_type (post_id, schema_type),
+            KEY idx_post_id (post_id),
+            KEY idx_schema_type (schema_type),
+            KEY idx_is_active (is_active)
+        ) {$charset};";
 
-        CREATE TABLE IF NOT EXISTS {$settings_table} (
-            id BIGINT(20) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            setting_key VARCHAR(100) NOT NULL UNIQUE,
+        $sql_settings = "CREATE TABLE IF NOT EXISTS {$settings_table} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            setting_key VARCHAR(100) NOT NULL,
             setting_value LONGTEXT DEFAULT NULL,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) {$charset};
-        ";
+            updated_at DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
+            PRIMARY KEY  (id),
+            UNIQUE KEY setting_key (setting_key)
+        ) {$charset};";
 
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        dbDelta( $sql );
+        // Use direct $wpdb->query() first (reliable), then dbDelta for ALTER support.
+        $wpdb->query( $sql_schema );
+        $wpdb->query( $sql_settings );
 
-        // Default settings
-        $defaults = [
-            'auto_breadcrumbs'   => 'true',
-            'auto_faq_detection' => 'true',
-            'auto_apply'         => 'false',
-            'conflict_mode'      => 'warn',
-        ];
-        foreach ( $defaults as $key => $value ) {
-            $wpdb->query( $wpdb->prepare(
-                "INSERT IGNORE INTO {$settings_table} (setting_key, setting_value) VALUES (%s, %s)",
-                $key, $value
-            ) );
+        if ( file_exists( ABSPATH . 'wp-admin/includes/upgrade.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+            dbDelta( $sql_schema );
+            dbDelta( $sql_settings );
         }
 
-        update_option( self::VERSION_KEY, self::VERSION );
+        // Verify both tables actually exist after creation attempt.
+        $schema_ok   = $wpdb->get_var( "SHOW TABLES LIKE '{$schema_table}'" ) === $schema_table;
+        $settings_ok = $wpdb->get_var( "SHOW TABLES LIKE '{$settings_table}'" ) === $settings_table;
+
+        if ( $settings_ok ) {
+            // Seed defaults — INSERT IGNORE is idempotent.
+            $defaults = array(
+                'auto_breadcrumbs'   => 'true',
+                'auto_faq_detection' => 'true',
+                'auto_apply'         => 'false',
+                'conflict_mode'      => 'warn',
+            );
+            foreach ( $defaults as $key => $value ) {
+                $wpdb->query( $wpdb->prepare(
+                    "INSERT IGNORE INTO {$settings_table} (setting_key, setting_value, updated_at) VALUES (%s, %s, %s)",
+                    $key, $value, current_time( 'mysql' )
+                ) );
+            }
+        }
+
+        if ( $schema_ok && $settings_ok ) {
+            update_option( self::VERSION_KEY, self::VERSION );
+        }
     }
 
     // ── Head Injection ────────────────────────────────────────────────────────
 
     public static function inject_schema() {
         global $wpdb, $post;
+
+        // Guard: skip silently if the schema table doesn't exist yet.
+        // Without this, every front-end page load logs a DB error when the
+        // table hasn't been created (e.g. after a plugin update via FTP).
+        static $schema_table_ok = null;
+        if ( $schema_table_ok === null ) {
+            $t = $wpdb->prefix . self::TABLE_SCHEMA;
+            $schema_table_ok = ( $wpdb->get_var( "SHOW TABLES LIKE '{$t}'" ) === $t );
+            // If table still missing, attempt one-time repair.
+            if ( ! $schema_table_ok ) {
+                self::create_tables();
+                $schema_table_ok = ( $wpdb->get_var( "SHOW TABLES LIKE '{$t}'" ) === $t );
+            }
+        }
+        if ( ! $schema_table_ok ) return;
 
         if ( is_front_page() || is_home() ) {
             self::inject_homepage_schema();

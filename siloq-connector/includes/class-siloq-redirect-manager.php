@@ -81,6 +81,18 @@ class Siloq_Redirect_Manager {
 
         // Verify the table actually exists — return false if creation failed.
         $exists = $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) === $table_name;
+
+        // Self-heal: if the table exists but the `enabled` column is missing
+        // (can happen on sites where the plugin was installed before the column
+        // was added and dbDelta silently skipped the schema change), add it now.
+        if ( $exists ) {
+            $col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_name}` LIKE 'enabled'" );
+            if ( empty( $col ) ) {
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `status_code`" );
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD KEY `enabled` (`enabled`)" );
+            }
+        }
+
         return $exists;
     }
     
@@ -88,20 +100,28 @@ class Siloq_Redirect_Manager {
      * Check if current URL needs redirect
      */
     public function maybe_redirect() {
-        if (is_admin()) {
-            return;
-        }
-        
+        // Skip admin, AJAX, REST API, and static asset requests — these never
+        // need redirects and each one would otherwise hit the DB unnecessarily.
+        if ( is_admin() ) return;
+        if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) return;
+        if ( defined( 'DOING_CRON' ) && DOING_CRON ) return;
+        if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) return;
+
+        $uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+        if ( strpos( $uri, '/wp-json/' ) !== false ) return;
+        if ( strpos( $uri, 'wp-content/' ) !== false ) return;
+        if ( strpos( $uri, 'wp-admin/' ) !== false ) return;
+
         $current_url = $this->get_current_url();
-        $redirect = $this->get_redirect($current_url);
-        
-        if ($redirect && $redirect->enabled) {
-            // Increment hit counter
+        $redirect    = $this->get_redirect( $current_url );
+
+        if ( $redirect && $redirect->enabled ) {
+            global $wpdb;
             $wpdb->query( $wpdb->prepare(
-                "UPDATE {$wpdb->prefix}" . self::TABLE_NAME . " SET hits = hits + 1 WHERE id = %d",
+                'UPDATE ' . $wpdb->prefix . self::TABLE_NAME . ' SET hits = hits + 1 WHERE id = %d',
                 $redirect->id
             ) );
-            wp_redirect($redirect->target_url, $redirect->status_code);
+            wp_redirect( $redirect->target_url, $redirect->status_code );
             exit;
         }
     }
@@ -117,15 +137,23 @@ class Siloq_Redirect_Manager {
     /**
      * Get redirect for URL
      */
-    public function get_redirect($source_url) {
+    public function get_redirect( $source_url ) {
         global $wpdb;
-        
+
         $table_name = $wpdb->prefix . self::TABLE_NAME;
-        
-        return $wpdb->get_row($wpdb->prepare(
+
+        // Guard: if the table doesn't exist yet, fail silently rather than
+        // logging a DB error on every front-end request.
+        static $table_verified = null;
+        if ( $table_verified === null ) {
+            $table_verified = ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) === $table_name );
+        }
+        if ( ! $table_verified ) return null;
+
+        return $wpdb->get_row( $wpdb->prepare(
             "SELECT * FROM $table_name WHERE source_url = %s AND enabled = 1",
             $source_url
-        ));
+        ) );
     }
     
     /**
