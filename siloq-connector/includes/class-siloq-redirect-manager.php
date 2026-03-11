@@ -169,16 +169,14 @@ class Siloq_Redirect_Manager {
 
         $table_name = $wpdb->prefix . self::TABLE_NAME;
 
-        // Self-heal: ensure the table exists before every insert.
-        // create_table() is cheap (SHOW TABLES check) and idempotent.
+        // Self-heal: ensure the table exists AND all columns are present.
+        // create_table() is idempotent — safe to call on every insert.
+        // MUST always run (not only when table is missing) so ALTER TABLE
+        // migrations (e.g. adding status_code to existing installs) execute.
+        $table_created = self::create_table();
         if ( $wpdb->get_var( "SHOW TABLES LIKE '{$table_name}'" ) !== $table_name ) {
-            $table_created = self::create_table();
-            // Verify the table actually got created — surface the failure immediately
-            // rather than letting the INSERT produce a cryptic "Table doesn't exist" error.
-            if ( ! $table_created ) {
-                self::$last_error = 'Redirect table could not be created. DB error: ' . $wpdb->last_error;
-                return false;
-            }
+            self::$last_error = 'Redirect table could not be created. DB error: ' . $wpdb->last_error;
+            return false;
         }
 
         // Normalize URLs

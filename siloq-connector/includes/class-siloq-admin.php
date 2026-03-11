@@ -4602,17 +4602,20 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                         nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
                         title: title
                     }, function(r) {
-                        if (r.success) {
+                        if (r && r.success) {
                             btn.textContent = '✓ Draft Created';
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
-                            // Switch to Pages tab so Kyle can see the new page
                             var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
                             if (pagesBtn) { pagesBtn.click(); }
                         } else {
-                            btn.textContent = 'Error — retry';
+                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed';
+                            btn.textContent = msg;
                             btn.disabled = false;
                         }
+                    }).fail(function(xhr) {
+                        btn.textContent = 'HTTP ' + xhr.status + ' — retry';
+                        btn.disabled = false;
                     });
                 }
 
@@ -4625,20 +4628,23 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                         nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
                         title: title
                     }, function(r) {
-                        if (r.success) {
+                        if (r && r.success) {
                             btn.textContent = '✓ Created';
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
                             btn.style.boxShadow = 'none';
                             var spoke = btn.closest('.siloq-spoke-card');
                             if (spoke) { spoke.style.borderColor = '#22c55e'; spoke.style.borderStyle = 'solid'; }
-                            // Switch to Pages tab
                             var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
                             if (pagesBtn) { pagesBtn.click(); }
                         } else {
-                            btn.textContent = 'Error — retry';
+                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed';
+                            btn.textContent = msg;
                             btn.disabled = false;
                         }
+                    }).fail(function(xhr) {
+                        btn.textContent = 'HTTP ' + xhr.status + ' — retry';
+                        btn.disabled = false;
                     });
                 }
 
@@ -6063,7 +6069,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             $scores[]   = $page_score;
 
             // Build per-page entry for the audit display
-            $page_type_meta = get_post_meta($post_id, '_siloq_page_type', true);
+            $page_type_meta = get_post_meta($post_id, '_siloq_page_role', true);
             $tier_map = array('hub' => 'hub', 'apex_hub' => 'apex_hub', 'pillar' => 'hub', 'spoke' => 'spoke', 'supporting' => 'spoke', 'orphan' => 'orphan');
             $tier = isset($tier_map[$page_type_meta]) ? $tier_map[$page_type_meta] : 'supporting';
             $pages[] = array('post_id' => $post_id, 'score' => $page_score, 'tier' => $tier, 'actions' => $page_actions);

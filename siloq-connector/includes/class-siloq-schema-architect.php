@@ -268,7 +268,7 @@ class Siloq_Schema_Architect {
         $detected = [];
 
         // Siloq architecture data
-        $siloq_role = get_post_meta( $post_id, '_siloq_page_type', true ) ?: 'unknown';
+        $siloq_role = get_post_meta( $post_id, '_siloq_page_role', true ) ?: 'unknown';
 
         // 1. BreadcrumbList — always
         $breadcrumbs = self::build_breadcrumbs( $post );
