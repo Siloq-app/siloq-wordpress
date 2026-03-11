@@ -416,6 +416,7 @@ class Siloq_Widget_Intelligence {
             . '(2) Never strip HTML tags. (3) Content must be meaningfully different from input. '
             . '(4) First sentence must contain the primary service keyword. '
             . '(5) Include city and state naturally. (6) No generic filler — at least one concrete specific detail. '
+            . 'Minimum 600 words required. Write comprehensive, detailed content. '
             . 'Return only the improved HTML. No explanation. No markdown fences.';
 
         $anthropic_key = get_option( 'siloq_anthropic_api_key', '' );

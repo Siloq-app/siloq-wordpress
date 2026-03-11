@@ -1363,6 +1363,10 @@
       if (p.schema_json) {
         html += ' <button type="button" class="siloq-btn siloq-btn--outline siloq-btn--xs siloq-schema-view-btn" data-post-id="' + p.id + '">View Schema</button>';
       }
+      if (p.permalink) {
+        var testUrl = 'https://search.google.com/test/rich-results?url=' + encodeURIComponent(p.permalink);
+        html += ' <a href="' + escAttr(testUrl) + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#4f46e5;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;">🔍 Test with Google →</a>';
+      }
       html += '</div>';
       if (p.schema_json) {
         html += '<pre id="siloq-schema-json-' + p.id + '" class="siloq-schema-json-preview">' + escHtml(p.schema_json) + '</pre>';

@@ -110,6 +110,11 @@ class Siloq_Sync_Engine {
             ? get_siloq_crawlable_post_types()
             : array('page', 'post');
 
+        // Exclude koops and JetEngine CPT slugs at the sync-query level (Bug 4)
+        $extra_excluded = array('koops', 'jet_cct', 'jet-smart-filters');
+        $excluded_post_types = defined('SILOQ_EXCLUDED_POST_TYPES') ? array_merge((array) SILOQ_EXCLUDED_POST_TYPES, $extra_excluded) : $extra_excluded;
+        $post_types = array_values(array_diff((array) $post_types, $excluded_post_types));
+
         $site_url = get_site_url();
 
         // Fetch one batch of posts at the given offset.

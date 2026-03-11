@@ -17,20 +17,20 @@ class Siloq_Builder_Apply {
     public static function apply_heading_change($post_id, $old_text, $new_text, $level = null) {
         $builder = siloq_detect_builder($post_id);
 
-        $result = match($builder) {
-            'gutenberg'   => self::update_gutenberg_heading($post_id, $old_text, $new_text, $level),
-            'elementor'   => self::update_elementor_heading($post_id, $old_text, $new_text),
-            'divi'        => self::update_divi_heading($post_id, $old_text, $new_text),
-            'beaver'      => self::update_beaver_heading($post_id, $old_text, $new_text),
-            'cornerstone' => self::update_cornerstone_heading($post_id, $old_text, $new_text),
-            'bricks'      => self::update_bricks_heading($post_id, $old_text, $new_text),
-            'siteorigin'  => self::update_siteorigin_heading($post_id, $old_text, $new_text),
-            'avada'       => self::update_avada_heading($post_id, $old_text, $new_text),
-            'wpbakery'    => self::manual_action($post_id, $old_text, $new_text, 'WPBakery'),
-            'oxygen'      => self::manual_action($post_id, $old_text, $new_text, 'Oxygen'),
-            'standard'    => self::update_gutenberg_heading($post_id, $old_text, $new_text, $level),
-            default       => array('status' => 'error', 'message' => 'Unknown builder: ' . $builder),
-        };
+        switch ($builder) {
+            case 'gutenberg':   $result = self::update_gutenberg_heading($post_id, $old_text, $new_text, $level); break;
+            case 'elementor':   $result = self::update_elementor_heading($post_id, $old_text, $new_text); break;
+            case 'divi':        $result = self::update_divi_heading($post_id, $old_text, $new_text); break;
+            case 'beaver':      $result = self::update_beaver_heading($post_id, $old_text, $new_text); break;
+            case 'cornerstone': $result = self::update_cornerstone_heading($post_id, $old_text, $new_text); break;
+            case 'bricks':      $result = self::update_bricks_heading($post_id, $old_text, $new_text); break;
+            case 'siteorigin':  $result = self::update_siteorigin_heading($post_id, $old_text, $new_text); break;
+            case 'avada':       $result = self::update_avada_heading($post_id, $old_text, $new_text); break;
+            case 'wpbakery':    $result = self::manual_action($post_id, $old_text, $new_text, 'WPBakery'); break;
+            case 'oxygen':      $result = self::manual_action($post_id, $old_text, $new_text, 'Oxygen'); break;
+            case 'standard':    $result = self::update_gutenberg_heading($post_id, $old_text, $new_text, $level); break;
+            default:            $result = array('status' => 'error', 'message' => 'Unknown builder: ' . $builder); break;
+        }
 
         $result['builder'] = $builder;
         $result['post_id'] = $post_id;
@@ -50,16 +50,17 @@ class Siloq_Builder_Apply {
     public static function apply_content_block($post_id, $content_html, $widget_type = 'text', $position = 'append') {
         $builder = siloq_detect_builder($post_id);
 
-        return match($builder) {
-            'gutenberg'   => self::append_gutenberg_block($post_id, $content_html, $widget_type),
-            'elementor'   => self::append_elementor_widget($post_id, $content_html, $widget_type),
-            'divi'        => self::append_divi_module($post_id, $content_html),
-            'beaver'      => self::append_beaver_module($post_id, $content_html, $widget_type),
-            'siteorigin'  => self::append_siteorigin_widget($post_id, $content_html),
-            'standard'    => self::append_gutenberg_block($post_id, $content_html, $widget_type),
-            'wpbakery', 'oxygen' => self::manual_action($post_id, '', $content_html, ucfirst($builder)),
-            default       => self::manual_action($post_id, '', $content_html, ucfirst($builder)),
-        };
+        switch ($builder) {
+            case 'gutenberg':  return self::append_gutenberg_block($post_id, $content_html, $widget_type);
+            case 'elementor':  return self::append_elementor_widget($post_id, $content_html, $widget_type);
+            case 'divi':       return self::append_divi_module($post_id, $content_html);
+            case 'beaver':     return self::append_beaver_module($post_id, $content_html, $widget_type);
+            case 'siteorigin': return self::append_siteorigin_widget($post_id, $content_html);
+            case 'standard':   return self::append_gutenberg_block($post_id, $content_html, $widget_type);
+            case 'wpbakery':
+            case 'oxygen':     return self::manual_action($post_id, '', $content_html, ucfirst($builder));
+            default:           return self::manual_action($post_id, '', $content_html, ucfirst($builder));
+        }
     }
 
     // ─── 1. GUTENBERG ────────────────────────────────────────────────────────
@@ -95,11 +96,11 @@ class Siloq_Builder_Apply {
     private static function append_gutenberg_block($post_id, $content_html, $widget_type) {
         $content = get_post_field('post_content', $post_id);
 
-        $block = match($widget_type) {
-            'heading'  => "<!-- wp:heading -->\n" . $content_html . "\n<!-- /wp:heading -->",
-            'button'   => "<!-- wp:buttons -->\n<!-- wp:button -->\n" . $content_html . "\n<!-- /wp:button -->\n<!-- /wp:buttons -->",
-            default    => "<!-- wp:paragraph -->\n" . $content_html . "\n<!-- /wp:paragraph -->",
-        };
+        switch ($widget_type) {
+            case 'heading': $block = "<!-- wp:heading -->\n" . $content_html . "\n<!-- /wp:heading -->"; break;
+            case 'button':  $block = "<!-- wp:buttons -->\n<!-- wp:button -->\n" . $content_html . "\n<!-- /wp:button -->\n<!-- /wp:buttons -->"; break;
+            default:        $block = "<!-- wp:paragraph -->\n" . $content_html . "\n<!-- /wp:paragraph -->"; break;
+        }
 
         $updated = $content . "\n\n" . $block;
         $result = wp_update_post(array('ID' => $post_id, 'post_content' => $updated), true);
@@ -151,11 +152,11 @@ class Siloq_Builder_Apply {
 
         $elements = $document->get_elements_data();
 
-        $el_widget_type = match($widget_type) {
-            'heading' => 'heading',
-            'button'  => 'button',
-            default   => 'text-editor',
-        };
+        switch ($widget_type) {
+            case 'heading': $el_widget_type = 'heading'; break;
+            case 'button':  $el_widget_type = 'button'; break;
+            default:        $el_widget_type = 'text-editor'; break;
+        }
         $settings_key = ($el_widget_type === 'heading') ? 'title' : 'editor';
 
         $new_widget = array(
@@ -453,27 +454,33 @@ class Siloq_Builder_Apply {
     }
 
     private static function get_manual_instructions($builder, $old_text, $new_text) {
-        $base = match($builder) {
-            'WPBakery' => array(
-                "Click 'Backend Editor' button on the page",
-                "Find the heading element (shows as 'Heading' widget)",
-                "Click the pencil (edit) icon on the heading",
-                "Change the text to the recommended text below",
-                "Click Save. Then Update page.",
-            ),
-            'Oxygen' => array(
-                "Go to WordPress Admin > Pages > Edit with Oxygen",
-                "Click on the heading element you want to change",
-                "In the left panel under 'Content', update the heading text",
-                "Click Save in the top toolbar",
-            ),
-            default => array(
-                "Open the page in your page editor",
-                "Find the heading or text section to update",
-                "Replace the text with the recommended content below",
-                "Save and publish the page",
-            ),
-        };
+        switch ($builder) {
+            case 'WPBakery':
+                $base = array(
+                    "Click 'Backend Editor' button on the page",
+                    "Find the heading element (shows as 'Heading' widget)",
+                    "Click the pencil (edit) icon on the heading",
+                    "Change the text to the recommended text below",
+                    "Click Save. Then Update page.",
+                );
+                break;
+            case 'Oxygen':
+                $base = array(
+                    "Go to WordPress Admin > Pages > Edit with Oxygen",
+                    "Click on the heading element you want to change",
+                    "In the left panel under 'Content', update the heading text",
+                    "Click Save in the top toolbar",
+                );
+                break;
+            default:
+                $base = array(
+                    "Open the page in your page editor",
+                    "Find the heading or text section to update",
+                    "Replace the text with the recommended content below",
+                    "Save and publish the page",
+                );
+                break;
+        }
 
         return array(
             'steps'    => $base,

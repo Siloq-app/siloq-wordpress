@@ -335,7 +335,7 @@ class Siloq_Schema_Architect {
             ];
         }
 
-        usort( $detected, fn( $a, $b ) => $b['confidence'] - $a['confidence'] );
+        usort( $detected, function( $a, $b ) { return $b['confidence'] - $a['confidence']; } );
         return $detected;
     }
 

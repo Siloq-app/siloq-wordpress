@@ -280,6 +280,7 @@
                 showEcStatus('✅ Applied! Click Save in Elementor to keep the change.', 'success');
             }
             $('#siloq-sr-' + widgetId).find('.siloq-apply-btn').text('✅ Applied').prop('disabled', true);
+            setTimeout(function(){ window.location.reload(); }, 1200);
 
         } catch (e) {
             showEcStatus('Could not apply: ' + e.message + '. Copy the suggestion and paste manually.', 'error');

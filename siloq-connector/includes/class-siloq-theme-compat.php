@@ -147,13 +147,13 @@ class Siloq_Theme_Compat {
      * Returns theme-specific option for hiding the page title.
      */
     private static function get_theme_title_hide_option($theme) {
-        return match($theme) {
-            'astra'         => "Astra page settings (sidebar panel) → Page Layout → Uncheck 'Display Page Title'",
-            'generatepress' => "GeneratePress → Disable Elements → Add rule for this page → Disable 'Page Header'",
-            'kadence'       => "Kadence page settings → Uncheck 'Title'",
-            'oceanwp'       => "OceanWP page settings → Page Header → Set to 'Disabled'",
-            default         => "Theme settings → Page Options → Hide Title",
-        };
+        switch ($theme) {
+            case 'astra':         return "Astra page settings (sidebar panel) → Page Layout → Uncheck 'Display Page Title'";
+            case 'generatepress': return "GeneratePress → Disable Elements → Add rule for this page → Disable 'Page Header'";
+            case 'kadence':       return "Kadence page settings → Uncheck 'Title'";
+            case 'oceanwp':       return "OceanWP page settings → Page Header → Set to 'Disabled'";
+            default:              return "Theme settings → Page Options → Hide Title";
+        }
     }
 
     /**

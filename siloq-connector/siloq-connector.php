@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.171
+* Version: 1.5.172
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.171');
+define('SILOQ_VERSION', '1.5.172');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -360,6 +360,7 @@ class Siloq_Connector {
         // Goals handlers
         add_action('wp_ajax_siloq_get_pages_for_selector', array('Siloq_Admin', 'ajax_get_pages_for_selector'));
         add_action('wp_ajax_siloq_save_goals', array('Siloq_Admin', 'ajax_save_goals'));
+        add_action('wp_ajax_siloq_save_goals_tab', array('Siloq_Admin', 'ajax_save_goals_tab'));
         // Schema tab handlers
         add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
@@ -401,6 +402,9 @@ class Siloq_Connector {
         add_action('wp_ajax_nopriv_siloq_run_audit_background', array($this, 'ajax_run_audit_background'));
         add_action('wp_ajax_siloq_audit_status',         array($this, 'ajax_audit_status'));
         add_action('siloq_audit_cron_job',               array($this, 'run_audit_cron_job'));
+
+        // Internal links — backend apply handler (Bug 6)
+        add_action('wp_ajax_siloq_add_internal_link', array($this, 'ajax_add_internal_link'));
 
         // Debug logging AJAX
         add_action('wp_ajax_siloq_toggle_debug',       array('Siloq_Admin', 'ajax_toggle_debug'));
@@ -1981,7 +1985,22 @@ class Siloq_Connector {
             return $this->generate_city_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services);
         }
 
-        return '<p><!-- Add your content for ' . esc_html($title) . ' here. --></p>';
+        // Local fallback — never return a blank draft
+        $biz_name    = get_option('siloq_business_name', get_bloginfo('name'));
+        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $cities      = json_decode(get_option('siloq_service_cities', '[]'), true);
+        $service_str = is_array($services) && !empty($services) ? $services[0] : 'electrical services';
+        $city_str    = is_array($cities)   && !empty($cities)   ? $cities[0]   : 'the area';
+        $content  = '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_str) . ' in ' . esc_html($city_str) . ' and the surrounding area.</p>';
+        $content .= '<p>Our experienced team delivers quality workmanship on every job. Contact us today for a free estimate.</p>';
+        $content .= '<h2>Our Services</h2><ul>';
+        if (is_array($services)) {
+            foreach (array_slice($services, 0, 5) as $svc) {
+                $content .= '<li>' . esc_html($svc) . '</li>';
+            }
+        }
+        $content .= '</ul>';
+        return $content;
     }
 
     /**
@@ -2331,7 +2350,8 @@ class Siloq_Connector {
     }
 
     /**
-     * AJAX: Run site audit via Siloq API (Track 2).
+     * AJAX: Run site audit synchronously (Bug 2 — background non-blocking HTTP
+     * fails on shared hosting; run inline instead).
      */
     public function ajax_run_audit() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
@@ -2339,42 +2359,51 @@ class Siloq_Connector {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
+        $result = Siloq_Admin::run_site_audit();
+        if (!empty($result['success']) && !empty($result['data'])) {
+            wp_send_json_success(array('status' => 'complete', 'message' => 'Audit complete.', 'data' => $result['data']));
+        } else {
+            $msg = isset($result['message']) ? $result['message'] : 'Audit failed.';
+            wp_send_json_error(array('message' => $msg));
+        }
+    }
 
-        // Generate a unique job key for this audit run
-        $job_key = 'siloq_audit_' . uniqid();
-
-        // Store running status
-        set_transient('siloq_audit_status', array(
-            'status'     => 'running',
-            'job_key'    => $job_key,
-            'started_at' => time(),
-            'progress'   => 0,
-            'message'    => 'Audit started...',
-        ), HOUR_IN_SECONDS);
-
-        // Schedule as background WP-Cron event
-        wp_schedule_single_event(time(), 'siloq_audit_cron_job', array($job_key));
-
-        // Trigger WP-Cron immediately via non-blocking HTTP request (don't wait for next page load)
-        wp_remote_post(
-            admin_url('admin-ajax.php'),
-            array(
-                'blocking'  => false,
-                'timeout'   => 0.01,
-                'sslverify' => apply_filters('https_local_ssl_verify', false),
-                'body'      => array(
-                    'action'  => 'siloq_run_audit_background',
-                    'nonce'   => wp_create_nonce('siloq_audit_bg_' . $job_key),
-                    'job_key' => $job_key,
-                ),
-            )
-        );
-
-        wp_send_json_success(array(
-            'status'  => 'started',
-            'job_key' => $job_key,
-            'message' => 'Audit running in the background. This usually takes 10-20 seconds.',
-        ));
+    /**
+     * AJAX: Append an internal link to the end of a post's content (Bug 6).
+     */
+    public function ajax_add_internal_link() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        $post_id     = intval($_POST['post_id'] ?? 0);
+        $target_url  = esc_url_raw($_POST['target_url'] ?? '');
+        $anchor_text = sanitize_text_field($_POST['anchor_text'] ?? '');
+        if (!$post_id || !$target_url || !$anchor_text) {
+            wp_send_json_error(array('message' => 'Missing post_id, target_url, or anchor_text'));
+            return;
+        }
+        $post = get_post($post_id);
+        if (!$post) {
+            wp_send_json_error(array('message' => 'Post not found'));
+            return;
+        }
+        $link_html   = '<a href="' . esc_url($target_url) . '">' . esc_html($anchor_text) . '</a>';
+        $content     = $post->post_content;
+        // Append inside the last </p>, or just append
+        if (strrpos($content, '</p>') !== false) {
+            $pos     = strrpos($content, '</p>');
+            $content = substr($content, 0, $pos) . ' ' . $link_html . substr($content, $pos);
+        } else {
+            $content .= '<p>' . $link_html . '</p>';
+        }
+        $update_result = wp_update_post(array('ID' => $post_id, 'post_content' => $content), true);
+        if (is_wp_error($update_result)) {
+            wp_send_json_error(array('message' => $update_result->get_error_message()));
+            return;
+        }
+        wp_send_json_success(array('permalink' => get_permalink($post_id)));
     }
 
     /**

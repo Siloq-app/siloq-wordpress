@@ -300,7 +300,7 @@
                     body: new URLSearchParams({
                         action: 'siloq_ai_generate_content',
                         post_id: wpData.postId.toString(),
-                        preferences: JSON.stringify(state.preferences),
+                        preferences: JSON.stringify(Object.assign({}, state.preferences, {minimum_words: 600, instructions: 'Minimum 600 words required. Write comprehensive, detailed content.'})),
                         nonce: wpData.nonce
                     })
                 });

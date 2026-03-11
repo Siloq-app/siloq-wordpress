@@ -197,6 +197,11 @@ class Siloq_Elementor_Panel {
                     ✅ Apply Schema
                 </button>
 
+                <?php
+                $test_url = 'https://search.google.com/test/rich-results?url=' . urlencode(get_permalink($post_id));
+                echo '<a href="' . esc_url($test_url) . '" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:8px;font-size:11px;color:#4f46e5;font-weight:500;">🔍 Test with Google →</a>';
+                ?>
+
             </div><!-- /#siloq-schema-preview-el -->
 
             <!-- Edit Content Tab -->

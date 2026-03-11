@@ -2049,11 +2049,18 @@ class Siloq_Admin {
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Schema</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-goals">Goals</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
             </ul>
 
             <!-- ═══════ DASHBOARD TAB ═══════ -->
             <div id="siloq-tab-dashboard" class="siloq-tab-panel active" role="tabpanel" aria-hidden="false">
+<?php if ( ! get_option('siloq_primary_goal', '') ): ?>
+<div style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+  <div style="font-size:13px;color:#854d0e;font-weight:500;">⚡ Set your Goals to get personalized SEO recommendations</div>
+  <button type="button" class="siloq-btn siloq-btn--primary siloq-btn--sm" onclick="document.querySelector('[aria-controls=\'siloq-tab-goals\']').click()" style="font-size:12px;">Set Goals →</button>
+</div>
+<?php endif; ?>
 <div class="siloq-dash-v2">
 
 <?php
@@ -2162,11 +2169,31 @@ foreach ($hub_data as $h) {
     foreach ($h['children'] as $c) $hub_child_ids[] = $c->ID;
 }
 
+// Build a set of permalink paths that appear as href targets in any published page content.
+// This prevents city pages linked inside hub body content from being falsely flagged as orphans.
+$content_linked_paths = array();
+$all_published = get_posts(array('post_type' => array('page', 'post'), 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids'));
+foreach ($all_published as $_pid) {
+    $_p = get_post($_pid);
+    if (!$_p || empty($_p->post_content)) continue;
+    if (preg_match_all('/href=["\']([^"\']+)["\']/i', $_p->post_content, $_m)) {
+        foreach ($_m[1] as $_href) {
+            $_parsed = parse_url($_href);
+            if (!empty($_parsed['path'])) {
+                $content_linked_paths[rtrim($_parsed['path'], '/')] = true;
+            }
+        }
+    }
+}
+
 $all_synced_ids = wp_list_pluck($all_synced_pages, 'ID');
 $true_orphan_posts = array();
 foreach ($all_synced_ids as $oid) {
     if (in_array($oid, $hub_child_ids)) continue;
     if (isset($menu_linked_ids[$oid])) continue;
+    // Check if this page's permalink path appears in any published content
+    $_permalink_path = rtrim(parse_url(get_permalink($oid), PHP_URL_PATH), '/');
+    if (!empty($_permalink_path) && isset($content_linked_paths[$_permalink_path])) continue;
     $true_orphan_posts[] = $oid;
 }
 
@@ -2632,18 +2659,16 @@ $audit_fresh = !empty($audit_results);
 <script>
 function siloqRunAudit(btn) {
     btn.disabled = true;
-    btn.textContent = 'Starting...';
+    btn.textContent = 'Running...';
 
     jQuery.post(ajaxurl, {
         action: 'siloq_run_audit',
         nonce: siloqDash.nonce
     }, function(resp) {
         if (resp.success) {
-            // Async audit started — poll for status
-            btn.textContent = 'Auditing...';
-            siloqPollAuditStatus(btn, 0);
+            location.reload();
         } else {
-            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Audit failed to start.';
+            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Audit failed.';
             alert(msg);
             btn.disabled = false;
             btn.textContent = 'Run Audit';
@@ -2653,36 +2678,6 @@ function siloqRunAudit(btn) {
         btn.disabled = false;
         btn.textContent = 'Run Audit';
     });
-}
-
-function siloqPollAuditStatus(btn, attempts) {
-    if (attempts > 60) { // 5 min max
-        btn.disabled = false;
-        btn.textContent = 'Run Audit';
-        alert('Audit is taking longer than expected. Try refreshing the page.');
-        return;
-    }
-    setTimeout(function() {
-        jQuery.post(ajaxurl, {
-            action: 'siloq_audit_status',
-            nonce: siloqDash.nonce
-        }, function(resp) {
-            var s = resp.success && resp.data ? resp.data : {};
-            if (s.status === 'complete') {
-                location.reload();
-            } else if (s.status === 'failed') {
-                btn.disabled = false;
-                btn.textContent = 'Run Audit';
-                alert('Audit failed: ' + (s.message || 'Unknown error'));
-            } else {
-                // Still running — show progress message
-                if (s.message) btn.textContent = s.message.substring(0, 20) + '...';
-                siloqPollAuditStatus(btn, attempts + 1);
-            }
-        }).fail(function() {
-            siloqPollAuditStatus(btn, attempts + 1);
-        });
-    }, 5000); // poll every 5 seconds
 }
 
 // ── One-click Fix It buttons ──
@@ -4296,6 +4291,232 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 </div>
 
             </div><!-- /redirects tab -->
+
+            <!-- ═══════ GOALS TAB ═══════ -->
+            <div id="siloq-tab-goals" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+<?php
+// Pre-load existing values
+$_goals_primary_goal       = get_option('siloq_primary_goal', '');
+$_goals_priority_services_raw = get_option('siloq_priority_services', get_option('siloq_primary_services', '[]'));
+$_goals_priority_services  = json_decode($_goals_priority_services_raw, true);
+if (!is_array($_goals_priority_services)) $_goals_priority_services = array();
+
+$_goals_priority_cities_raw  = get_option('siloq_priority_cities', '');
+if (empty($_goals_priority_cities_raw)) {
+    // Fall back to service_areas
+    $_sa_raw = get_option('siloq_service_areas', '[]');
+    $_sa_arr = json_decode($_sa_raw, true);
+    $_goals_priority_cities = array();
+    if (is_array($_sa_arr)) {
+        foreach ($_sa_arr as $_sa) {
+            if (is_string($_sa)) $_goals_priority_cities[] = $_sa;
+            elseif (is_array($_sa) && !empty($_sa['city'])) $_goals_priority_cities[] = $_sa['city'];
+        }
+    }
+} else {
+    $_goals_priority_cities = json_decode($_goals_priority_cities_raw, true);
+    if (!is_array($_goals_priority_cities)) $_goals_priority_cities = array();
+}
+
+$_goals_geo_pages_raw = get_option('siloq_geo_priority_pages', '[]');
+$_goals_geo_pages     = json_decode($_goals_geo_pages_raw, true);
+if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
+?>
+<div class="siloq-card" style="max-width:700px;">
+  <div class="siloq-card-header">
+    <h3 class="siloq-card-title">🎯 Goals</h3>
+    <p style="font-size:12px;color:#6b7280;margin:4px 0 0;">Tell Siloq what you're trying to achieve. This powers your personalized SEO recommendations.</p>
+  </div>
+
+  <div id="siloq-goals-saved-msg" style="display:none;padding:10px 16px;background:#d1fae5;border-radius:8px;font-size:13px;color:#065f46;font-weight:500;margin-bottom:16px;"></div>
+
+  <!-- Section 1: Primary Goal -->
+  <div style="margin-bottom:28px;">
+    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 12px;">1. What's your primary goal?</h4>
+    <?php
+    $goal_options = array(
+        'local_calls'       => 'More local phone calls',
+        'form_submissions'  => 'More form submissions',
+        'foot_traffic'      => 'More foot traffic',
+        'brand_awareness'   => 'Build brand awareness',
+        'service_rankings'  => 'Rank for specific services',
+    );
+    foreach ($goal_options as $val => $label): ?>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;">
+      <input type="radio" name="siloq_goals_primary" value="<?php echo esc_attr($val); ?>" <?php checked($_goals_primary_goal, $val); ?> style="margin:0;">
+      <span style="font-size:13px;color:#374151;"><?php echo esc_html($label); ?></span>
+    </label>
+    <?php endforeach; ?>
+  </div>
+
+  <!-- Section 2: Priority Services -->
+  <div style="margin-bottom:28px;">
+    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 4px;">2. Priority services</h4>
+    <?php if (empty($_goals_priority_services)): ?>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Enter services you want to prioritize (comma-separated):</p>
+    <input type="text" id="siloq-goals-services-input" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" placeholder="e.g. electrical panel upgrade, EV charger installation">
+    <?php else: ?>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Pre-filled from your onboarding. Uncheck any you don't want to prioritize:</p>
+    <div id="siloq-goals-services-list">
+      <?php foreach ($_goals_priority_services as $svc): ?>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="siloq_goals_service[]" value="<?php echo esc_attr($svc); ?>" checked style="margin:0;">
+        <span style="font-size:13px;color:#374151;"><?php echo esc_html($svc); ?></span>
+      </label>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Section 3: Priority Cities -->
+  <div style="margin-bottom:28px;">
+    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 4px;">3. Priority cities</h4>
+    <?php if (empty($_goals_priority_cities)): ?>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Enter cities you want to rank in (comma-separated):</p>
+    <input type="text" id="siloq-goals-cities-input" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" placeholder="e.g. Kansas City, Lee's Summit, Independence">
+    <?php else: ?>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Pre-filled from your service areas. Uncheck any you don't want to prioritize:</p>
+    <div id="siloq-goals-cities-list">
+      <?php foreach ($_goals_priority_cities as $city): ?>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" name="siloq_goals_city[]" value="<?php echo esc_attr($city); ?>" checked style="margin:0;">
+        <span style="font-size:13px;color:#374151;"><?php echo esc_html($city); ?></span>
+      </label>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Section 4: AI Priority Pages -->
+  <div style="margin-bottom:28px;">
+    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 4px;">4. Priority pages (up to 3)</h4>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Which pages matter most? Siloq will focus AI improvements here first.</p>
+    <input type="text" id="siloq-goals-page-search" placeholder="Search pages..." style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-bottom:8px;" autocomplete="off">
+    <div id="siloq-goals-page-results" style="border:1px solid #e5e7eb;border-radius:6px;max-height:160px;overflow-y:auto;display:none;background:#fff;"></div>
+    <div id="siloq-goals-page-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+      <?php
+      foreach ($_goals_geo_pages as $_gp_id):
+          $_gp_post = get_post(intval($_gp_id));
+          if (!$_gp_post) continue;
+      ?>
+      <span class="siloq-goals-page-pill" data-id="<?php echo intval($_gp_id); ?>" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:12px;font-weight:500;">
+        <?php echo esc_html($_gp_post->post_title); ?>
+        <button type="button" onclick="siloqGoalsRemovePage(this)" style="background:none;border:none;cursor:pointer;color:#7c3aed;font-size:14px;padding:0;line-height:1;">&times;</button>
+      </span>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <button type="button" id="siloq-goals-save-btn" class="siloq-btn siloq-btn--primary" style="padding:10px 24px;font-size:13px;">
+    💾 Save Goals
+  </button>
+</div>
+
+<script>
+(function($){
+    // Page search AJAX
+    var goalPages = [];
+    var goalSelectedIds = <?php echo wp_json_encode($_goals_geo_pages); ?>;
+
+    $('#siloq-goals-page-search').on('input', function(){
+        var q = $(this).val().trim();
+        if (q.length < 2) { $('#siloq-goals-page-results').hide(); return; }
+        $.post(ajaxurl, {action:'siloq_get_pages_for_selector', nonce:siloqDash.nonce}, function(res){
+            if (!res.success) return;
+            var pages = res.data.pages || [];
+            goalPages = pages;
+            var html = '';
+            pages.forEach(function(p){
+                if (q && p.post_title.toLowerCase().indexOf(q.toLowerCase()) === -1) return;
+                var sel = goalSelectedIds.indexOf(parseInt(p.ID)) !== -1;
+                if (sel) return;
+                html += '<div class="siloq-goals-page-opt" data-id="'+p.ID+'" style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f3f4f6;color:#374151;" onmouseover="this.style.background=\'#f5f3ff\'" onmouseout="this.style.background=\'\'">'+$('<div>').text(p.post_title).html()+'</div>';
+            });
+            if (!html) html = '<div style="padding:10px 12px;font-size:12px;color:#9ca3af;">No pages found</div>';
+            $('#siloq-goals-page-results').html(html).show();
+        });
+    });
+
+    $(document).on('click', '.siloq-goals-page-opt', function(){
+        if (goalSelectedIds.length >= 3) { alert('Maximum 3 priority pages.'); return; }
+        var id = parseInt($(this).data('id'));
+        var title = $(this).text().trim();
+        goalSelectedIds.push(id);
+        var pill = '<span class="siloq-goals-page-pill" data-id="'+id+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:12px;font-weight:500;">'
+            + $('<div>').text(title).html()
+            + ' <button type="button" onclick="siloqGoalsRemovePage(this)" style="background:none;border:none;cursor:pointer;color:#7c3aed;font-size:14px;padding:0;line-height:1;">&times;</button></span>';
+        $('#siloq-goals-page-pills').append(pill);
+        $('#siloq-goals-page-results').hide();
+        $('#siloq-goals-page-search').val('');
+    });
+
+    window.siloqGoalsRemovePage = function(btn) {
+        var $pill = $(btn).closest('.siloq-goals-page-pill');
+        var id = parseInt($pill.data('id'));
+        goalSelectedIds = goalSelectedIds.filter(function(i){ return i !== id; });
+        $pill.remove();
+    };
+
+    $('#siloq-goals-save-btn').on('click', function(){
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Saving...');
+
+        // Collect primary goal
+        var primaryGoal = $('input[name="siloq_goals_primary"]:checked').val() || '';
+
+        // Collect services
+        var services = [];
+        $('input[name="siloq_goals_service[]"]:checked').each(function(){ services.push($(this).val()); });
+        // If text input used instead of checkboxes
+        var svcInput = $('#siloq-goals-services-input').val();
+        if (svcInput) {
+            svcInput.split(',').forEach(function(s){ var t = s.trim(); if(t) services.push(t); });
+        }
+
+        // Collect cities
+        var cities = [];
+        $('input[name="siloq_goals_city[]"]:checked').each(function(){ cities.push($(this).val()); });
+        var cityInput = $('#siloq-goals-cities-input').val();
+        if (cityInput) {
+            cityInput.split(',').forEach(function(c){ var t = c.trim(); if(t) cities.push(t); });
+        }
+
+        $.post(ajaxurl, {
+            action: 'siloq_save_goals_tab',
+            nonce: siloqDash.nonce,
+            primary_goal: primaryGoal,
+            'priority_services[]': services,
+            'priority_cities[]': cities,
+            'geo_priority_pages[]': goalSelectedIds
+        }, function(res){
+            $btn.prop('disabled', false).text('💾 Save Goals');
+            if (res.success) {
+                var msg = (res.data && res.data.message) ? res.data.message : 'Goals saved!';
+                $('#siloq-goals-saved-msg').text('✅ ' + msg).show();
+                setTimeout(function(){ $('#siloq-goals-saved-msg').fadeOut(); }, 4000);
+                // Hide the dashboard banner if it exists
+                if (primaryGoal) {
+                    $('.siloq-goals-banner').hide();
+                }
+            } else {
+                var err = (res.data && res.data.message) ? res.data.message : 'Save failed.';
+                alert('Error: ' + err);
+            }
+        }).fail(function(){
+            $btn.prop('disabled', false).text('💾 Save Goals');
+            alert('Network error. Please try again.');
+        });
+    });
+
+    // Close page results on outside click
+    $(document).on('click', function(e){
+        if (!$(e.target).closest('#siloq-goals-page-search, #siloq-goals-page-results').length) {
+            $('#siloq-goals-page-results').hide();
+        }
+    });
+})(jQuery);
+</script>
+            </div><!-- /goals tab -->
 
             <script>
                 // Pass roadmap progress to JS
@@ -7260,5 +7481,49 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
         }
 
         wp_send_json_success( array( 'message' => 'Goals saved' ) );
+    }
+
+    /**
+     * AJAX: Save Goals tab form (Bug 9 — first-class Goals tab).
+     */
+    public static function ajax_save_goals_tab() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+            return;
+        }
+
+        $primary_goal        = isset( $_POST['primary_goal'] )        ? sanitize_text_field( $_POST['primary_goal'] )        : '';
+        $priority_services_r = isset( $_POST['priority_services'] )   ? (array) $_POST['priority_services']                  : array();
+        $priority_cities_r   = isset( $_POST['priority_cities'] )     ? (array) $_POST['priority_cities']                    : array();
+        $geo_pages_r         = isset( $_POST['geo_priority_pages'] )  ? (array) $_POST['geo_priority_pages']                 : array();
+
+        $priority_services = array_map( 'sanitize_text_field', $priority_services_r );
+        $priority_cities   = array_map( 'sanitize_text_field', $priority_cities_r );
+        $geo_pages         = array_map( 'intval', $geo_pages_r );
+
+        // Save individual options
+        if ( $primary_goal ) update_option( 'siloq_primary_goal', $primary_goal );
+        if ( ! empty( $priority_services ) ) update_option( 'siloq_priority_services', wp_json_encode( $priority_services ) );
+        if ( ! empty( $priority_cities ) )   update_option( 'siloq_priority_cities',   wp_json_encode( $priority_cities ) );
+        if ( ! empty( $geo_pages ) )         update_option( 'siloq_geo_priority_pages', wp_json_encode( $geo_pages ) );
+
+        // Also update siloq_site_goals for backward compat
+        $goals = array(
+            'primary_goal'       => $primary_goal,
+            'priority_services'  => $priority_services,
+            'priority_locations' => $priority_cities,
+            'geo_priority_pages' => $geo_pages,
+        );
+        Siloq_Goals::save_goals( $goals );
+
+        // Sync to API via PATCH /sites/{site_id}/goals/
+        $site_id = get_option( 'siloq_site_id' );
+        if ( $site_id ) {
+            $api_client = new Siloq_API_Client();
+            $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'PATCH', $goals );
+        }
+
+        wp_send_json_success( array( 'message' => 'Goals saved — intelligence will update on next audit' ) );
     }
 }

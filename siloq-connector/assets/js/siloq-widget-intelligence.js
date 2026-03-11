@@ -770,14 +770,32 @@
             var $append = $('<button style="margin-left:4px;font-size:10px;padding:2px 6px;background:#e0e7ff;color:#3730a3;border:none;border-radius:3px;cursor:pointer;">Add at bottom?</button>');
             $btn.after($append);
             $append.on('click', function() {
-                var appended = siloqAppendLink(url, anchor);
-                if (appended) {
-                    $btn.text('✅ Added at bottom').css({'background':'#059669','color':'#fff'});
-                    $append.remove();
-                    if (window.elementor && elementor.saver) elementor.saver.setFlagEditorChange(true);
-                } else {
-                    $append.text('Could not add — no text widget found').css({'background':'#fef2f2','color':'#991b1b'});
-                }
+                var $ab = $(this);
+                $ab.prop('disabled', true).text('Adding...');
+                $.ajax({
+                    url: cfg.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'siloq_add_internal_link',
+                        nonce: cfg.nonce,
+                        post_id: cfg.postId,
+                        target_url: url,
+                        anchor_text: anchor
+                    },
+                    success: function(res) {
+                        if (res.success) {
+                            $btn.text('✅ Added at bottom').css({'background':'#059669','color':'#fff'});
+                            $ab.remove();
+                            if (window.elementor && elementor.saver) elementor.saver.setFlagEditorChange(true);
+                        } else {
+                            var msg = (res.data && res.data.message) ? res.data.message : 'Could not add';
+                            $ab.prop('disabled', false).text('Error: ' + msg).css({'background':'#fef2f2','color':'#991b1b'});
+                        }
+                    },
+                    error: function() {
+                        $ab.prop('disabled', false).text('Network error').css({'background':'#fef2f2','color':'#991b1b'});
+                    }
+                });
             });
             $btn.prop('disabled', false);
         }
