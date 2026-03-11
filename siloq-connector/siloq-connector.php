@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.170
+* Version: 1.5.171
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.170');
+define('SILOQ_VERSION', '1.5.171');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -170,6 +170,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-architect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-auto-redirect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
@@ -275,6 +276,9 @@ class Siloq_Connector {
         // Ensure redirects table exists on every load (safe — dbDelta is idempotent)
         Siloq_Redirect_Manager::create_table();
         Siloq_Redirect_Manager::get_instance();
+
+        // Auto-redirect on slug change (post_updated hook).
+        Siloq_Auto_Redirect::init();
 
         // Initialize Schema Intelligence (AJAX handlers + wp_head output).
         Siloq_Schema_Intelligence::init();

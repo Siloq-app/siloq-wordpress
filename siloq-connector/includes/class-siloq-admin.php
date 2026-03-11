@@ -5924,6 +5924,14 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
             );
         }
 
+        // Cap to 25 pages to avoid upgrade_required on free tier.
+        // Hub/pillar pages first, then supporting.
+        usort($pages_payload, function($a, $b) {
+            $tier_order = array('hub' => 0, 'pillar' => 1, 'supporting' => 2);
+            return ($tier_order[$a['page_type']] ?? 2) - ($tier_order[$b['page_type']] ?? 2);
+        });
+        $pages_payload = array_slice($pages_payload, 0, 25);
+
         // Build site context from entity profile
         $services = json_decode(get_option('siloq_primary_services', '[]'), true);
         $areas = json_decode(get_option('siloq_service_areas', '[]'), true);

@@ -49,8 +49,9 @@ class Siloq_Schema_Intelligence {
      * Register all AJAX hooks. Called from siloq-connector.php.
      */
     public static function init() {
-        add_action( 'wp_ajax_siloq_generate_schema', [ __CLASS__, 'ajax_generate_schema' ] );
-        add_action( 'wp_ajax_siloq_apply_schema',    [ __CLASS__, 'ajax_apply_schema'    ] );
+        add_action( 'wp_ajax_siloq_generate_schema',    [ __CLASS__, 'ajax_generate_schema'    ] );
+        add_action( 'wp_ajax_siloq_apply_schema',       [ __CLASS__, 'ajax_apply_schema'       ] );
+        add_action( 'wp_ajax_siloq_get_schema_status',  [ __CLASS__, 'ajax_get_schema_status'  ] );
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -1178,6 +1179,32 @@ class Siloq_Schema_Intelligence {
             'message'       => sprintf( '%d schema type(s) applied to wp_head.', count( $applied_types ) ),
             'applied_types' => $applied_types,
             'count'         => count( $applied_types ),
+        ] );
+    }
+
+    /**
+     * AJAX: Return current schema status for a post (used by Elementor panel init).
+     *
+     * Action: wp_ajax_siloq_get_schema_status
+     */
+    public static function ajax_get_schema_status() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error();
+            return;
+        }
+
+        $active = class_exists( 'Siloq_Schema_Architect' )
+            ? Siloq_Schema_Architect::get_active_schema( $post_id )
+            : [];
+
+        $types = array_column( $active, 'schema_type' );
+
+        wp_send_json_success( [
+            'has_schema'   => ! empty( $active ),
+            'schema_types' => $types,
         ] );
     }
 }

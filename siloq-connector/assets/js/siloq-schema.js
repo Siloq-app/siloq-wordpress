@@ -315,6 +315,17 @@
             $panel.removeClass( 'is-open' ).attr( 'aria-hidden', 'true' );
             $trigger.attr( 'aria-expanded', 'false' );
         } );
+
+        // Load existing schema status on init so badge persists across Elementor sessions.
+        if ( POST_ID ) {
+            $.post( AJAX_URL, { action: 'siloq_get_schema_status', nonce: NONCE, post_id: POST_ID }, function ( resp ) {
+                if ( resp.success && resp.data && resp.data.has_schema ) {
+                    var types = resp.data.schema_types ? resp.data.schema_types.join( ', ' ) : '';
+                    var badge = '<span class="siloq-schema-badge siloq-schema-badge--applied">✅ Applied' + ( types ? ' (' + types + ')' : '' ) + '</span>';
+                    $el( 'surface' ).find( '.siloq-schema-status' ).html( badge );
+                }
+            } );
+        }
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────

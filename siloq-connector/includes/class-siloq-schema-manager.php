@@ -14,31 +14,43 @@ class Siloq_Schema_Manager {
      * Output schema markup in wp_head
      */
     public static function output_schema() {
-        if (!is_singular('page')) {
+        if (!is_singular()) {
             return;
         }
-        
+
         global $post;
         if (!$post || !is_a($post, 'WP_Post')) {
             return;
         }
-        
-        // Check for new schema format first
-        $schema = get_post_meta($post->ID, '_siloq_schema', true);
-        if (!empty($schema)) {
+
+        // Read from wp_siloq_schema DB table (authoritative source)
+        if (!class_exists('Siloq_Schema_Architect')) return;
+        $active_schemas = Siloq_Schema_Architect::get_active_schema($post->ID);
+        if (empty($active_schemas)) {
+            // Fallback to legacy post meta
+            $schema = get_post_meta($post->ID, '_siloq_schema', true);
+            if (empty($schema)) {
+                $schema = get_post_meta($post->ID, '_siloq_schema_markup', true);
+            }
+            if (empty($schema)) return;
             echo "\n<!-- Siloq Schema Markup -->\n";
             echo '<script type="application/ld+json">' . "\n";
-            echo json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n";
-            echo '</script>' . "\n";
+            if (is_array($schema)) {
+                echo json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            } else {
+                echo $schema;
+            }
+            echo "\n</script>\n";
             return;
         }
-        
-        // Fallback to legacy format
-        $schema_markup = get_post_meta($post->ID, '_siloq_schema_markup', true);
-        if (!empty($schema_markup)) {
-            echo "\n<!-- Siloq Schema Markup (Legacy) -->\n";
+
+        // Output each active schema from DB
+        foreach ($active_schemas as $row) {
+            $json = $row['schema_json'];
+            if (empty($json)) continue;
+            echo "\n<!-- Siloq Schema: " . esc_html($row['schema_type']) . " -->\n";
             echo '<script type="application/ld+json">' . "\n";
-            echo $schema_markup . "\n";
+            echo $json . "\n";
             echo '</script>' . "\n";
         }
     }
