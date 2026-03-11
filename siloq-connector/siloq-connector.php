@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.172
+* Version: 1.5.173
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.172');
+define('SILOQ_VERSION', '1.5.173');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -361,8 +361,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_pages_for_selector', array('Siloq_Admin', 'ajax_get_pages_for_selector'));
         add_action('wp_ajax_siloq_save_goals', array('Siloq_Admin', 'ajax_save_goals'));
         add_action('wp_ajax_siloq_save_goals_tab', array('Siloq_Admin', 'ajax_save_goals_tab'));
-        // Schema tab handlers
-        add_action('wp_ajax_siloq_get_schema_status', array($this, 'ajax_get_schema_status'));
+        // Schema tab handlers (schema status is handled by Siloq_Schema_Intelligence::init())
         add_action('wp_ajax_siloq_get_schema_graph', array($this, 'ajax_get_schema_graph'));
         add_action('wp_ajax_siloq_repair_elementor_meta',  array($this, 'ajax_repair_elementor_meta'));
         add_action('wp_ajax_siloq_bulk_apply_schema',         array('Siloq_Admin', 'ajax_bulk_apply_schema'));
@@ -388,8 +387,9 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_redirects',        array('Siloq_Admin', 'ajax_get_redirects'));
         add_action('wp_ajax_siloq_add_redirect',         array('Siloq_Admin', 'ajax_add_redirect'));
         add_action('wp_ajax_siloq_delete_redirect',      array('Siloq_Admin', 'ajax_delete_redirect'));
-        add_action('wp_ajax_siloq_bulk_add_redirects',   array('Siloq_Admin', 'ajax_bulk_add_redirects'));
-        add_action('wp_ajax_siloq_preview_city_redirects', array('Siloq_Admin', 'ajax_preview_city_redirects'));
+        add_action('wp_ajax_siloq_bulk_add_redirects',      array('Siloq_Admin', 'ajax_bulk_add_redirects'));
+        add_action('wp_ajax_siloq_preview_city_redirects',  array('Siloq_Admin', 'ajax_preview_city_redirects'));
+        add_action('wp_ajax_siloq_atomic_restructure_page', array('Siloq_Admin', 'ajax_atomic_restructure_page'));
         // Image generation (DALL-E via API)
         add_action('wp_ajax_siloq_generate_and_insert_image', array('Siloq_Widget_Intelligence', 'ajax_generate_and_insert_image'));
         // Image Audit
@@ -1803,6 +1803,19 @@ class Siloq_Connector {
             'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
         ));
 
+        // Load city names for the location-word exception
+        $siloq_cities_raw = get_option('siloq_service_cities', '[]');
+        $siloq_cities     = json_decode($siloq_cities_raw, true);
+        if (!is_array($siloq_cities)) $siloq_cities = array();
+        // Normalise: each entry may be a string or an array with 'city' key
+        $city_names = array();
+        foreach ($siloq_cities as $entry) {
+            $cn = is_array($entry) ? (isset($entry['city']) ? $entry['city'] : '') : $entry;
+            if (!empty($cn)) $city_names[] = strtolower(trim($cn));
+        }
+
+        $new_title_lower = strtolower($title);
+
         foreach ($existing as $post) {
             $existing_title = strtolower($post->post_title);
             $existing_slug  = $post->post_name;
@@ -1811,18 +1824,39 @@ class Siloq_Connector {
             $existing_core = str_replace($strip, '', $existing_title);
             $existing_core = preg_replace('/\s+/', ' ', trim($existing_core));
 
-            if (
+            $would_block = (
                 ( strlen($core_kw) >= 4 && strpos($existing_core, $core_kw) !== false ) ||
                 ( strlen($core_kw) >= 4 && strpos($existing_slug, $core_kw) !== false ) ||
-                similar_text($core_kw, $existing_core, $pct) && $pct > 75
-            ) {
-                return array(
-                    'message'       => 'A page targeting "' . $post->post_title . '" already exists. Improve the existing page instead of creating a duplicate.',
-                    'existing_page' => $post->post_title,
-                    'existing_url'  => get_permalink($post->ID),
-                    'edit_url'      => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
-                );
+                ( similar_text($core_kw, $existing_core, $pct) && $pct > 90 )
+            );
+
+            if (!$would_block) continue;
+
+            // Location-word exception: if both titles contain DIFFERENT city names,
+            // these are intentionally similar city pages — allow creation.
+            if (!empty($city_names)) {
+                $new_city      = '';
+                $existing_city = '';
+                foreach ($city_names as $cn) {
+                    if (strpos($new_title_lower, $cn) !== false && empty($new_city)) {
+                        $new_city = $cn;
+                    }
+                    if (strpos($existing_title, $cn) !== false && empty($existing_city)) {
+                        $existing_city = $cn;
+                    }
+                }
+                // Both have a city name but they're different cities — let it through
+                if (!empty($new_city) && !empty($existing_city) && $new_city !== $existing_city) {
+                    continue;
+                }
             }
+
+            return array(
+                'message'       => 'A page targeting "' . $post->post_title . '" already exists. Improve the existing page instead of creating a duplicate.',
+                'existing_page' => $post->post_title,
+                'existing_url'  => get_permalink($post->ID),
+                'edit_url'      => admin_url('post.php?post=' . $post->ID . '&action=elementor'),
+            );
         }
 
         return null;
@@ -1961,6 +1995,12 @@ class Siloq_Connector {
         $biz_phone   = get_option('siloq_phone', '');
         $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
         if (!is_array($services)) $services = array();
+        // Filter out generic business descriptors that produce meaningless page titles
+        $services = array_values(array_filter($services, function($svc) {
+            $generic_words = array('contractor', 'company', 'business', 'provider', 'professional',
+                'specialist', 'service', 'services', 'expert', 'experts');
+            return !in_array(strtolower(trim($svc)), $generic_words, true);
+        }));
         $service_areas = json_decode(get_option('siloq_service_areas', '[]'), true);
         if (!is_array($service_areas)) $service_areas = array();
 
@@ -2962,101 +3002,7 @@ class Siloq_Connector {
         wp_send_json_success(array('message' => 'Onboarding complete'));
     }
 
-    /**
-     * AJAX: Get schema status for all synced pages.
-     */
-    public function ajax_get_schema_status() {
-        check_ajax_referer('siloq_ajax_nonce', 'nonce');
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => 'Unauthorized'));
-        }
-
-        $args = array(
-            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('post', 'page'),
-            'post_status'    => 'publish',
-            'posts_per_page' => 200,
-            'meta_query'     => array(
-                array(
-                    'key'     => '_siloq_synced',
-                    'compare' => 'EXISTS',
-                ),
-            ),
-        );
-
-        $query = new WP_Query($args);
-        $pages = array();
-
-        foreach ($query->posts as $post) {
-            $analysis_raw = get_post_meta($post->ID, '_siloq_analysis_data', true);
-            $analysis = array();
-            if (!empty($analysis_raw)) {
-                $decoded = is_array($analysis_raw) ? $analysis_raw : json_decode($analysis_raw, true);
-                if (is_array($decoded)) $analysis = $decoded;
-            }
-
-            // Applied types
-            $applied_raw = get_post_meta($post->ID, '_siloq_applied_types', true);
-            $applied_types = array();
-            if (!empty($applied_raw)) {
-                $decoded = json_decode($applied_raw, true);
-                if (is_array($decoded)) $applied_types = $decoded;
-            }
-
-            // Recommended types from analysis
-            $recommended = array();
-            if (!empty($analysis['recommended_schema'])) {
-                $recommended = (array) $analysis['recommended_schema'];
-            } elseif (!empty($analysis['schema_types'])) {
-                $recommended = (array) $analysis['schema_types'];
-            }
-
-            // Schema JSON output — check _siloq_schema_json first (persisted), then fall back to suggested
-            $schema_json = '';
-            $saved_schema = get_post_meta($post->ID, '_siloq_schema_json', true);
-            if (!empty($saved_schema)) {
-                $decoded = json_decode($saved_schema, true);
-                if (is_array($decoded)) {
-                    $schema_json = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-                }
-            } else {
-                $suggested = get_post_meta($post->ID, '_siloq_suggested_schema', true);
-                if (!empty($suggested)) {
-                    $decoded = json_decode($suggested, true);
-                    if (is_array($decoded)) {
-                        $schema_json = wp_json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-                    }
-                }
-            }
-
-            // If _siloq_schema_applied is set, treat as applied even without API call
-            $schema_applied = get_post_meta($post->ID, '_siloq_schema_applied', true);
-
-            // Determine status
-            $status = 'none';
-            if (!empty($applied_types)) {
-                if (!empty($recommended) && count(array_diff($recommended, $applied_types)) > 0) {
-                    $status = 'partial';
-                } else {
-                    $status = 'applied';
-                }
-            } elseif (!empty($schema_applied) && !empty($schema_json)) {
-                $status = 'applied';
-            }
-
-            $pages[] = array(
-                'id'                => $post->ID,
-                'title'             => get_the_title($post->ID),
-                'edit_url'          => get_edit_post_link($post->ID, 'raw'),
-                'permalink'         => get_permalink($post->ID),
-                'applied_types'     => $applied_types,
-                'recommended_types' => $recommended,
-                'schema_json'       => $schema_json,
-                'status'            => $status,
-            );
-        }
-
-        wp_send_json_success(array('pages' => $pages));
-    }
+    // ajax_get_schema_status removed — authoritative handler is in Siloq_Schema_Intelligence::init()
 
     /**
      * AJAX: Get schema graph from Siloq API.

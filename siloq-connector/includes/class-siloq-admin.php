@@ -3308,27 +3308,41 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                     return;
                 }
 
-                // Step 2: apply each redirect sequentially
-                $btn.text('Applying ' + suggestions.length + ' redirect' + (suggestions.length !== 1 ? 's' : '') + '…');
-                var done = 0, errors = 0;
+                // Step 2: atomically restructure each page (slug change + redirect) sequentially
+                $btn.text('Restructuring ' + suggestions.length + ' page' + (suggestions.length !== 1 ? 's' : '') + '…');
+                var done = 0, failed = 0, errorDetails = [];
 
                 function applyNext(idx) {
                     if (idx >= suggestions.length) {
                         $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
-                        var msg = '✓ ' + done + ' redirect' + (done !== 1 ? 's' : '') + ' created. Old URLs still work — now update each city page\'s parent to "' + <?php echo json_encode($_plan_sa_hub->post_title); ?> + '" in WordPress to complete the URL change.';
-                        if (errors) msg += ' (' + errors + ' failed)';
-                        $status.css({'background': errors ? '#fee2e2' : '#dcfce7','color': errors ? '#991b1b' : '#166534','border': '1px solid ' + (errors ? '#fca5a5' : '#bbf7d0')})
+                        var msg = '✓ ' + done + ' page' + (done !== 1 ? 's' : '') + ' restructured';
+                        if (failed) { msg += ', ' + failed + ' failed'; }
+                        msg += '. Old URLs automatically redirect to new locations.';
+                        if (errorDetails.length) { msg += ' Errors: ' + errorDetails.join('; '); }
+                        $status.css({'background': failed ? '#fee2e2' : '#dcfce7','color': failed ? '#991b1b' : '#166534','border': '1px solid ' + (failed ? '#fca5a5' : '#bbf7d0')})
                                .text(msg).show();
-                        // Reload the redirects tab list if it's been opened
                         if (typeof loadSiloqRedirects === 'function') loadSiloqRedirects();
                         return;
                     }
                     var s = suggestions[idx];
                     $.post(
                         (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
-                        { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from: s.from, to: s.to, status_code: 301 },
-                        function(res) { if (res.success) done++; else errors++; applyNext(idx + 1); }
-                    ).fail(function(){ errors++; applyNext(idx + 1); });
+                        {
+                            action:          'siloq_atomic_restructure_page',
+                            nonce:           (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''),
+                            post_id:         s.post_id,
+                            hub_post_id:     s.hub_post_id,
+                            original_parent: s.original_parent
+                        },
+                        function(res) {
+                            if (res.success) { done++; } else {
+                                failed++;
+                                var errMsg = (res.data && res.data.message) ? res.data.message : 'Unknown error';
+                                errorDetails.push(s.from + ': ' + errMsg);
+                            }
+                            applyNext(idx + 1);
+                        }
+                    ).fail(function(){ failed++; errorDetails.push(s.from + ': Request failed'); applyNext(idx + 1); });
                 }
                 applyNext(0);
             }
@@ -4139,7 +4153,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                                     ? '<span style="color:#16a34a;font-weight:600;">✓ Exists</span>'
                                     : '<span style="color:#94a3b8;">New</span>';
                                 var typeColor = s.page_type === 'city_spoke' ? '#6366f1' : '#64748b';
-                                html += '<tr style="border-bottom:1px solid #f1f5f9;" data-from="' + siloqEsc(s.from) + '" data-to="' + siloqEsc(s.to) + '">';
+                                html += '<tr style="border-bottom:1px solid #f1f5f9;" data-from="' + siloqEsc(s.from) + '" data-to="' + siloqEsc(s.to) + '" data-post-id="' + parseInt(s.post_id || 0) + '" data-hub-post-id="' + parseInt(s.hub_post_id || 0) + '" data-original-parent="' + parseInt(s.original_parent || 0) + '">';
                                 html += '<td style="padding:8px 10px;"><input type="checkbox" class="siloq-restructure-row-cb"' + (s.already_exists ? ' disabled' : ' checked') + '></td>';
                                 html += '<td style="padding:8px 10px;"><div style="font-weight:600;color:#1e293b;">' + siloqEsc(s.title) + '</div><div style="font-size:10px;color:' + typeColor + ';margin-top:2px;">' + siloqEsc(s.page_type) + '</div></td>';
                                 html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#6b7280;">' + siloqEsc(s.from) + '</td>';
@@ -4173,50 +4187,73 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                         $('#siloq-restructure-tbody tr').each(function() {
                             var $row = $(this);
                             if ($row.find('.siloq-restructure-row-cb').is(':checked')) {
-                                toApply.push({ from: $row.data('from'), to: $row.data('to') });
+                                toApply.push({
+                                    from:            $row.data('from'),
+                                    to:              $row.data('to'),
+                                    post_id:         $row.data('post-id'),
+                                    hub_post_id:     $row.data('hub-post-id'),
+                                    original_parent: $row.data('original-parent')
+                                });
                             }
                         });
 
                         if (!toApply.length) {
-                            $msg.css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fde68a'}).text('No redirects selected.').show();
+                            $msg.css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fde68a'}).text('No pages selected.').show();
                             return;
                         }
 
                         $btn.prop('disabled', true).text('Applying…');
                         $msg.hide();
 
-                        var done = 0, errors = 0;
-                        var total = toApply.length;
+                        var done = 0, failed = 0, errorDetails = [];
 
                         function applyNext(idx) {
                             if (idx >= toApply.length) {
                                 $btn.prop('disabled', false).text('✓ Apply Selected Redirects');
-                                var msg = done + ' redirect' + (done !== 1 ? 's' : '') + ' added successfully.';
-                                if (errors) msg += ' ' + errors + ' failed.';
+                                var msg = done + ' page' + (done !== 1 ? 's' : '') + ' restructured';
+                                if (failed) { msg += ', ' + failed + ' failed'; }
+                                msg += '.';
+                                if (errorDetails.length) {
+                                    msg += ' Errors: ' + errorDetails.join('; ');
+                                }
                                 $msg.css({
-                                    'background': errors ? '#fee2e2' : '#dcfce7',
-                                    'color': errors ? '#991b1b' : '#166534',
-                                    'border': '1px solid ' + (errors ? '#fca5a5' : '#bbf7d0')
+                                    'background': failed ? '#fee2e2' : '#dcfce7',
+                                    'color': failed ? '#991b1b' : '#166534',
+                                    'border': '1px solid ' + (failed ? '#fca5a5' : '#bbf7d0')
                                 }).text(msg).show();
-                                // Reload the redirects list
                                 if (typeof loadSiloqRedirects === 'function') loadSiloqRedirects();
                                 return;
                             }
                             var item = toApply[idx];
+                            var postData = {
+                                action:          'siloq_atomic_restructure_page',
+                                nonce:           (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''),
+                                post_id:         item.post_id,
+                                hub_post_id:     item.hub_post_id,
+                                original_parent: item.original_parent
+                            };
                             $.post(
                                 (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl),
-                                { action: 'siloq_add_redirect', nonce: (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : ''), from: item.from, to: item.to, status_code: 301 },
+                                postData,
                                 function(r) {
-                                    if (r.success) done++; else errors++;
-                                    // Mark row applied
                                     var $tr = $('#siloq-restructure-tbody tr[data-from="' + item.from + '"]');
-                                    $tr.find('td:last').html(r.success
-                                        ? '<span style="color:#16a34a;font-weight:600;">✓ Applied</span>'
-                                        : '<span style="color:#dc2626;">✗ Error</span>');
+                                    if (r.success) {
+                                        done++;
+                                        $tr.find('td:last').html('<span style="color:#16a34a;font-weight:600;">✓ Restructured</span>');
+                                    } else {
+                                        failed++;
+                                        var errMsg = (r.data && r.data.message) ? r.data.message : 'Unknown error';
+                                        errorDetails.push(item.from + ': ' + errMsg);
+                                        $tr.find('td:last').html('<span style="color:#dc2626;" title="' + siloqEsc(errMsg) + '">✗ Failed</span>');
+                                    }
                                     $tr.find('.siloq-restructure-row-cb').prop('disabled', true).prop('checked', false);
                                     applyNext(idx + 1);
                                 }
-                            ).fail(function() { errors++; applyNext(idx + 1); });
+                            ).fail(function() {
+                                failed++;
+                                errorDetails.push(item.from + ': Request failed');
+                                applyNext(idx + 1);
+                            });
                         }
                         applyNext(0);
                     });
@@ -6473,12 +6510,16 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                              'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
                              'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
                              'VA','WA','WV','WI','WY','DC');
-        $primary_services = array_values( array_filter( $primary_services, function( $s ) use ( $state_abbrs ) {
+        $generic_service_words = array( 'contractor', 'company', 'business', 'provider', 'professional',
+            'specialist', 'service', 'services', 'expert', 'experts' );
+        $primary_services = array_values( array_filter( $primary_services, function( $s ) use ( $state_abbrs, $generic_service_words ) {
             if ( empty( trim( $s ) ) ) return false;
             if ( str_word_count( $s ) > 5 ) return false; // Too long — likely a page title fragment
             foreach ( $state_abbrs as $st ) {
                 if ( preg_match( '/\b' . $st . '\b/i', $s ) ) return false;
             }
+            // Filter out generic business descriptors that aren't real service names
+            if ( in_array( strtolower( trim( $s ) ), $generic_service_words, true ) ) return false;
             return true;
         } ) );
 
@@ -7252,13 +7293,17 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
 
             $suggestions[] = [
                 'post_id'        => $post->ID,
-                'title'          => $post->post_title,
-                'page_type'      => $page_type,
-                'from'           => $from_url,
-                'to'             => $to_url,
-                'from_full'      => $site_url . $from_url,
-                'to_full'        => $site_url . $to_url,
-                'already_exists' => ! empty( $already_exists ),
+                'title'           => $post->post_title,
+                'page_type'       => $page_type,
+                'from'            => $from_url,
+                'to'              => $to_url,
+                'from_full'       => $site_url . $from_url,
+                'to_full'         => $site_url . $to_url,
+                'already_exists'  => ! empty( $already_exists ),
+                'post_id'         => $post->ID,
+                'original_slug'   => $post->post_name,
+                'original_parent' => $post->post_parent,
+                'hub_post_id'     => $hub_page ? $hub_page->ID : 0,
             ];
         }
 
@@ -7268,6 +7313,85 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             'target_prefix' => $target_prefix,
             'hub_slug'      => $hub_slug,
         ] );
+    }
+
+    /**
+     * AJAX: Atomically restructure a single city page slug + create 301 redirect.
+     *
+     * Sets post_parent to the hub page (which changes the URL), then creates a
+     * 301 redirect from the old path to the new path. Rolls back on failure.
+     *
+     * @since 1.5.173
+     */
+    public static function ajax_atomic_restructure_page() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $post_id         = intval( isset( $_POST['post_id'] ) ? $_POST['post_id'] : 0 );
+        $hub_post_id     = intval( isset( $_POST['hub_post_id'] ) ? $_POST['hub_post_id'] : 0 );
+        $original_parent = intval( isset( $_POST['original_parent'] ) ? $_POST['original_parent'] : 0 );
+
+        if ( ! $post_id ) {
+            wp_send_json_error( array( 'message' => 'Invalid post ID.' ) );
+        }
+
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            wp_send_json_error( array( 'message' => 'Post not found.' ) );
+        }
+
+        // Capture old URL before any change
+        $old_url = get_permalink( $post_id );
+
+        // Update post_parent to nest under hub (keeps same post_name / slug segment)
+        $update_data = array( 'ID' => $post_id );
+        if ( $hub_post_id ) {
+            $update_data['post_parent'] = $hub_post_id;
+        }
+        $result = wp_update_post( $update_data, true );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        // Soft-flush rewrite rules so get_permalink() reflects the new parent
+        flush_rewrite_rules( false );
+
+        $new_url = get_permalink( $post_id );
+
+        if ( $old_url === $new_url ) {
+            // Parent change had no effect on URL — nothing to redirect
+            wp_send_json_success( array(
+                'message' => 'No URL change detected — skipped redirect creation.',
+                'skipped' => true,
+            ) );
+            return;
+        }
+
+        $old_path = wp_parse_url( $old_url, PHP_URL_PATH );
+        $new_path = wp_parse_url( $new_url, PHP_URL_PATH );
+
+        // Create 301 redirect
+        $mgr              = Siloq_Redirect_Manager::get_instance();
+        $redirect_created = $mgr->add_redirect( $old_path, $new_path, 301 );
+
+        if ( ! $redirect_created ) {
+            // Roll back the parent change
+            wp_update_post( array( 'ID' => $post_id, 'post_parent' => $original_parent ) );
+            flush_rewrite_rules( false );
+            $db_err = Siloq_Redirect_Manager::$last_error;
+            wp_send_json_error( array(
+                'message' => 'Redirect creation failed — parent change rolled back. ' . ( $db_err ? $db_err : '' ),
+            ) );
+        }
+
+        wp_send_json_success( array(
+            'message' => 'Restructured successfully.',
+            'old_url' => $old_url,
+            'new_url' => $new_url,
+        ) );
     }
 
     // ── Debug Logging AJAX Handlers ──────────────────────────────────────
@@ -7409,15 +7533,12 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
 
         $endpoint = $api_url . '/sites/' . $site_id . '/intelligence/';
 
-        $response = wp_remote_post( $endpoint, array(
+        $response = wp_remote_get( $endpoint, array(
             'timeout' => 60,
             'headers' => array(
                 'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
+                'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
             ),
-            'body' => wp_json_encode( array(
-                'site_id' => $site_id,
-            ) ),
         ) );
 
         if ( is_wp_error( $response ) ) {
