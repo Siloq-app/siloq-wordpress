@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.174
+* Version: 1.5.175
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.174');
+define('SILOQ_VERSION', '1.5.175');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -1065,8 +1065,8 @@ class Siloq_Connector {
             'state'            => get_option( 'siloq_state', '' ),
             'zip'              => get_option( 'siloq_zip', '' ),
             'business_type'    => get_option( 'siloq_business_type', '' ),
-            'primary_services' => json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true ) ?: [],
-            'service_areas'    => json_decode( wp_unslash( get_option( 'siloq_service_areas',    '[]' ) ), true ) ?: [],
+            'primary_services' => json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [],
+            'service_areas'    => json_decode( get_option( 'siloq_service_areas',    '[]' ), true ) ?: [],
             'founding_year'    => get_option( 'siloq_founding_year', '' ),
         ];
 
@@ -1836,7 +1836,7 @@ class Siloq_Connector {
         ));
 
         // Load city names for the location-word exception
-        $siloq_cities_raw = wp_unslash(get_option('siloq_service_cities', '[]'));
+        $siloq_cities_raw = get_option('siloq_service_cities', '[]');
         $siloq_cities     = json_decode($siloq_cities_raw, true);
         if (!is_array($siloq_cities)) $siloq_cities = array();
         // Normalise: each entry may be a string or an array with 'city' key
@@ -2025,7 +2025,7 @@ class Siloq_Connector {
         $biz_city    = get_option('siloq_city', '');
         $biz_state   = get_option('siloq_state', '');
         $biz_phone   = get_option('siloq_phone', '');
-        $services    = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
+        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
         if (!is_array($services)) $services = array();
         // Filter out generic business descriptors that produce meaningless page titles
         $services = array_values(array_filter($services, function($svc) {
@@ -2033,7 +2033,7 @@ class Siloq_Connector {
                 'specialist', 'service', 'services', 'expert', 'experts');
             return !in_array(strtolower(trim($svc)), $generic_words, true);
         }));
-        $service_areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
+        $service_areas = json_decode(get_option('siloq_service_areas', '[]'), true);
         if (!is_array($service_areas)) $service_areas = array();
 
         $cities = array();
@@ -2059,8 +2059,8 @@ class Siloq_Connector {
 
         // Local fallback — never return a blank draft
         $biz_name    = get_option('siloq_business_name', get_bloginfo('name'));
-        $services    = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
-        $cities      = json_decode(wp_unslash(get_option('siloq_service_cities', '[]')), true);
+        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $cities      = json_decode(get_option('siloq_service_cities', '[]'), true);
         $service_str = is_array($services) && !empty($services) ? $services[0] : 'electrical services';
         $city_str    = is_array($cities)   && !empty($cities)   ? $cities[0]   : 'the area';
         $content  = '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_str) . ' in ' . esc_html($city_str) . ' and the surrounding area.</p>';

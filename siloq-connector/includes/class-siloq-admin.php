@@ -4359,14 +4359,14 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 <?php
 // Pre-load existing values
 $_goals_primary_goal       = get_option('siloq_primary_goal', '');
-$_goals_priority_services_raw = wp_unslash(get_option('siloq_priority_services', get_option('siloq_primary_services', '[]')));
+$_goals_priority_services_raw = get_option('siloq_priority_services', get_option('siloq_primary_services', '[]'));
 $_goals_priority_services  = json_decode($_goals_priority_services_raw, true);
 if (!is_array($_goals_priority_services)) $_goals_priority_services = array();
 
 $_goals_priority_cities_raw  = get_option('siloq_priority_cities', '');
 if (empty($_goals_priority_cities_raw)) {
     // Fall back to service_areas
-    $_sa_raw = wp_unslash(get_option('siloq_service_areas', '[]'));
+    $_sa_raw = get_option('siloq_service_areas', '[]');
     $_sa_arr = json_decode($_sa_raw, true);
     $_goals_priority_cities = array();
     if (is_array($_sa_arr)) {
@@ -5126,7 +5126,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             'state'         => esc_attr( get_option( 'siloq_state', '' ) ),
             'zip'           => esc_attr( get_option( 'siloq_zip', '' ) ),
             'business_type' => esc_attr( get_option( 'siloq_business_type', '' ) ),
-            'services'      => esc_attr( implode( ', ', json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true ) ?: [] ) ),
+            'services'      => esc_attr( implode( ', ', json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [] ) ),
         );
         ?>
         <style>
@@ -6196,8 +6196,8 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $pages_payload = array_slice($pages_payload, 0, 25);
 
         // Build site context from entity profile
-        $services = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
-        $areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
         $site_context = array(
             'business_name'           => get_option('siloq_business_name', get_bloginfo('name')),
             'business_type'           => get_option('siloq_business_type', ''),
@@ -6346,8 +6346,8 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $city = get_option('siloq_city', '');
         $state = get_option('siloq_state', '');
         $zip = get_option('siloq_zip', '');
-        $services = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
-        $areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
 
         $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
 
@@ -6507,7 +6507,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
 
         // ── Service gaps ────────────────────────────────────────────────────
         // Only compare against siloq_primary_services option — NEVER parse from page titles
-        $primary_services = json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true );
+        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
         if ( ! is_array( $primary_services ) ) $primary_services = array();
 
         // Filter to clean service names only (≤5 words, no state abbreviations)
@@ -6565,7 +6565,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $service_areas = array();
         $_gap_biz_type = get_option( 'siloq_business_type', 'general' );
         if ( in_array( $_gap_biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
-            $service_areas = json_decode( wp_unslash( get_option( 'siloq_service_areas', '[]' ) ), true );
+            $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
             if ( ! is_array( $service_areas ) ) $service_areas = array();
         }
         $first_service = ! empty( $primary_services ) ? $primary_services[0] : '';
@@ -6645,7 +6645,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             ?: get_post_meta( $post_id, '_siloq_page_type_classification', true )
             ?: 'supporting';
 
-        $primary_services = json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true );
+        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
         if ( ! is_array( $primary_services ) ) $primary_services = [];
         $primary_service = ! empty( $primary_services ) ? $primary_services[0] : '';
 
