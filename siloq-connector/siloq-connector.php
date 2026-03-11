@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.175
+* Version: 1.5.176
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.175');
+define('SILOQ_VERSION', '1.5.176');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -2426,18 +2426,25 @@ class Siloq_Connector {
      * fails on shared hosting; run inline instead).
      */
     public function ajax_run_audit() {
-        @set_time_limit(120); // allow 2 minutes for audit — AI calls per page can take 60-90s total
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('edit_pages')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        $result = Siloq_Admin::run_site_audit();
-        if (!empty($result['success']) && !empty($result['data'])) {
-            wp_send_json_success(array('status' => 'complete', 'message' => 'Audit complete.', 'data' => $result['data']));
+        // Run the local audit — pure PHP, zero HTTP calls, works on all hosting.
+        // The API-based audit (run_site_audit) makes an outgoing call to api.siloq.ai
+        // that times out on shared hosting with max_execution_time=30.
+        $result = Siloq_Admin::run_site_audit_local();
+        if (!empty($result) && !empty($result['success'])) {
+            // Store results so the audit tab renders them on reload.
+            set_transient('siloq_audit_results', $result, 6 * HOUR_IN_SECONDS);
+            update_option('siloq_last_audit_time', current_time('mysql'));
+            if (isset($result['site_score'])) {
+                update_option('siloq_site_score', intval($result['site_score']));
+            }
+            wp_send_json_success(array('status' => 'complete', 'message' => 'Audit complete.', 'data' => $result));
         } else {
-            $msg = isset($result['message']) ? $result['message'] : 'Audit failed.';
-            wp_send_json_error(array('message' => $msg));
+            wp_send_json_error(array('message' => 'Audit failed — no pages found. Try syncing pages first.'));
         }
     }
 

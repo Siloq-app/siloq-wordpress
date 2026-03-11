@@ -5966,16 +5966,18 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $actions  = array();
         $issues   = array('critical' => array(), 'important' => array(), 'opportunity' => array());
         $scores   = array();
+        $pages    = array(); // per-page structured results for the audit display
         $seo_plugin = get_option('siloq_active_seo_plugin', 'siloq_native');
 
         foreach ($posts as $p) {
-            $post_id     = $p->ID;
-            $title       = get_the_title($post_id);
-            $edit_url    = get_edit_post_link($post_id, 'raw');
+            $post_id      = $p->ID;
+            $title        = get_the_title($post_id);
+            $edit_url     = get_edit_post_link($post_id, 'raw');
             // el_url is ONLY used for content/H1 issues that require the visual editor
             // Meta title/description always use edit_url (WP editor where AIOSEO panel lives)
-            $el_url      = admin_url('post.php?post=' . $post_id . '&action=elementor');
-            $score       = 100;
+            $el_url       = admin_url('post.php?post=' . $post_id . '&action=elementor');
+            $score        = 100;
+            $page_actions = array(); // actions for THIS page only
 
             $formula_title = self::siloq_formula_seo_title($post_id);
             $formula_desc  = self::siloq_formula_meta_desc($post_id);
@@ -5985,11 +5987,15 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             $has_seo_title = ($seo_title !== get_the_title($post_id) && !empty($seo_title));
             if (!$has_seo_title) {
                 $score -= 10;
-                $actions[] = array('headline' => 'Add SEO title to "' . $title . '"',
+                $a = array('headline' => 'Add SEO title to "' . $title . '"', 'title' => 'Missing SEO title',
                     'detail' => 'Missing SEO title tag. Siloq will write one automatically.',
+                    'recommendation' => 'Missing SEO title. Siloq will write one automatically.',
+                    'severity' => 'high', 'category' => 'Meta',
                     'priority' => 'high', 'post_id' => $post_id,
                     'fix_category' => 'auto', 'fix_type' => 'meta_title', 'formula' => $formula_title,
-                    'edit_url' => $edit_url, 'elementor_url' => $edit_url); // WP editor, never Elementor
+                    'edit_url' => $edit_url, 'elementor_url' => $edit_url);
+                $actions[]      = $a;
+                $page_actions[] = $a;
                 $issues['important'][] = array('title' => $title, 'issue' => 'Missing SEO title',
                     'fix_category' => 'auto', 'fix_type' => 'meta_title', 'formula' => $formula_title,
                     'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $edit_url);
@@ -6001,11 +6007,15 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             $broken      = is_array($meta_result) && isset($meta_result['status']) && $meta_result['status'] === 'broken_fallback';
             if (empty($meta_desc) || $broken) {
                 $score -= 15;
-                $actions[] = array('headline' => 'Add meta description to "' . $title . '"',
-                    'detail' => $broken ? 'Meta description contains full page content. Siloq will generate a proper summary.' : 'Missing meta description reduces CTR. Siloq will generate one.',
+                $meta_detail = $broken ? 'Meta description contains full page content. Siloq will generate a proper summary.' : 'Missing meta description reduces CTR. Siloq will generate one.';
+                $a = array('headline' => 'Add meta description to "' . $title . '"', 'title' => 'Missing meta description',
+                    'detail' => $meta_detail, 'recommendation' => $meta_detail,
+                    'severity' => 'high', 'category' => 'Meta',
                     'priority' => 'high', 'post_id' => $post_id,
                     'fix_category' => 'auto', 'fix_type' => 'meta_description', 'formula' => $formula_desc,
-                    'edit_url' => $edit_url, 'elementor_url' => $edit_url); // WP editor, never Elementor
+                    'edit_url' => $edit_url, 'elementor_url' => $edit_url);
+                $actions[]      = $a;
+                $page_actions[] = $a;
                 $issues['important'][] = array('title' => $title, 'issue' => 'Missing meta description',
                     'fix_category' => 'auto', 'fix_type' => 'meta_description', 'formula' => $formula_desc,
                     'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $edit_url);
@@ -6020,11 +6030,15 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             ));
             if (empty($active_types)) {
                 $score -= 20;
-                $actions[] = array('headline' => 'Add schema markup to "' . $title . '"',
+                $a = array('headline' => 'Add schema markup to "' . $title . '"', 'title' => 'No schema markup',
                     'detail' => 'No structured data. Schema helps AI cite this page and improves rich results.',
+                    'recommendation' => 'Add schema markup. Structured data helps AI cite this page and improves rich results.',
+                    'severity' => 'warning', 'category' => 'Schema',
                     'priority' => 'high', 'post_id' => $post_id,
                     'fix_category' => 'auto', 'fix_type' => 'schema',
                     'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $actions[]      = $a;
+                $page_actions[] = $a;
                 $issues['opportunity'][] = array('title' => $title, 'issue' => 'No schema markup',
                     'fix_category' => 'auto', 'fix_type' => 'schema',
                     'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
@@ -6034,10 +6048,25 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             $wc = str_word_count(wp_strip_all_tags($p->post_content));
             if ($wc < 300 && $wc > 0) {
                 $score -= 15;
+                $a = array('headline' => 'Thin content on "' . $title . '"', 'title' => 'Thin content',
+                    'detail' => 'Only ' . $wc . ' words. Aim for 500+ for service pages.',
+                    'recommendation' => 'Only ' . $wc . ' words. Expand to 500+ words for service pages.',
+                    'severity' => 'medium', 'category' => 'Content',
+                    'priority' => 'medium', 'post_id' => $post_id,
+                    'fix_category' => 'manual', 'fix_type' => 'content',
+                    'edit_url' => $edit_url, 'elementor_url' => $el_url);
+                $page_actions[] = $a;
                 $issues['important'][] = array('title' => $title, 'issue' => 'Thin content — only ' . $wc . ' words. Aim for 500+.', 'post_id' => $post_id, 'edit_url' => $edit_url, 'elementor_url' => $el_url);
             }
 
-            $scores[] = max(0, $score);
+            $page_score = max(0, $score);
+            $scores[]   = $page_score;
+
+            // Build per-page entry for the audit display
+            $page_type_meta = get_post_meta($post_id, '_siloq_page_type', true);
+            $tier_map = array('hub' => 'hub', 'apex_hub' => 'apex_hub', 'pillar' => 'hub', 'spoke' => 'spoke', 'supporting' => 'spoke', 'orphan' => 'orphan');
+            $tier = isset($tier_map[$page_type_meta]) ? $tier_map[$page_type_meta] : 'supporting';
+            $pages[] = array('post_id' => $post_id, 'score' => $page_score, 'tier' => $tier, 'actions' => $page_actions);
         }
 
         $site_score = !empty($scores) ? round(array_sum($scores) / count($scores)) : 0;
@@ -6052,6 +6081,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             'success'    => true,
             'site_score' => $site_score,
             'page_count' => count($posts),
+            'pages'      => $pages,
             'actions'    => $actions,
             'issues'     => $issues,
             'audit_id'   => 'local_' . time(),
