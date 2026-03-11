@@ -7679,11 +7679,11 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         );
         Siloq_Goals::save_goals( $goals );
 
-        // Sync to API via PATCH /sites/{site_id}/goals/
+        // Sync to API via POST /sites/{site_id}/goals/ (upsert — API does not support PATCH)
         $site_id = get_option( 'siloq_site_id' );
         if ( $site_id ) {
             $api_client = new Siloq_API_Client();
-            $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'PATCH', $goals );
+            $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'POST', $goals );
         }
 
         wp_send_json_success( array( 'message' => 'Goals saved — intelligence will update on next audit' ) );
