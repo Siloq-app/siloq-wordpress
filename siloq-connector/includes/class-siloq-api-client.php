@@ -43,7 +43,7 @@ class Siloq_API_Client {
                 'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'application/json'
             ),
-            'timeout' => 30
+            'timeout' => 90 // was 30 — audit with many pages needs more time
         ));
         
         if (is_wp_error($response)) {
@@ -216,7 +216,7 @@ class Siloq_API_Client {
         $url = $this->api_url . $endpoint;
         
         $args = array(
-            'timeout' => 30,
+            'timeout' => 90, // was 30 — audit with many pages needs more time
             'headers' => array(
                 'Authorization' => 'Bearer ' . $this->api_key,
                 'Content-Type' => 'application/json'

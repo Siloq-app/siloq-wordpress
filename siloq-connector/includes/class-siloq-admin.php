@@ -2071,10 +2071,11 @@ $missing_count_profile = count($missing_fields);
 
 // Build hub data: pages marked as hub in analysis, OR pages that have child pages
 $all_synced_pages = get_posts(array(
-    'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
-    'post_status'    => 'publish',
-    'posts_per_page' => -1,
-    'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
+    'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
+    'post_type__not_in'  => array('koops', 'jet_cct', 'jet-smart-filters', 'attachment'),
+    'post_status'        => 'publish',
+    'posts_per_page'     => -1,
+    'meta_query'         => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
 $hub_data = array();
 $non_hub_ids = array();
@@ -2367,7 +2368,7 @@ if ($has_plan && isset($plan_data['issues'])) {
   <div class="siloq-insight-card">
     <div class="siloq-ic-hdr">
       <div class="siloq-ic-title-group"><div class="siloq-ic-icon indigo">&#128202;</div><div class="siloq-ic-title">Search Performance</div></div>
-      <a href="#siloq-tab-gsc" class="siloq-ic-link siloq-tab-btn" aria-controls="siloq-tab-gsc">Full Report &rarr;</a>
+      <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'siloq-tab-gsc\']'); if(btn){btn.click();} return false;" class="siloq-ic-link" style="color:#4f46e5;font-size:12px;font-weight:500;">Full Report &rarr;</a>
     </div>
     <?php if ($gsc_impr_28d > 0): ?>
     <div class="siloq-gsc-grid">
@@ -3001,7 +3002,12 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
               <div style="font-size:12px;font-weight:600;color:#334155;"><?php echo esc_html( $check['label'] ); ?></div>
               <div style="font-size:11px;color:#64748b;margin-top:2px;"><?php echo esc_html( $check['message'] ); ?></div>
               <?php if ( ! empty( $check['link'] ) && ! empty( $check['link_text'] ) ) : ?>
-                <a href="<?php echo esc_attr( $check['link'] ); ?>" <?php if ( strpos( $check['link'], '#' ) !== 0 ) echo 'target="_blank" rel="noopener"'; ?> class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+                <?php if ( strpos( $check['link'], '#siloq-tab-' ) === 0 ) :
+                    $tab_id = ltrim( $check['link'], '#' ); ?>
+                <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'<?php echo esc_js($tab_id); ?>\']'); if(btn){btn.click();} return false;" class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+                <?php else : ?>
+                <a href="<?php echo esc_url( $check['link'] ); ?>" target="_blank" rel="noopener" class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+                <?php endif; ?>
               <?php endif; ?>
             </div>
           </div>
@@ -3126,8 +3132,14 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
             html += '<div style="font-size:12px;font-weight:600;color:#334155;">' + siloqEscape(check.label) + '</div>';
             html += '<div style="font-size:11px;color:#64748b;margin-top:2px;">' + siloqEscape(check.message) + '</div>';
             if (check.link && check.link_text) {
+                var isTabLink = check.link.indexOf('#siloq-tab-') === 0;
                 var isExternal = check.link.indexOf('#') !== 0;
-                html += '<a href="' + siloqEscape(check.link) + '"' + (isExternal ? ' target="_blank" rel="noopener"' : '') + ' style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+                if (isTabLink) {
+                    var tabId = check.link.replace('#', '');
+                    html += '<a href="#" onclick="var btn=document.querySelector(\'[aria-controls=\\\"' + tabId + '\\\"]\'); if(btn){btn.click();} return false;" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+                } else {
+                    html += '<a href="' + siloqEscape(check.link) + '"' + (isExternal ? ' target="_blank" rel="noopener"' : '') + ' style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+                }
             }
             if (check.action === 'generate' && check.action_text) {
                 html += '<button type="button" id="siloq-generate-agent-files-audit" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;margin-top:4px;">' + siloqEscape(check.action_text) + '</button>';
@@ -3437,6 +3449,14 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 </div>
 
                 <?php
+                $sync_result = get_option( 'siloq_last_sync_result', null );
+                if ( $sync_result && ! empty( $sync_result['last_run'] ) ) : ?>
+                <div style="font-size:11px;color:#6b7280;margin-bottom:8px;">
+                    Last sync: <?php echo esc_html( $sync_result['last_run'] ); ?> &mdash; <?php echo intval( $sync_result['synced_count'] ); ?> pages synced<?php if ( intval( $sync_result['error_count'] ) > 0 ) echo ' (' . intval( $sync_result['error_count'] ) . ' errors)'; ?>
+                </div>
+                <?php endif; ?>
+
+                <?php
                 $queue_count = intval( get_option( 'siloq_analysis_queue_count', 0 ) );
                 if ( $queue_count > 0 ) : ?>
                 <div class="siloq-analysis-queue-banner" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:8px 16px;margin-bottom:12px;font-size:13px;color:#92400e;">
@@ -3460,6 +3480,11 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
             <!-- ═══════ SCHEMA TAB ═══════ -->
             <div id="siloq-tab-schema" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <?php
+                global $wpdb;
+                $siloq_synced_meta_count = intval( $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_siloq_synced'" ) );
+                ?>
+                <script>var siloqSyncedMetaCount = <?php echo $siloq_synced_meta_count; ?>;</script>
 
                 <!-- Section 1: Entity Profile Completeness -->
                 <?php
@@ -4334,14 +4359,14 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 <?php
 // Pre-load existing values
 $_goals_primary_goal       = get_option('siloq_primary_goal', '');
-$_goals_priority_services_raw = get_option('siloq_priority_services', get_option('siloq_primary_services', '[]'));
+$_goals_priority_services_raw = wp_unslash(get_option('siloq_priority_services', get_option('siloq_primary_services', '[]')));
 $_goals_priority_services  = json_decode($_goals_priority_services_raw, true);
 if (!is_array($_goals_priority_services)) $_goals_priority_services = array();
 
 $_goals_priority_cities_raw  = get_option('siloq_priority_cities', '');
 if (empty($_goals_priority_cities_raw)) {
     // Fall back to service_areas
-    $_sa_raw = get_option('siloq_service_areas', '[]');
+    $_sa_raw = wp_unslash(get_option('siloq_service_areas', '[]'));
     $_sa_arr = json_decode($_sa_raw, true);
     $_goals_priority_cities = array();
     if (is_array($_sa_arr)) {
@@ -4568,35 +4593,22 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                     chev.classList.toggle('open', !isOpen);
                 }
 
-                // Create draft with generated content (for gap analysis cards)
+                // Create a blank draft page and switch to Pages tab (for gap analysis cards)
                 function siloqCreateGapDraft(btn, title, draftType) {
-                    btn.textContent = 'Generating...';
+                    btn.textContent = 'Creating...';
                     btn.disabled = true;
                     jQuery.post(ajaxurl, {
-                        action: 'siloq_create_draft_page',
+                        action: 'siloq_add_page',
                         nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
-                        title: title,
-                        draft_type: draftType
+                        title: title
                     }, function(r) {
-                        if (r.success && r.data.edit_url) {
-                            btn.textContent = '✓ Draft Created — opening...';
+                        if (r.success) {
+                            btn.textContent = '✓ Draft Created';
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
-                            setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
-                        } else if (r.data && r.data.cannibal) {
-                            // Cannibalization warning — show inline instead of creating
-                            btn.textContent = '⚠ Page exists';
-                            btn.style.background = '#fef3c7';
-                            btn.style.color = '#92400e';
-                            btn.disabled = false;
-                            var card = btn.closest('.siloq-gap-card, .siloq-spoke-card, li, div');
-                            if (card) {
-                                var warn = document.createElement('div');
-                                warn.style.cssText = 'font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-top:6px;';
-                                warn.innerHTML = '⚠ <strong>' + r.data.existing_page + '</strong> already targets this keyword. '
-                                    + '<a href="' + r.data.edit_url + '" target="_blank" style="color:#1d4ed8;text-decoration:underline">Improve that page instead &rarr;</a>';
-                                card.appendChild(warn);
-                            }
+                            // Switch to Pages tab so Kyle can see the new page
+                            var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
+                            if (pagesBtn) { pagesBtn.click(); }
                         } else {
                             btn.textContent = 'Error — retry';
                             btn.disabled = false;
@@ -4609,27 +4621,20 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                     btn.textContent = 'Creating...';
                     btn.disabled = true;
                     jQuery.post(ajaxurl, {
-                        action: 'siloq_create_draft_page',
+                        action: 'siloq_add_page',
                         nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
                         title: title
                     }, function(r) {
-                        if (r.success && r.data.edit_url) {
+                        if (r.success) {
                             btn.textContent = '✓ Created';
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
                             btn.style.boxShadow = 'none';
                             var spoke = btn.closest('.siloq-spoke-card');
                             if (spoke) { spoke.style.borderColor = '#22c55e'; spoke.style.borderStyle = 'solid'; }
-                            setTimeout(function(){ window.open(r.data.edit_url, '_blank'); }, 600);
-                        } else if (r.data && r.data.cannibal) {
-                            btn.textContent = '⚠ Already exists';
-                            btn.style.background = '#fef3c7';
-                            btn.style.color = '#92400e';
-                            btn.disabled = false;
-                            var info = document.createElement('div');
-                            info.style.cssText = 'font-size:11px;color:#92400e;margin-top:4px;';
-                            info.innerHTML = '<a href="' + r.data.edit_url + '" target="_blank">Edit: ' + r.data.existing_page + ' &rarr;</a>';
-                            btn.parentNode.insertBefore(info, btn.nextSibling);
+                            // Switch to Pages tab
+                            var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
+                            if (pagesBtn) { pagesBtn.click(); }
                         } else {
                             btn.textContent = 'Error — retry';
                             btn.disabled = false;
@@ -5121,7 +5126,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             'state'         => esc_attr( get_option( 'siloq_state', '' ) ),
             'zip'           => esc_attr( get_option( 'siloq_zip', '' ) ),
             'business_type' => esc_attr( get_option( 'siloq_business_type', '' ) ),
-            'services'      => esc_attr( implode( ', ', json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [] ) ),
+            'services'      => esc_attr( implode( ', ', json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true ) ?: [] ) ),
         );
         ?>
         <style>
@@ -6191,8 +6196,8 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $pages_payload = array_slice($pages_payload, 0, 25);
 
         // Build site context from entity profile
-        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
-        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+        $services = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
+        $areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
         $site_context = array(
             'business_name'           => get_option('siloq_business_name', get_bloginfo('name')),
             'business_type'           => get_option('siloq_business_type', ''),
@@ -6341,8 +6346,8 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $city = get_option('siloq_city', '');
         $state = get_option('siloq_state', '');
         $zip = get_option('siloq_zip', '');
-        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
-        $areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+        $services = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
+        $areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
 
         $address_filled = !empty($address) && !empty($city) && !empty($state) && !empty($zip);
 
@@ -6502,7 +6507,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
 
         // ── Service gaps ────────────────────────────────────────────────────
         // Only compare against siloq_primary_services option — NEVER parse from page titles
-        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        $primary_services = json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true );
         if ( ! is_array( $primary_services ) ) $primary_services = array();
 
         // Filter to clean service names only (≤5 words, no state abbreviations)
@@ -6560,7 +6565,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $service_areas = array();
         $_gap_biz_type = get_option( 'siloq_business_type', 'general' );
         if ( in_array( $_gap_biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
-            $service_areas = json_decode( get_option( 'siloq_service_areas', '[]' ), true );
+            $service_areas = json_decode( wp_unslash( get_option( 'siloq_service_areas', '[]' ) ), true );
             if ( ! is_array( $service_areas ) ) $service_areas = array();
         }
         $first_service = ! empty( $primary_services ) ? $primary_services[0] : '';
@@ -6640,7 +6645,7 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             ?: get_post_meta( $post_id, '_siloq_page_type_classification', true )
             ?: 'supporting';
 
-        $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
+        $primary_services = json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true );
         if ( ! is_array( $primary_services ) ) $primary_services = [];
         $primary_service = ! empty( $primary_services ) ? $primary_services[0] : '';
 

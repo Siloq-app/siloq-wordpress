@@ -239,6 +239,15 @@ class Siloq_Sync_Engine {
             }
         }
 
+        // Store sync result for Pages tab diagnostic display
+        if ( ! $has_more ) {
+            update_option( 'siloq_last_sync_result', array(
+                'synced_count' => $synced_count,
+                'error_count'  => $error_count,
+                'last_run'     => current_time( 'mysql' ),
+            ) );
+        }
+
         return array(
             'success'     => true, // always true — let JS decide based on has_more + counts
             'synced'      => $synced_count,

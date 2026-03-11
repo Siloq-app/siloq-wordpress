@@ -1314,7 +1314,11 @@
     }, function (res) {
       schemaLoaded = true;
       if (!res.success || !res.data || !res.data.pages) {
-        $list.html('<div class="siloq-empty"><p>No synced pages found. Sync pages first from the Pages tab.</p></div>');
+        var syncedCount = (typeof siloqSyncedMetaCount !== 'undefined') ? siloqSyncedMetaCount : -1;
+        var diagMsg = syncedCount === 0
+          ? 'No pages have been synced yet. Go to the <strong>Pages</strong> tab and run <strong>Sync All Pages</strong> first.'
+          : (syncedCount > 0 ? syncedCount + ' pages are synced. Loading schema status — please refresh if this persists.' : 'No synced pages found. Sync pages first from the Pages tab.');
+        $list.html('<div class="siloq-empty"><p>' + diagMsg + '</p></div>');
         return;
       }
       renderSchemaPages(res.data.pages);
@@ -1326,7 +1330,11 @@
   function renderSchemaPages(pages) {
     var $list = $('#siloq-schema-pages-list');
     if (!pages.length) {
-      $list.html('<div class="siloq-empty"><p>No synced pages found. Sync pages first from the Pages tab.</p></div>');
+      var syncedCount2 = (typeof siloqSyncedMetaCount !== 'undefined') ? siloqSyncedMetaCount : -1;
+      var diagMsg2 = syncedCount2 === 0
+        ? 'No pages have been synced yet. Go to the <strong>Pages</strong> tab and run <strong>Sync All Pages</strong> first.'
+        : (syncedCount2 > 0 ? syncedCount2 + ' pages are synced but none are showing — please refresh.' : 'No synced pages found. Sync pages first from the Pages tab.');
+      $list.html('<div class="siloq-empty"><p>' + diagMsg2 + '</p></div>');
       return;
     }
     var html = '';

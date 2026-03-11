@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.173
+* Version: 1.5.174
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.173');
+define('SILOQ_VERSION', '1.5.174');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -340,6 +340,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_plan_data', array($this, 'ajax_get_plan_data'));
         add_action('wp_ajax_siloq_save_roadmap_progress', array($this, 'ajax_save_roadmap_progress'));
         add_action('wp_ajax_siloq_create_draft_page', array($this, 'ajax_create_draft_page'));
+        add_action('wp_ajax_siloq_add_page',          array($this, 'ajax_add_page'));
         add_action('wp_ajax_siloq_save_api_key',      array($this, 'ajax_save_api_key'));
         add_action('wp_ajax_siloq_get_pages_list', array($this, 'ajax_get_pages_list'));
         // GSC connection handlers
@@ -1064,8 +1065,8 @@ class Siloq_Connector {
             'state'            => get_option( 'siloq_state', '' ),
             'zip'              => get_option( 'siloq_zip', '' ),
             'business_type'    => get_option( 'siloq_business_type', '' ),
-            'primary_services' => json_decode( get_option( 'siloq_primary_services', '[]' ), true ) ?: [],
-            'service_areas'    => json_decode( get_option( 'siloq_service_areas',    '[]' ), true ) ?: [],
+            'primary_services' => json_decode( wp_unslash( get_option( 'siloq_primary_services', '[]' ) ), true ) ?: [],
+            'service_areas'    => json_decode( wp_unslash( get_option( 'siloq_service_areas',    '[]' ) ), true ) ?: [],
             'founding_year'    => get_option( 'siloq_founding_year', '' ),
         ];
 
@@ -1708,13 +1709,44 @@ class Siloq_Connector {
         wp_send_json_success(array('last4' => substr($value, -4)));
     }
 
+    /**
+     * Simple AJAX handler: create a blank draft page.
+     * No content generation, no cannibalization check — just wp_insert_post.
+     * Used by the Create Draft buttons in the AI Visibility / gap analysis tab.
+     */
+    public function ajax_add_page() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+            return;
+        }
+        $title = sanitize_text_field(isset($_POST['title']) ? $_POST['title'] : '');
+        if (empty($title)) {
+            wp_send_json_error(array('message' => 'Title required.'));
+            return;
+        }
+        $post_id = wp_insert_post(array(
+            'post_title'  => $title,
+            'post_status' => 'draft',
+            'post_type'   => 'page',
+        ), true);
+        if (is_wp_error($post_id)) {
+            wp_send_json_error(array('message' => $post_id->get_error_message()));
+            return;
+        }
+        wp_send_json_success(array(
+            'post_id'  => $post_id,
+            'edit_url' => get_edit_post_link($post_id, 'raw'),
+        ));
+    }
+
     public function ajax_create_draft_page() {
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('edit_posts')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
             return;
         }
-        $title      = sanitize_text_field($_POST['title'] ?? '');
+        $title      = sanitize_text_field(isset($_POST['title']) ? $_POST['title'] : '');
         $draft_type = sanitize_text_field($_POST['draft_type'] ?? 'generic'); // service-areas | service | city | generic
         if (empty($title)) {
             wp_send_json_error(array('message' => 'Title required'));
@@ -1804,7 +1836,7 @@ class Siloq_Connector {
         ));
 
         // Load city names for the location-word exception
-        $siloq_cities_raw = get_option('siloq_service_cities', '[]');
+        $siloq_cities_raw = wp_unslash(get_option('siloq_service_cities', '[]'));
         $siloq_cities     = json_decode($siloq_cities_raw, true);
         if (!is_array($siloq_cities)) $siloq_cities = array();
         // Normalise: each entry may be a string or an array with 'city' key
@@ -1993,7 +2025,7 @@ class Siloq_Connector {
         $biz_city    = get_option('siloq_city', '');
         $biz_state   = get_option('siloq_state', '');
         $biz_phone   = get_option('siloq_phone', '');
-        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $services    = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
         if (!is_array($services)) $services = array();
         // Filter out generic business descriptors that produce meaningless page titles
         $services = array_values(array_filter($services, function($svc) {
@@ -2001,7 +2033,7 @@ class Siloq_Connector {
                 'specialist', 'service', 'services', 'expert', 'experts');
             return !in_array(strtolower(trim($svc)), $generic_words, true);
         }));
-        $service_areas = json_decode(get_option('siloq_service_areas', '[]'), true);
+        $service_areas = json_decode(wp_unslash(get_option('siloq_service_areas', '[]')), true);
         if (!is_array($service_areas)) $service_areas = array();
 
         $cities = array();
@@ -2027,8 +2059,8 @@ class Siloq_Connector {
 
         // Local fallback — never return a blank draft
         $biz_name    = get_option('siloq_business_name', get_bloginfo('name'));
-        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
-        $cities      = json_decode(get_option('siloq_service_cities', '[]'), true);
+        $services    = json_decode(wp_unslash(get_option('siloq_primary_services', '[]')), true);
+        $cities      = json_decode(wp_unslash(get_option('siloq_service_cities', '[]')), true);
         $service_str = is_array($services) && !empty($services) ? $services[0] : 'electrical services';
         $city_str    = is_array($cities)   && !empty($cities)   ? $cities[0]   : 'the area';
         $content  = '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_str) . ' in ' . esc_html($city_str) . ' and the surrounding area.</p>';
@@ -2394,6 +2426,7 @@ class Siloq_Connector {
      * fails on shared hosting; run inline instead).
      */
     public function ajax_run_audit() {
+        @set_time_limit(120); // allow 2 minutes for audit — AI calls per page can take 60-90s total
         check_ajax_referer('siloq_ajax_nonce', 'nonce');
         if (!current_user_can('edit_pages')) {
             wp_send_json_error(array('message' => 'Unauthorized'));
