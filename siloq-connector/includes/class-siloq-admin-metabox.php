@@ -103,15 +103,41 @@ class Siloq_Admin_Metabox {
 
     public static function render_meta_box( $post ) {
         $post_id       = $post->ID;
-        $applied_types = get_post_meta( $post_id, '_siloq_applied_types', true );
-        $applied_at    = get_post_meta( $post_id, '_siloq_schema_applied', true );
         $has_staged    = ! empty( get_post_meta( $post_id, '_siloq_suggested_schema', true ) );
 
-        $applied_list  = '';
-        if ( ! empty( $applied_types ) ) {
-            $types = json_decode( $applied_types, true );
-            if ( is_array( $types ) && ! empty( $types ) ) {
-                $applied_list = implode( ', ', array_map( 'esc_html', $types ) );
+        // Fix 4: Read schema status from the DB table (wp_siloq_schema), not post meta.
+        // post meta (_siloq_applied_types / _siloq_schema_applied) can be out of sync
+        // with the DB table that output_schema() reads — DB is the single source of truth.
+        $applied_list = '';
+        $applied_at   = '';
+        if ( class_exists( 'Siloq_Schema_Architect' ) ) {
+            global $wpdb;
+            $schema_table = $wpdb->prefix . 'siloq_schema';
+            $db_rows = $wpdb->get_results( $wpdb->prepare(
+                "SELECT schema_type, updated_at FROM {$schema_table} WHERE post_id = %d AND is_active = 1 ORDER BY schema_type ASC",
+                $post_id
+            ) );
+            if ( ! empty( $db_rows ) ) {
+                $db_types = array();
+                foreach ( $db_rows as $row ) {
+                    $db_types[] = $row->schema_type;
+                    if ( empty( $applied_at ) && ! empty( $row->updated_at ) ) {
+                        $applied_at = $row->updated_at;
+                    }
+                }
+                $applied_list = implode( ', ', array_map( 'esc_html', $db_types ) );
+            }
+        }
+
+        // Fallback to post meta only if DB table is unavailable
+        if ( empty( $applied_list ) ) {
+            $applied_types_meta = get_post_meta( $post_id, '_siloq_applied_types', true );
+            $applied_at         = get_post_meta( $post_id, '_siloq_schema_applied', true );
+            if ( ! empty( $applied_types_meta ) ) {
+                $types = json_decode( $applied_types_meta, true );
+                if ( is_array( $types ) && ! empty( $types ) ) {
+                    $applied_list = implode( ', ', array_map( 'esc_html', $types ) );
+                }
             }
         }
         ?>

@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.178
+* Version: 1.5.180
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.178');
+define('SILOQ_VERSION', '1.5.180');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -2331,10 +2331,24 @@ class Siloq_Connector {
             $score = isset($analysis['score']) ? intval($analysis['score']) : (isset($analysis['seo_score']['overall']) ? intval($analysis['seo_score']['overall']) : 0);
             $primary_keyword = isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : (isset($analysis['seo_score']['primary_keyword']) ? $analysis['seo_score']['primary_keyword'] : '');
 
-            // Schema status for page card button
-            $applied_schema = get_post_meta($post->ID, '_siloq_applied_types', true);
-            $schema_applied_flag = get_post_meta($post->ID, '_siloq_schema_applied', true);
-            $has_schema = ! empty( $applied_schema ) || ! empty( $schema_applied_flag );
+            // Fix 4: Schema status reads from DB table (wp_siloq_schema), not post meta.
+            // post meta can be out of sync with the DB table that actually drives wp_head output.
+            $has_schema = false;
+            if ( class_exists( 'Siloq_Schema_Architect' ) ) {
+                global $wpdb;
+                $schema_table = $wpdb->prefix . 'siloq_schema';
+                $schema_count = $wpdb->get_var( $wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$schema_table} WHERE post_id = %d AND is_active = 1",
+                    $post->ID
+                ) );
+                $has_schema = ( intval( $schema_count ) > 0 );
+            }
+            // Fallback to post meta if DB table is unavailable
+            if ( ! $has_schema ) {
+                $applied_schema      = get_post_meta( $post->ID, '_siloq_applied_types', true );
+                $schema_applied_flag = get_post_meta( $post->ID, '_siloq_schema_applied', true );
+                $has_schema          = ! empty( $applied_schema ) || ! empty( $schema_applied_flag );
+            }
 
             $pages[] = array(
                 'id'              => $post->ID,
