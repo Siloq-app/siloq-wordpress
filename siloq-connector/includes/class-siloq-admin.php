@@ -7397,13 +7397,34 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
+        // Fix 3: Clear WP's post cache so get_permalink() reflects the new parent.
+        clean_post_cache( $post_id );
+        wp_cache_delete( $post_id, 'posts' );
+
         // Soft-flush rewrite rules so get_permalink() reflects the new parent
         flush_rewrite_rules( false );
 
         $new_url = get_permalink( $post_id );
 
+        // Fix 3: If WP still returns the same URL (stale cache / no pretty-permalinks),
+        // compute the nested URL manually from the hub slug + page slug.
+        if ( $old_url === $new_url && $hub_post_id ) {
+            $hub      = get_post( $hub_post_id );
+            $hub_slug = $hub ? $hub->post_name : '';
+            $page_obj = get_post( $post_id );
+            $page_slug = $page_obj ? $page_obj->post_name : '';
+            if ( $hub_slug && $page_slug ) {
+                $new_url = trailingslashit( get_site_url() ) . $hub_slug . '/' . $page_slug . '/';
+            }
+        }
+
         if ( $old_url === $new_url ) {
             // Parent change had no effect on URL — nothing to redirect
+            // Fix 5: Still reclassify the page role even if URL didn't change.
+            if ( class_exists( 'Siloq_Sync_Engine' ) ) {
+                $sync = new Siloq_Sync_Engine();
+                $sync->reclassify_page_by_parent( $post_id );
+            }
             wp_send_json_success( array(
                 'message' => 'No URL change detected — skipped redirect creation.',
                 'skipped' => true,
@@ -7421,11 +7442,18 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         if ( ! $redirect_created ) {
             // Roll back the parent change
             wp_update_post( array( 'ID' => $post_id, 'post_parent' => $original_parent ) );
+            clean_post_cache( $post_id );
             flush_rewrite_rules( false );
             $db_err = Siloq_Redirect_Manager::$last_error;
             wp_send_json_error( array(
                 'message' => 'Redirect creation failed — parent change rolled back. ' . ( $db_err ? $db_err : '' ),
             ) );
+        }
+
+        // Fix 5: Re-classify this page's role based on the new post_parent.
+        if ( class_exists( 'Siloq_Sync_Engine' ) ) {
+            $sync = new Siloq_Sync_Engine();
+            $sync->reclassify_page_by_parent( $post_id );
         }
 
         wp_send_json_success( array(
