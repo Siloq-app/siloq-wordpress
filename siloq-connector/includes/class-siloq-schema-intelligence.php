@@ -51,7 +51,8 @@ class Siloq_Schema_Intelligence {
     public static function init() {
         add_action( 'wp_ajax_siloq_generate_schema',    [ __CLASS__, 'ajax_generate_schema'    ] );
         add_action( 'wp_ajax_siloq_apply_schema',       [ __CLASS__, 'ajax_apply_schema'       ] );
-        add_action( 'wp_ajax_siloq_get_schema_status',  [ __CLASS__, 'ajax_get_schema_status'  ] );
+        add_action( 'wp_ajax_siloq_get_schema_status',     [ __CLASS__, 'ajax_get_schema_status'     ] );
+        add_action( 'wp_ajax_siloq_get_all_schema_status', [ __CLASS__, 'ajax_get_all_schema_status' ] );
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -1206,5 +1207,66 @@ class Siloq_Schema_Intelligence {
             'has_schema'   => ! empty( $active ),
             'schema_types' => $types,
         ] );
+    }
+
+    /**
+     * AJAX: Return schema status for ALL synced pages.
+     * Called by the Schema dashboard tab (no post_id).
+     * Action: wp_ajax_siloq_get_all_schema_status
+     */
+    public static function ajax_get_all_schema_status() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+
+        $synced_posts = get_posts( array(
+            'post_type'      => array( 'page', 'post' ),
+            'post_status'    => 'publish',
+            'posts_per_page' => 200,
+            'meta_query'     => array(
+                array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ),
+            ),
+        ) );
+
+        $pages = array();
+        foreach ( $synced_posts as $post ) {
+            $active = class_exists( 'Siloq_Schema_Architect' )
+                ? Siloq_Schema_Architect::get_active_schema( $post->ID )
+                : array();
+
+            $applied_types = array_column( $active, 'schema_type' );
+
+            // Determine recommended types based on page role
+            $page_role = get_post_meta( $post->ID, '_siloq_page_role', true );
+            $recommended = array( 'WebPage' );
+            if ( in_array( $page_role, array( 'hub', 'apex_hub', 'service_areas', 'spoke' ), true ) ) {
+                $recommended[] = 'LocalBusiness';
+            }
+            if ( strpos( strtolower( $post->post_title ), 'faq' ) !== false ) {
+                $recommended[] = 'FAQPage';
+            }
+
+            if ( empty( $active ) ) {
+                $status = 'none';
+            } elseif ( count( $applied_types ) >= count( $recommended ) ) {
+                $status = 'applied';
+            } else {
+                $status = 'partial';
+            }
+
+            // Get first schema JSON for preview
+            $schema_json = ! empty( $active ) ? ( isset( $active[0]['schema_json'] ) ? $active[0]['schema_json'] : '' ) : '';
+
+            $pages[] = array(
+                'id'                => $post->ID,
+                'title'             => $post->post_title,
+                'edit_url'          => get_edit_post_link( $post->ID, 'raw' ),
+                'permalink'         => get_permalink( $post->ID ),
+                'status'            => $status,
+                'applied_types'     => $applied_types,
+                'recommended_types' => $recommended,
+                'schema_json'       => $schema_json,
+            );
+        }
+
+        wp_send_json_success( array( 'pages' => $pages ) );
     }
 }
