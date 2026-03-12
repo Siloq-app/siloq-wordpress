@@ -4,7 +4,7 @@
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
 
-* Version: 1.5.183
+
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 // Define basic plugin constants
 
-define('SILOQ_VERSION', '1.5.183');
+
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -2057,21 +2057,55 @@ class Siloq_Connector {
             return $this->generate_city_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services);
         }
 
-        // Local fallback — never return a blank draft
-        $biz_name    = get_option('siloq_business_name', get_bloginfo('name'));
-        $services    = json_decode(get_option('siloq_primary_services', '[]'), true);
-        $cities      = json_decode(get_option('siloq_service_cities', '[]'), true);
-        $service_str = is_array($services) && !empty($services) ? $services[0] : 'electrical services';
-        $city_str    = is_array($cities)   && !empty($cities)   ? $cities[0]   : 'the area';
-        $content  = '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_str) . ' in ' . esc_html($city_str) . ' and the surrounding area.</p>';
-        $content .= '<p>Our experienced team delivers quality workmanship on every job. Contact us today for a free estimate.</p>';
-        $content .= '<h2>Our Services</h2><ul>';
-        if (is_array($services)) {
-            foreach (array_slice($services, 0, 5) as $svc) {
-                $content .= '<li>' . esc_html($svc) . '</li>';
+        // Generic fallback (unknown draft type) — try Claude first, then template
+        $generic_key = get_option('siloq_anthropic_api_key', '');
+        $biz_name_g  = get_option('siloq_business_name', get_bloginfo('name'));
+        $biz_city_g  = get_option('siloq_city', '');
+        $biz_state_g = get_option('siloq_state', '');
+        $biz_phone_g = get_option('siloq_phone', '');
+        $services_g  = json_decode(get_option('siloq_primary_services', '[]'), true);
+        if (!is_array($services_g)) $services_g = array();
+        $cities_g    = json_decode(get_option('siloq_service_cities', '[]'), true);
+        if (!is_array($cities_g)) $cities_g = array();
+        $service_str = !empty($services_g) ? strtolower($services_g[0]) : 'electrical services';
+        $city_str    = !empty($cities_g) ? $cities_g[0] : (!empty($biz_city_g) ? $biz_city_g : 'the area');
+        $location_g  = $biz_city_g . ($biz_state_g ? ', ' . $biz_state_g : '');
+        $tel_g       = $biz_phone_g ? preg_replace('/\D/', '', $biz_phone_g) : '';
+        $tel_link_g  = $tel_g ? '<a href="tel:' . $tel_g . '">' . esc_html($biz_phone_g) . '</a>' : '';
+
+        if (!empty($generic_key)) {
+            $services_str_g = implode(', ', array_map('strtolower', $services_g));
+            $sys_g = 'You are an expert SEO content writer for ' . $biz_name_g . ', a service business in ' . $location_g . '. Write rich, useful HTML content for service business pages. Output raw HTML only, no markdown.';
+            $prompt_g = 'Write a general service page for ' . $biz_name_g . ' covering their services in ' . $location_g . '.
+
+Page title: ' . $title . '
+Business: ' . $biz_name_g . '
+Phone: ' . $biz_phone_g . '
+Services offered: ' . $services_str_g . '
+
+Include:
+- A dense opening paragraph (40-80 words) for AI search engines mentioning the business name, location, and services
+- An H2 section covering what the business does and why customers choose them
+- A services list with brief descriptions
+- A CTA with phone ' . ($tel_link_g ? $tel_link_g : $biz_phone_g) . ' as a tel: link
+- 600+ words total, raw HTML only, no placeholder text';
+            $claude_g = $this->call_claude_for_content($sys_g, $prompt_g);
+            if (!empty($claude_g)) {
+                return $claude_g;
             }
         }
+
+        // Hard fallback template — used only when no Anthropic key and no type match
+        $content  = '<p>' . esc_html($biz_name_g) . ' provides professional ' . esc_html($service_str) . ' in ' . esc_html($city_str) . ' and the surrounding area.</p>';
+        $content .= '<p>Our experienced team delivers quality workmanship on every job. Contact us today for a free estimate.</p>';
+        $content .= '<h2>Our Services</h2><ul>';
+        foreach (array_slice($services_g, 0, 5) as $svc) {
+            $content .= '<li>' . esc_html($svc) . '</li>';
+        }
         $content .= '</ul>';
+        if ($tel_link_g) {
+            $content .= '<p>Ready to get started? Call us at ' . $tel_link_g . ' for a free estimate.</p>';
+        }
         return $content;
     }
 
@@ -2114,7 +2148,7 @@ class Siloq_Connector {
         $key = get_option('siloq_anthropic_api_key', '');
         if (empty($key)) return '';
         $resp = wp_remote_post('https://api.anthropic.com/v1/messages', array(
-            'timeout' => 60,
+            'timeout' => 90,
             'headers' => array(
                 'x-api-key'         => $key,
                 'anthropic-version' => '2023-06-01',
@@ -2122,14 +2156,90 @@ class Siloq_Connector {
             ),
             'body' => wp_json_encode(array(
                 'model'      => 'claude-sonnet-4-6',
-                'max_tokens' => 2048,
+                'max_tokens' => 4096,
                 'system'     => $system,
                 'messages'   => array(array('role' => 'user', 'content' => $user_prompt)),
             )),
         ));
         if (is_wp_error($resp) || wp_remote_retrieve_response_code($resp) !== 200) return '';
         $body = json_decode(wp_remote_retrieve_body($resp), true);
-        return $body['content'][0]['text'] ?? '';
+        // PHP 7.3 compatible — no ?? on chained array access
+        if (isset($body['content'][0]['text'])) {
+            return $body['content'][0]['text'];
+        }
+        return '';
+    }
+
+    /**
+     * Find the hub page for a given type ('service_areas' or 'services').
+     * Returns array with 'title' and 'url', or empty strings if not found.
+     *
+     * @param string $type 'service_areas' or 'services'
+     * @return array
+     */
+    private function get_hub_page_info($type) {
+        $result = array('title' => '', 'url' => '');
+
+        // Check cached hub ID first
+        if ($type === 'service_areas') {
+            $hub_id = (int) get_option('siloq_service_areas_hub_id', 0);
+        } else {
+            $hub_id = (int) get_option('siloq_services_hub_id', 0);
+        }
+
+        if ($hub_id) {
+            $hub = get_post($hub_id);
+            if ($hub && $hub->post_status === 'publish') {
+                $result['title'] = $hub->post_title;
+                $result['url']   = get_permalink($hub->ID);
+                return $result;
+            }
+        }
+
+        // Fall back to meta / title query
+        if ($type === 'service_areas') {
+            $meta_role   = 'service_areas';
+            $title_terms = array('service areas', 'service area', 'cities we serve');
+        } else {
+            $meta_role   = 'hub';
+            $title_terms = array('our services', 'services');
+        }
+
+        // Search by meta role
+        $by_meta = get_posts(array(
+            'post_type'   => 'page',
+            'post_status' => 'publish',
+            'numberposts' => 1,
+            'meta_query'  => array(array(
+                'key'   => '_siloq_page_role',
+                'value' => $meta_role,
+            )),
+        ));
+        if (!empty($by_meta)) {
+            $hub = $by_meta[0];
+            $result['title'] = $hub->post_title;
+            $result['url']   = get_permalink($hub->ID);
+            return $result;
+        }
+
+        // Search by title
+        $all_pages = get_posts(array(
+            'post_type'   => 'page',
+            'post_status' => 'publish',
+            'numberposts' => 200,
+        ));
+        foreach ($all_pages as $p) {
+            $title_lc = strtolower($p->post_title);
+            foreach ($title_terms as $term) {
+                if (strpos($title_lc, $term) !== false) {
+                    $result['title'] = $p->post_title;
+                    $result['url']   = get_permalink($p->ID);
+                    return $result;
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -2214,33 +2324,157 @@ class Siloq_Connector {
     }
 
     private function generate_service_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services) {
-        $service_lower = strtolower($title);
-        $location = $biz_city . ($biz_state ? ', ' . $biz_state : '');
-        return '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_lower) . ' in ' . esc_html($location) . ' and surrounding areas. Our licensed team delivers reliable results on every job — residential and commercial.</p>'
-            . "\n\n" . '<h2>What\'s Included</h2>'
-            . "\n" . '<ul>'
-            . "\n" . '<li><!-- Describe your specific process or deliverable --></li>'
-            . "\n" . '<li><!-- What makes your approach different --></li>'
-            . "\n" . '<li><!-- Any warranty, guarantee, or certification relevant to this service --></li>'
-            . "\n" . '</ul>'
+        $location        = $biz_city . ($biz_state ? ', ' . $biz_state : '');
+        $service_lower   = strtolower($title);
+        $services_list   = implode(', ', array_map('strtolower', $services));
+        $biz_phone       = get_option('siloq_phone', '');
+        $phone_raw       = $biz_phone ? $biz_phone : '';
+        $tel_digits      = preg_replace('/\D/', '', $phone_raw);
+        $tel_link        = $phone_raw ? '<a href="tel:' . $tel_digits . '">' . esc_html($phone_raw) . '</a>' : '';
+
+        // Hub page for internal linking
+        $hub = $this->get_hub_page_info('services');
+        $hub_title = isset($hub['title']) ? $hub['title'] : '';
+        $hub_url   = isset($hub['url'])   ? $hub['url']   : '';
+
+        // Build primary keyword: "Service Title City, State"
+        $primary_keyword = $title . ' ' . $location;
+
+        // Try Claude first
+        $anthropic_key = get_option('siloq_anthropic_api_key', '');
+        if (!empty($anthropic_key)) {
+            $system = 'You are an expert SEO content writer for ' . $biz_name . ', a service business in ' . $location . '.
+
+You write pages using the Three-Layer Content Model:
+
+LAYER 1 — GEO (Answer Capsule, 40-80 words):
+A single dense paragraph. Mentions ' . $biz_name . ', the target city, the service keyword, and one specific local detail. Written so AI search engines (ChatGPT, Perplexity, Google AI) can extract it as a direct answer. No fluff, no "we are pleased to offer."
+
+LAYER 2 — SEO (Main Body, 600+ words):
+Multiple paragraphs, H2 headings written as questions people actually search. Internal link to the hub page at least twice. Self-contained paragraphs — never "as mentioned above." Use specific data, local facts, or common scenarios where possible.
+
+LAYER 3 — CRO (Conversion, 1-2 paragraphs):
+Clear call to action. Business phone number as clickable tel: link. Direct the reader to the hub/service page. Make it easy to contact or schedule.
+
+Output raw HTML only. No markdown, no code fences. No placeholder text like "[insert here]". Start with the GEO capsule paragraph, then the SEO body with H2s, then the CRO section.';
+
+            $user_prompt = 'Write a page for ' . $biz_name . ' targeting the keyword "' . $primary_keyword . '".
+
+Business: ' . $biz_name . '
+Phone: ' . $phone_raw . '
+Location: ' . $location . '
+Target page keyword: ' . $primary_keyword . '
+Page role: SERVICE SPOKE — this page ranks for a specific service. It links UP to the Services hub.' . ($hub_url ? "\nHub page to link back to: " . $hub_title . ' — ' . $hub_url : '') . '
+Service page topic: ' . $title . '
+All services offered: ' . ($services_list ? $services_list : $service_lower) . '
+
+Required:
+- GEO capsule first (40-80 words, dense, mentions ' . $biz_name . ' + ' . $location . ' + ' . $service_lower . ')
+- Explain what the service is, why it matters, when to call
+- H2 headings written as questions people actually search (e.g. "How much does ' . $service_lower . ' cost?", "What happens during a ' . $service_lower . '?", "When should I call an electrician for ' . $service_lower . '?")
+- ' . ($hub_url ? 'Link to hub page (' . $hub_title . ') naturally at least twice in the body' : 'Mention the business service page naturally') . '
+- End with CTA including phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as a tel: link
+- 800+ words total
+- Do NOT use placeholder text like "[insert statistic here]" or "[add detail]"';
+
+            $content = $this->call_claude_for_content($system, $user_prompt);
+            if (!empty($content)) {
+                return $content;
+            }
+        }
+
+        // Fallback template (used only when Anthropic key is missing or call fails)
+        $hub_link = ($hub_url && $hub_title)
+            ? ' Visit our <a href="' . esc_url($hub_url) . '">' . esc_html($hub_title) . '</a> page for a full overview.'
+            : '';
+        return '<p>' . esc_html($biz_name) . ' provides professional ' . esc_html($service_lower) . ' in ' . esc_html($location) . ' and surrounding areas. Our licensed team delivers reliable results on every job — residential and commercial.' . $hub_link . '</p>'
+            . "\n\n" . '<h2>What Is ' . esc_html(ucwords($service_lower)) . '?</h2>'
+            . "\n" . '<p>' . esc_html($biz_name) . ' handles all aspects of ' . esc_html($service_lower) . ' for homes and businesses in ' . esc_html($location) . '. Whether you need a new installation, a repair, or a system upgrade, our licensed technicians are ready.</p>'
+            . "\n\n" . '<h2>When Should You Call for ' . esc_html(ucwords($service_lower)) . '?</h2>'
+            . "\n" . '<p>If you are experiencing issues with ' . esc_html($service_lower) . ' or want to prevent future problems, contact ' . esc_html($biz_name) . ' for a free assessment.</p>'
             . "\n\n" . '<h2>Why ' . esc_html($biz_name) . '?</h2>'
-            . "\n" . '<p><!-- Add your licensing details, years of experience, or key differentiator --></p>'
-            . "\n\n" . '<p>Ready to schedule?' . $phone_html . ' for a free estimate.</p>';
+            . "\n" . '<p>Licensed, insured, and locally trusted in ' . esc_html($location) . '. We stand behind every job with quality workmanship and transparent pricing.</p>'
+            . ($hub_url && $hub_title ? "\n\n" . '<p>See all our services: <a href="' . esc_url($hub_url) . '">' . esc_html($hub_title) . '</a>.</p>' : '')
+            . "\n\n" . '<p>Ready to schedule? ' . ($tel_link ? 'Call us at ' . $tel_link : esc_html($biz_name)) . ' for a free estimate.</p>';
     }
 
     private function generate_city_page_content($title, $biz_name, $biz_city, $biz_state, $phone_html, $services) {
+        // Extract city name from page title
         $city_match = array();
         preg_match('/^(.*?)(?:,?\s+[A-Z]{2})?\s*(?:electrician|electric|plumb|hvac|roof|service|contractor)/i', $title, $city_match);
-        $city_name = !empty($city_match[1]) ? trim($city_match[1]) : $title;
+        $city_name     = (!empty($city_match[1])) ? trim($city_match[1]) : $title;
         $service_label = !empty($services) ? strtolower($services[0]) : 'electrical services';
-        return '<p>' . esc_html($biz_name) . ' serves ' . esc_html($city_name) . ' with reliable, licensed ' . esc_html($service_label) . '. Our team comes to you — same-day availability, upfront pricing, no surprises.</p>'
+        $services_list = implode(', ', array_map('strtolower', $services));
+        $location      = $biz_city . ($biz_state ? ', ' . $biz_state : '');
+        $biz_phone     = get_option('siloq_phone', '');
+        $phone_raw     = $biz_phone ? $biz_phone : '';
+        $tel_digits    = preg_replace('/\D/', '', $phone_raw);
+        $tel_link      = $phone_raw ? '<a href="tel:' . $tel_digits . '">' . esc_html($phone_raw) . '</a>' : '';
+
+        // Hub page for internal linking
+        $hub = $this->get_hub_page_info('service_areas');
+        $hub_title = isset($hub['title']) ? $hub['title'] : '';
+        $hub_url   = isset($hub['url'])   ? $hub['url']   : '';
+
+        // Build primary keyword: "Electrician CityName, ST"
+        $primary_keyword = ucfirst($service_label) . ' ' . $city_name . ($biz_state ? ', ' . $biz_state : '');
+
+        // Try Claude first
+        $anthropic_key = get_option('siloq_anthropic_api_key', '');
+        if (!empty($anthropic_key)) {
+            $system = 'You are an expert SEO content writer for ' . $biz_name . ', a service business in ' . $location . '.
+
+You write pages using the Three-Layer Content Model:
+
+LAYER 1 — GEO (Answer Capsule, 40-80 words):
+A single dense paragraph. Mentions ' . $biz_name . ', the target city, the service keyword, and one specific local detail. Written so AI search engines (ChatGPT, Perplexity, Google AI) can extract it as a direct answer. No fluff, no "we are pleased to offer."
+
+LAYER 2 — SEO (Main Body, 600+ words):
+Multiple paragraphs, H2 headings written as questions people actually search. Internal link to the hub page at least twice. Self-contained paragraphs — never "as mentioned above." Use specific data, local facts, or common scenarios where possible.
+
+LAYER 3 — CRO (Conversion, 1-2 paragraphs):
+Clear call to action. Business phone number as clickable tel: link. Direct the reader to the hub/service page. Make it easy to contact or schedule.
+
+Output raw HTML only. No markdown, no code fences. No placeholder text like "[insert here]". Start with the GEO capsule paragraph, then the SEO body with H2s, then the CRO section.';
+
+            $user_prompt = 'Write a page for ' . $biz_name . ' targeting the keyword "' . $primary_keyword . '".
+
+Business: ' . $biz_name . '
+Phone: ' . $phone_raw . '
+Location: ' . $location . '
+Target page keyword: ' . $primary_keyword . '
+Target city: ' . $city_name . '
+Page role: CITY SPOKE — this page ranks for services in ' . $city_name . '. It links UP to the Service Areas hub.' . ($hub_url ? "\nHub page to link back to: " . $hub_title . ' — ' . $hub_url : '') . '
+Services offered: ' . ($services_list ? $services_list : $service_label) . '
+
+Required:
+- GEO capsule first (40-80 words, dense, mentions ' . $biz_name . ' + ' . $city_name . ' + ' . $service_label . ')
+- H2 headings as real search questions (e.g. "Do you serve ' . $city_name . '?", "How quickly can an electrician reach ' . $city_name . '?", "What ' . $service_label . ' services are available in ' . $city_name . '?")
+- ' . ($hub_url ? 'Link to hub page (' . $hub_title . ') naturally at least twice in the body' : 'Mention the business service areas page naturally') . '
+- End with CTA including phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as a tel: link
+- 800+ words total
+- Do NOT use placeholder text like "[insert statistic here]" or "[add detail]"';
+
+            $content = $this->call_claude_for_content($system, $user_prompt);
+            if (!empty($content)) {
+                return $content;
+            }
+        }
+
+        // Fallback template (used only when Anthropic key is missing or call fails)
+        $hub_link = ($hub_url && $hub_title)
+            ? ' See all the <a href="' . esc_url($hub_url) . '">' . esc_html($hub_title) . '</a> we cover.'
+            : '';
+        return '<p>' . esc_html($biz_name) . ' serves ' . esc_html($city_name) . ' with reliable, licensed ' . esc_html($service_label) . '. Our team comes to you — same-day availability, upfront pricing, no surprises.' . $hub_link . '</p>'
             . "\n\n" . '<h2>' . esc_html($service_label ? ucfirst($service_label) : 'Services') . ' in ' . esc_html($city_name) . '</h2>'
+            . "\n" . '<p>' . esc_html($biz_name) . ' provides the full range of ' . esc_html($service_label) . ' to residents and businesses in ' . esc_html($city_name) . '. Locally owned, licensed, and insured — we treat every job like it is in our own backyard.</p>'
             . "\n" . '<ul>'
-            . (!empty($services) ? "\n" . implode('', array_map(function($s){ return '<li>' . esc_html($s) . '</li>'; }, $services)) : "\n<li><!-- Add services --></li>")
+            . (!empty($services) ? "\n" . implode('', array_map(function($s) { return '<li>' . esc_html($s) . '</li>'; }, $services)) : "\n<li>" . esc_html(ucfirst($service_label)) . '</li>')
             . "\n" . '</ul>'
             . "\n\n" . '<h2>Why Choose ' . esc_html($biz_name) . ' in ' . esc_html($city_name) . '?</h2>'
-            . "\n" . '<p><!-- Add what specifically makes you the right choice for ' . esc_html($city_name) . ' customers --></p>'
-            . "\n\n" . '<p>Serving ' . esc_html($city_name) . ' and the greater ' . esc_html($biz_city) . ' area.' . $phone_html . ' for a free estimate.</p>';
+            . "\n" . '<p>Serving ' . esc_html($city_name) . ' and the greater ' . esc_html($location) . ' area with honest, professional service since day one. Licensed electricians, clear pricing, and a job done right.</p>'
+            . ($hub_url && $hub_title ? "\n\n" . '<p>View all our <a href="' . esc_url($hub_url) . '">' . esc_html($hub_title) . '</a> across the metro.</p>' : '')
+            . "\n\n" . '<p>Serving ' . esc_html($city_name) . ' and the greater ' . esc_html($location) . ' area. ' . ($tel_link ? 'Call ' . $tel_link : esc_html($biz_name)) . ' for a free estimate.</p>';
     }
 
     public function ajax_save_roadmap_progress() {
