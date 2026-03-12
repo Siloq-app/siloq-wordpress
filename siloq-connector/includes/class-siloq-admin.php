@@ -3928,8 +3928,10 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 <!-- ═══ SITE GOALS ═══ -->
                 <?php
                 $goals_data        = Siloq_Goals::get_goals();
-                $current_goal      = isset( $goals_data['primary_goal'] ) ? $goals_data['primary_goal'] : 'local_leads';
-                $current_geo_pages = isset( $goals_data['geo_priority_pages'] ) ? (array) $goals_data['geo_priority_pages'] : array();
+                $current_goal           = isset( $goals_data['primary_goal'] ) ? $goals_data['primary_goal'] : 'local_leads';
+                $current_geo_pages      = isset( $goals_data['geo_priority_pages'] ) ? (array) $goals_data['geo_priority_pages'] : array();
+                $current_target_keywords = json_decode( get_option( 'siloq_target_keywords', '[]' ), true );
+                if ( ! is_array( $current_target_keywords ) ) $current_target_keywords = array();
                 $goal_labels       = array(
                     'local_leads'    => __( 'Get more phone calls / local leads', 'siloq-connector' ),
                     'ecommerce_sales'=> __( 'Drive more e-commerce sales', 'siloq-connector' ),
@@ -3956,12 +3958,29 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                             <?php endforeach; ?>
                         </div>
 
-                        <!-- GEO Priority Pages -->
+                        <!-- Target Keyword Phrases (replaces GEO Priority Pages picker) -->
                         <div class="siloq-settings-section" style="margin-bottom:16px;">
-                            <label style="font-weight:600;display:block;margin-bottom:4px;"><?php _e( 'GEO Priority Pages', 'siloq-connector' ); ?></label>
-                            <p style="font-size:12px;color:#64748b;margin-bottom:8px;"><?php _e( 'Select up to 3 pages you most want AI assistants to cite.', 'siloq-connector' ); ?></p>
-                            <div id="siloq-goals-page-selector" style="max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
-                                <p style="color:#9ca3af;font-size:13px;"><?php _e( 'Loading pages...', 'siloq-connector' ); ?></p>
+                            <label style="font-weight:600;display:block;margin-bottom:4px;"><?php _e( 'Target Keyword Phrases', 'siloq-connector' ); ?></label>
+                            <p style="font-size:12px;color:#64748b;margin-bottom:10px;"><?php _e( 'Enter 5–7 keyword phrases you want to rank for. Siloq will auto-match each to the best page on your site.', 'siloq-connector' ); ?></p>
+                            <div id="siloq-goals-keywords-wrap">
+                            <?php for ( $ki = 0; $ki < 7; $ki++ ) :
+                                $kw_val = isset( $current_target_keywords[ $ki ] ) ? esc_attr( $current_target_keywords[ $ki ] ) : '';
+                            ?>
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                                    <span style="font-size:12px;color:#9ca3af;min-width:72px;"><?php printf( esc_html__( 'Keyword %d', 'siloq-connector' ), $ki + 1 ); ?></span>
+                                    <input type="text" class="siloq-target-keyword-input" value="<?php echo $kw_val; ?>" placeholder="<?php esc_attr_e( 'electrician kansas city mo', 'siloq-connector' ); ?>" style="flex:1;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" maxlength="120">
+                                </div>
+                            <?php endfor; ?>
+                            </div>
+                            <div id="siloq-goals-keyword-map" style="margin-top:12px;display:none;">
+                                <p style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;"><?php _e( 'Auto-matched pages:', 'siloq-connector' ); ?></p>
+                                <table style="width:100%;border-collapse:collapse;font-size:12px;" id="siloq-goals-keyword-map-table">
+                                    <thead><tr style="background:#f8fafc;">
+                                        <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;"><?php _e( 'Keyword', 'siloq-connector' ); ?></th>
+                                        <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;"><?php _e( 'Matched Page', 'siloq-connector' ); ?></th>
+                                    </tr></thead>
+                                    <tbody id="siloq-goals-keyword-map-body"></tbody>
+                                </table>
                             </div>
                         </div>
 
@@ -3972,47 +3991,6 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
                         <script>
                         (function(){
-                            var preselected = <?php echo wp_json_encode( array_map( 'intval', $current_geo_pages ) ); ?>;
-
-                            function loadGoalsPages() {
-                                var container = document.getElementById('siloq-goals-page-selector');
-                                if (!container) return;
-                                var fd = new FormData();
-                                fd.append('action', 'siloq_get_pages_for_selector');
-                                fd.append('nonce', '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>');
-                                fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
-                                    .then(function(r){ return r.json(); })
-                                    .then(function(res){
-                                        if (!res.success || !res.data || !res.data.pages) {
-                                            container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js( __( 'Could not load pages.', 'siloq-connector' ) ); ?></p>';
-                                            return;
-                                        }
-                                        var pages = res.data.pages;
-                                        var html = '';
-                                        for (var i = 0; i < pages.length; i++) {
-                                            var p = pages[i];
-                                            var chk = preselected.indexOf(parseInt(p.ID)) !== -1 ? 'checked' : '';
-                                            html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;">'
-                                                  + '<input type="checkbox" class="siloq-goals-page-cb" value="' + p.ID + '" ' + chk + ' style="accent-color:#6366f1;">'
-                                                  + '<span>' + p.post_title + '</span>'
-                                                  + '</label>';
-                                        }
-                                        container.innerHTML = html || '<p style="color:#9ca3af;font-size:13px;"><?php echo esc_js( __( 'No published pages found.', 'siloq-connector' ) ); ?></p>';
-
-                                        container.addEventListener('change', function(e) {
-                                            if (e.target && e.target.classList.contains('siloq-goals-page-cb')) {
-                                                var checked = container.querySelectorAll('.siloq-goals-page-cb:checked');
-                                                if (checked.length > 3) { e.target.checked = false; }
-                                            }
-                                        });
-                                    })
-                                    .catch(function(){
-                                        container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js( __( 'Error loading pages.', 'siloq-connector' ) ); ?></p>';
-                                    });
-                            }
-
-                            loadGoalsPages();
-
                             document.getElementById('siloq-goals-save-btn').addEventListener('click', function() {
                                 var btn = this;
                                 btn.disabled = true;
@@ -4021,15 +3999,18 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                                 var primaryEl = document.querySelector('input[name="siloq_goals_primary"]:checked');
                                 var primaryGoal = primaryEl ? primaryEl.value : 'local_leads';
 
-                                var geoPages = [];
-                                var cbs = document.querySelectorAll('.siloq-goals-page-cb:checked');
-                                for (var i = 0; i < cbs.length; i++) { geoPages.push(cbs[i].value); }
+                                var keywords = [];
+                                var inputs = document.querySelectorAll('.siloq-target-keyword-input');
+                                for (var i = 0; i < inputs.length; i++) {
+                                    var v = inputs[i].value.trim();
+                                    if (v) keywords.push(v);
+                                }
 
                                 var fd = new FormData();
-                                fd.append('action', 'siloq_save_goals');
+                                fd.append('action', 'siloq_save_goals_tab');
                                 fd.append('nonce', '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>');
                                 fd.append('primary_goal', primaryGoal);
-                                for (var j = 0; j < geoPages.length; j++) { fd.append('geo_priority_pages[]', geoPages[j]); }
+                                for (var j = 0; j < keywords.length; j++) { fd.append('target_keywords[]', keywords[j]); }
 
                                 fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
                                     .then(function(r){ return r.json(); })
@@ -4040,12 +4021,27 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                                         if (res.success) {
                                             msg.textContent = '<?php echo esc_js( __( 'Goals saved and synced.', 'siloq-connector' ) ); ?>';
                                             msg.style.color = '#16a34a';
+                                            // Show keyword → page mapping table
+                                            var mapData = (res.data && res.data.keyword_map) ? res.data.keyword_map : [];
+                                            if (mapData.length) {
+                                                var tbody = document.getElementById('siloq-goals-keyword-map-body');
+                                                var rows = '';
+                                                for (var k = 0; k < mapData.length; k++) {
+                                                    var row = mapData[k];
+                                                    var pageCell = row.matched_title
+                                                        ? '<a href="' + row.edit_url + '" target="_blank" style="color:#4f46e5;">' + row.matched_title + '</a>'
+                                                        : '<span style="color:#9ca3af;">No match found</span>';
+                                                    rows += '<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + row.keyword + '</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + pageCell + '</td></tr>';
+                                                }
+                                                tbody.innerHTML = rows;
+                                                document.getElementById('siloq-goals-keyword-map').style.display = 'block';
+                                            }
                                         } else {
                                             msg.textContent = (res.data && res.data.message) ? res.data.message : '<?php echo esc_js( __( 'Error saving goals.', 'siloq-connector' ) ); ?>';
                                             msg.style.color = '#ef4444';
                                         }
                                         msg.style.display = 'inline-block';
-                                        setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+                                        setTimeout(function(){ msg.style.display = 'none'; }, 4000);
                                     })
                                     .catch(function(){
                                         btn.disabled = false;
@@ -4383,6 +4379,9 @@ if (empty($_goals_priority_cities_raw)) {
 $_goals_geo_pages_raw = get_option('siloq_geo_priority_pages', '[]');
 $_goals_geo_pages     = json_decode($_goals_geo_pages_raw, true);
 if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
+$_goals_target_keywords_raw = get_option('siloq_target_keywords', '[]');
+$_goals_target_keywords     = json_decode($_goals_target_keywords_raw, true);
+if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 ?>
 <div class="siloq-card" style="max-width:700px;">
   <div class="siloq-card-header">
@@ -4449,23 +4448,29 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
     <?php endif; ?>
   </div>
 
-  <!-- Section 4: AI Priority Pages -->
+  <!-- Section 4: Target Keyword Phrases (replaces GEO Priority Pages picker) -->
   <div style="margin-bottom:28px;">
-    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 4px;">4. Priority pages (up to 3)</h4>
-    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Which pages matter most? Siloq will focus AI improvements here first.</p>
-    <input type="text" id="siloq-goals-page-search" placeholder="Search pages..." style="width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;margin-bottom:8px;" autocomplete="off">
-    <div id="siloq-goals-page-results" style="border:1px solid #e5e7eb;border-radius:6px;max-height:160px;overflow-y:auto;display:none;background:#fff;"></div>
-    <div id="siloq-goals-page-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
-      <?php
-      foreach ($_goals_geo_pages as $_gp_id):
-          $_gp_post = get_post(intval($_gp_id));
-          if (!$_gp_post) continue;
-      ?>
-      <span class="siloq-goals-page-pill" data-id="<?php echo intval($_gp_id); ?>" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:12px;font-weight:500;">
-        <?php echo esc_html($_gp_post->post_title); ?>
-        <button type="button" onclick="siloqGoalsRemovePage(this)" style="background:none;border:none;cursor:pointer;color:#7c3aed;font-size:14px;padding:0;line-height:1;">&times;</button>
-      </span>
-      <?php endforeach; ?>
+    <h4 style="font-size:13px;font-weight:700;color:#111;margin:0 0 4px;">4. Target keyword phrases</h4>
+    <p style="font-size:12px;color:#6b7280;margin:0 0 10px;">Enter 5–7 keyword phrases you want to rank for. Siloq auto-matches each to your best page.</p>
+    <div id="siloq-goals-kw-wrap-tab">
+    <?php for ($gki = 0; $gki < 7; $gki++) :
+        $gkv = isset($_goals_target_keywords[$gki]) ? esc_attr($_goals_target_keywords[$gki]) : '';
+    ?>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:12px;color:#9ca3af;min-width:72px;"><?php printf(esc_html__('Keyword %d', 'siloq-connector'), $gki + 1); ?></span>
+        <input type="text" class="siloq-tab-keyword-input" value="<?php echo $gkv; ?>" placeholder="<?php esc_attr_e('electrician kansas city mo', 'siloq-connector'); ?>" style="flex:1;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" maxlength="120">
+      </div>
+    <?php endfor; ?>
+    </div>
+    <div id="siloq-goals-tab-kw-map" style="margin-top:12px;display:none;">
+      <p style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;"><?php _e('Auto-matched pages:', 'siloq-connector'); ?></p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#f8fafc;">
+          <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;"><?php _e('Keyword', 'siloq-connector'); ?></th>
+          <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;"><?php _e('Matched Page', 'siloq-connector'); ?></th>
+        </tr></thead>
+        <tbody id="siloq-goals-tab-kw-map-body"></tbody>
+      </table>
     </div>
   </div>
 
@@ -4476,49 +4481,6 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
 
 <script>
 (function($){
-    // Page search AJAX
-    var goalPages = [];
-    var goalSelectedIds = <?php echo wp_json_encode($_goals_geo_pages); ?>;
-
-    $('#siloq-goals-page-search').on('input', function(){
-        var q = $(this).val().trim();
-        if (q.length < 2) { $('#siloq-goals-page-results').hide(); return; }
-        $.post(ajaxurl, {action:'siloq_get_pages_for_selector', nonce:siloqDash.nonce}, function(res){
-            if (!res.success) return;
-            var pages = res.data.pages || [];
-            goalPages = pages;
-            var html = '';
-            pages.forEach(function(p){
-                if (q && p.post_title.toLowerCase().indexOf(q.toLowerCase()) === -1) return;
-                var sel = goalSelectedIds.indexOf(parseInt(p.ID)) !== -1;
-                if (sel) return;
-                html += '<div class="siloq-goals-page-opt" data-id="'+p.ID+'" style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f3f4f6;color:#374151;" onmouseover="this.style.background=\'#f5f3ff\'" onmouseout="this.style.background=\'\'">'+$('<div>').text(p.post_title).html()+'</div>';
-            });
-            if (!html) html = '<div style="padding:10px 12px;font-size:12px;color:#9ca3af;">No pages found</div>';
-            $('#siloq-goals-page-results').html(html).show();
-        });
-    });
-
-    $(document).on('click', '.siloq-goals-page-opt', function(){
-        if (goalSelectedIds.length >= 3) { alert('Maximum 3 priority pages.'); return; }
-        var id = parseInt($(this).data('id'));
-        var title = $(this).text().trim();
-        goalSelectedIds.push(id);
-        var pill = '<span class="siloq-goals-page-pill" data-id="'+id+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:12px;font-weight:500;">'
-            + $('<div>').text(title).html()
-            + ' <button type="button" onclick="siloqGoalsRemovePage(this)" style="background:none;border:none;cursor:pointer;color:#7c3aed;font-size:14px;padding:0;line-height:1;">&times;</button></span>';
-        $('#siloq-goals-page-pills').append(pill);
-        $('#siloq-goals-page-results').hide();
-        $('#siloq-goals-page-search').val('');
-    });
-
-    window.siloqGoalsRemovePage = function(btn) {
-        var $pill = $(btn).closest('.siloq-goals-page-pill');
-        var id = parseInt($pill.data('id'));
-        goalSelectedIds = goalSelectedIds.filter(function(i){ return i !== id; });
-        $pill.remove();
-    };
-
     $('#siloq-goals-save-btn').on('click', function(){
         var $btn = $(this);
         $btn.prop('disabled', true).text('Saving...');
@@ -4529,7 +4491,6 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         // Collect services
         var services = [];
         $('input[name="siloq_goals_service[]"]:checked').each(function(){ services.push($(this).val()); });
-        // If text input used instead of checkboxes
         var svcInput = $('#siloq-goals-services-input').val();
         if (svcInput) {
             svcInput.split(',').forEach(function(s){ var t = s.trim(); if(t) services.push(t); });
@@ -4543,22 +4504,42 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             cityInput.split(',').forEach(function(c){ var t = c.trim(); if(t) cities.push(t); });
         }
 
-        $.post(ajaxurl, {
+        // Collect keyword phrases
+        var keywords = [];
+        $('.siloq-tab-keyword-input').each(function(){
+            var v = $(this).val().trim();
+            if (v) keywords.push(v);
+        });
+
+        var postData = {
             action: 'siloq_save_goals_tab',
-            nonce: siloqDash.nonce,
+            nonce: (typeof siloqDash !== 'undefined') ? siloqDash.nonce : '',
             primary_goal: primaryGoal,
             'priority_services[]': services,
             'priority_cities[]': cities,
-            'geo_priority_pages[]': goalSelectedIds
-        }, function(res){
+            'target_keywords[]': keywords
+        };
+
+        $.post(ajaxurl, postData, function(res){
             $btn.prop('disabled', false).text('💾 Save Goals');
             if (res.success) {
                 var msg = (res.data && res.data.message) ? res.data.message : 'Goals saved!';
                 $('#siloq-goals-saved-msg').text('✅ ' + msg).show();
                 setTimeout(function(){ $('#siloq-goals-saved-msg').fadeOut(); }, 4000);
-                // Hide the dashboard banner if it exists
-                if (primaryGoal) {
-                    $('.siloq-goals-banner').hide();
+                if (primaryGoal) { $('.siloq-goals-banner').hide(); }
+                // Show keyword → page map
+                var mapData = (res.data && res.data.keyword_map) ? res.data.keyword_map : [];
+                if (mapData.length) {
+                    var rows = '';
+                    for (var k = 0; k < mapData.length; k++) {
+                        var row = mapData[k];
+                        var pageCell = row.matched_title
+                            ? '<a href="' + row.edit_url + '" target="_blank" style="color:#4f46e5;">' + $('<div>').text(row.matched_title).html() + '</a>'
+                            : '<span style="color:#9ca3af;">No match found</span>';
+                        rows += '<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + $('<div>').text(row.keyword).html() + '</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + pageCell + '</td></tr>';
+                    }
+                    $('#siloq-goals-tab-kw-map-body').html(rows);
+                    $('#siloq-goals-tab-kw-map').show();
                 }
             } else {
                 var err = (res.data && res.data.message) ? res.data.message : 'Save failed.';
@@ -4568,13 +4549,6 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
             $btn.prop('disabled', false).text('💾 Save Goals');
             alert('Network error. Please try again.');
         });
-    });
-
-    // Close page results on outside click
-    $(document).on('click', function(e){
-        if (!$(e.target).closest('#siloq-goals-page-search, #siloq-goals-page-results').length) {
-            $('#siloq-goals-page-results').hide();
-        }
     });
 })(jQuery);
 </script>
@@ -5576,22 +5550,27 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                     </div>
                 </div>
 
-                <!-- STEP 5: GEO Priority Pages -->
+                <!-- STEP 5: Target Keyword Phrases (replaces GEO Priority Pages) -->
                 <div class="siloq-wizard-step" id="siloq-step-geo">
                 </div>
                 <div class="siloq-wizard-panel" id="siloq-wizard-step-5">
-                    <h2><?php _e( 'GEO Priority Pages', 'siloq-connector' ); ?></h2>
-                    <p class="siloq-wizard-subtitle"><?php _e( 'Which pages do you most want AI assistants to cite?', 'siloq-connector' ); ?></p>
-                    <p style="font-size:13px;color:#64748b;margin-bottom:16px;"><?php _e( 'Select up to 3 pages. These become your GEO priority pages.', 'siloq-connector' ); ?></p>
+                    <h2><?php _e( 'Target Keyword Phrases', 'siloq-connector' ); ?></h2>
+                    <p class="siloq-wizard-subtitle"><?php _e( 'Enter 5–7 keyword phrases you want your site to rank for.', 'siloq-connector' ); ?></p>
+                    <p style="font-size:13px;color:#64748b;margin-bottom:16px;"><?php _e( 'Siloq will automatically match each phrase to the best page on your site and use them to power your GEO recommendations.', 'siloq-connector' ); ?></p>
 
                     <div class="siloq-wizard-error" id="siloq-wizard-error-5"></div>
 
-                    <div id="siloq-geo-page-selector" style="max-height:260px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">
-                        <p style="color:#9ca3af;font-size:13px;"><?php _e( 'Loading pages...', 'siloq-connector' ); ?></p>
+                    <div id="siloq-wizard-keywords-wrap">
+                    <?php for ($wki = 0; $wki < 7; $wki++) : ?>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="font-size:12px;color:#9ca3af;min-width:72px;"><?php printf(esc_html__('Keyword %d', 'siloq-connector'), $wki + 1); ?></span>
+                            <input type="text" class="siloq-wizard-keyword-input" placeholder="<?php esc_attr_e('electrician kansas city mo', 'siloq-connector'); ?>" style="flex:1;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;" maxlength="120">
+                        </div>
+                    <?php endfor; ?>
                     </div>
 
                     <p class="siloq-hint" style="font-size:12px;color:#64748b;margin-top:12px;">
-                        <?php _e( 'AI assistants like ChatGPT and Perplexity cite pages that are well-structured and authoritative. Siloq will help optimize these pages for AI visibility.', 'siloq-connector' ); ?>
+                        <?php _e( 'Examples: "electrician kansas city mo", "panel upgrade independence mo", "ev charger installation lee\'s summit"', 'siloq-connector' ); ?>
                     </p>
 
                     <button type="button" class="siloq-wizard-btn" id="siloq-wizard-geo-btn" onclick="siloqWizardSaveGoals()" style="margin-top:16px;">
@@ -5703,52 +5682,9 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                 if (step === 5) siloqWizardLoadGeoPages();
             };
 
+            // siloqWizardLoadGeoPages: no longer fetches pages — keywords are plain text inputs
             window.siloqWizardLoadGeoPages = function() {
-                var container = document.getElementById('siloq-geo-page-selector');
-                if (!container) return;
-                // Avoid reloading if already populated
-                if (container.getAttribute('data-loaded') === '1') return;
-
-                var fd = new FormData();
-                fd.append('action', 'siloq_get_pages_for_selector');
-                fd.append('nonce', nonce);
-
-                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
-                    .then(function(r) { return r.json(); })
-                    .then(function(res) {
-                        if (!res.success || !res.data || !res.data.pages) {
-                            container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js(__('Could not load pages.', 'siloq-connector')); ?></p>';
-                            return;
-                        }
-                        var pages = res.data.pages;
-                        if (!pages.length) {
-                            container.innerHTML = '<p style="color:#9ca3af;font-size:13px;"><?php echo esc_js(__('No published pages found.', 'siloq-connector')); ?></p>';
-                            return;
-                        }
-                        var html = '';
-                        for (var i = 0; i < pages.length; i++) {
-                            var p = pages[i];
-                            html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:13px;">'
-                                  + '<input type="checkbox" class="siloq-geo-page-cb" value="' + p.ID + '" style="accent-color:#6366f1;">'
-                                  + '<span>' + p.post_title + '</span>'
-                                  + '</label>';
-                        }
-                        container.innerHTML = html;
-                        container.setAttribute('data-loaded', '1');
-
-                        // Limit to 3 selections
-                        container.addEventListener('change', function(e) {
-                            if (e.target && e.target.classList.contains('siloq-geo-page-cb')) {
-                                var checked = container.querySelectorAll('.siloq-geo-page-cb:checked');
-                                if (checked.length > 3) {
-                                    e.target.checked = false;
-                                }
-                            }
-                        });
-                    })
-                    .catch(function() {
-                        container.innerHTML = '<p style="color:#ef4444;font-size:13px;"><?php echo esc_js(__('Error loading pages.', 'siloq-connector')); ?></p>';
-                    });
+                // No-op: keyword inputs are rendered server-side; nothing to load
             };
 
             window.siloqWizardSaveGoals = function() {
@@ -5758,18 +5694,16 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
                 var primaryGoalEl = document.querySelector('input[name="siloq_primary_goal"]:checked');
                 var primaryGoal = primaryGoalEl ? primaryGoalEl.value : 'local_leads';
 
-                var geoPages = [];
-                var checked = document.querySelectorAll('.siloq-geo-page-cb:checked');
-                for (var i = 0; i < checked.length; i++) {
-                    geoPages.push(checked[i].value);
-                }
-
                 var fd = new FormData();
                 fd.append('action', 'siloq_save_goals');
                 fd.append('nonce', nonce);
                 fd.append('primary_goal', primaryGoal);
-                for (var j = 0; j < geoPages.length; j++) {
-                    fd.append('geo_priority_pages[]', geoPages[j]);
+
+                // Collect keyword phrases from wizard step 5 inputs
+                var kwInputs = document.querySelectorAll('.siloq-wizard-keyword-input');
+                for (var ki = 0; ki < kwInputs.length; ki++) {
+                    var kv = kwInputs[ki].value.trim();
+                    if (kv) fd.append('target_keywords[]', kv);
                 }
 
                 fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -7653,13 +7587,23 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
     public static function ajax_save_goals() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
 
-        $primary_goal   = isset( $_POST['primary_goal'] ) ? sanitize_text_field( $_POST['primary_goal'] ) : 'local_leads';
-        $geo_pages_raw  = isset( $_POST['geo_priority_pages'] ) ? (array) $_POST['geo_priority_pages'] : array();
-        $geo_pages      = array_map( 'intval', $geo_pages_raw );
+        $primary_goal    = isset( $_POST['primary_goal'] ) ? sanitize_text_field( $_POST['primary_goal'] ) : 'local_leads';
+
+        // Accept both geo_priority_pages (legacy) and target_keywords (new)
+        $geo_pages_raw   = isset( $_POST['geo_priority_pages'] ) ? (array) $_POST['geo_priority_pages'] : array();
+        $geo_pages       = array_map( 'intval', $geo_pages_raw );
+
+        $target_kw_raw   = isset( $_POST['target_keywords'] ) ? (array) $_POST['target_keywords'] : array();
+        $target_keywords = array_slice( array_map( 'sanitize_text_field', $target_kw_raw ), 0, 7 );
+
+        if ( ! empty( $target_keywords ) ) {
+            update_option( 'siloq_target_keywords', wp_json_encode( $target_keywords ) );
+        }
 
         $goals = array(
             'primary_goal'       => $primary_goal,
-            'geo_priority_pages' => $geo_pages,
+            'geo_priority_pages' => $geo_pages,    // backward compat — kept but deprecated
+            'target_keywords'    => $target_keywords,
         );
         Siloq_Goals::save_goals( $goals );
 
@@ -7674,7 +7618,70 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
     }
 
     /**
-     * AJAX: Save Goals tab form (Bug 9 — first-class Goals tab).
+     * Auto-map a list of keyword phrases to the best matching synced WP page.
+     * Uses similar_text() against page titles. Match threshold: 40%.
+     *
+     * @param  array $keywords  List of keyword strings (max 7).
+     * @return array            Each element: ['keyword', 'post_id', 'matched_title', 'edit_url']
+     */
+    private static function map_keywords_to_pages( $keywords ) {
+        if ( empty( $keywords ) ) {
+            return array();
+        }
+
+        // Fetch all synced published pages (titles are the match surface)
+        $all_pages = get_posts( array(
+            'post_type'   => array( 'page', 'post' ),
+            'post_status' => 'publish',
+            'numberposts' => 500,
+            'meta_query'  => array( array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ) ),
+            'fields'      => 'all',
+        ) );
+
+        $keyword_map     = array();
+        $keyword_page_map = array(); // keyword string => post_id
+
+        foreach ( $keywords as $keyword ) {
+            $keyword_clean = strtolower( trim( $keyword ) );
+            $best_score    = 0;
+            $best_id       = 0;
+            $best_title    = '';
+
+            foreach ( $all_pages as $page ) {
+                $title_lc = strtolower( $page->post_title );
+                $score    = 0;
+                similar_text( $keyword_clean, $title_lc, $score );
+                if ( $score > $best_score ) {
+                    $best_score = $score;
+                    $best_id    = $page->ID;
+                    $best_title = $page->post_title;
+                }
+            }
+
+            $matched_id    = ( $best_score >= 40 ) ? $best_id    : 0;
+            $matched_title = ( $best_score >= 40 ) ? $best_title : '';
+            $edit_url      = $matched_id ? get_edit_post_link( $matched_id, 'raw' ) : '';
+
+            $keyword_map[]          = array(
+                'keyword'       => $keyword,
+                'post_id'       => $matched_id,
+                'matched_title' => $matched_title,
+                'edit_url'      => $edit_url,
+                'score'         => round( $best_score, 1 ),
+            );
+            if ( $matched_id ) {
+                $keyword_page_map[ $keyword ] = $matched_id;
+            }
+        }
+
+        // Persist the map
+        update_option( 'siloq_keyword_page_map', wp_json_encode( $keyword_page_map ) );
+
+        return $keyword_map;
+    }
+
+    /**
+     * AJAX: Save Goals tab form (primary goal, services, cities, target keywords).
      */
     public static function ajax_save_goals_tab() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
@@ -7686,34 +7693,49 @@ if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
         $primary_goal        = isset( $_POST['primary_goal'] )        ? sanitize_text_field( $_POST['primary_goal'] )        : '';
         $priority_services_r = isset( $_POST['priority_services'] )   ? (array) $_POST['priority_services']                  : array();
         $priority_cities_r   = isset( $_POST['priority_cities'] )     ? (array) $_POST['priority_cities']                    : array();
+        $target_kw_r         = isset( $_POST['target_keywords'] )     ? (array) $_POST['target_keywords']                    : array();
+
+        // Backward compat: accept geo_priority_pages if sent
         $geo_pages_r         = isset( $_POST['geo_priority_pages'] )  ? (array) $_POST['geo_priority_pages']                 : array();
 
         $priority_services = array_map( 'sanitize_text_field', $priority_services_r );
         $priority_cities   = array_map( 'sanitize_text_field', $priority_cities_r );
+        $target_keywords   = array_slice( array_map( 'sanitize_text_field', $target_kw_r ), 0, 7 );
         $geo_pages         = array_map( 'intval', $geo_pages_r );
 
         // Save individual options
-        if ( $primary_goal ) update_option( 'siloq_primary_goal', $primary_goal );
+        if ( $primary_goal )       update_option( 'siloq_primary_goal',       $primary_goal );
         if ( ! empty( $priority_services ) ) update_option( 'siloq_priority_services', wp_json_encode( $priority_services ) );
         if ( ! empty( $priority_cities ) )   update_option( 'siloq_priority_cities',   wp_json_encode( $priority_cities ) );
-        if ( ! empty( $geo_pages ) )         update_option( 'siloq_geo_priority_pages', wp_json_encode( $geo_pages ) );
+        if ( ! empty( $target_keywords ) )   update_option( 'siloq_target_keywords',   wp_json_encode( $target_keywords ) );
+        if ( ! empty( $geo_pages ) )         update_option( 'siloq_geo_priority_pages', wp_json_encode( $geo_pages ) ); // backward compat
 
-        // Also update siloq_site_goals for backward compat
+        // Auto-map keywords to pages
+        $keyword_map = array();
+        if ( ! empty( $target_keywords ) ) {
+            $keyword_map = self::map_keywords_to_pages( $target_keywords );
+        }
+
+        // Persist goals (backward compat siloq_site_goals option)
         $goals = array(
             'primary_goal'       => $primary_goal,
             'priority_services'  => $priority_services,
             'priority_locations' => $priority_cities,
-            'geo_priority_pages' => $geo_pages,
+            'target_keywords'    => $target_keywords,
+            'geo_priority_pages' => $geo_pages, // deprecated but kept for compat
         );
         Siloq_Goals::save_goals( $goals );
 
-        // Sync to API via POST /sites/{site_id}/goals/ (upsert — API does not support PATCH)
+        // Sync to API via POST /sites/{site_id}/goals/
         $site_id = get_option( 'siloq_site_id' );
         if ( $site_id ) {
             $api_client = new Siloq_API_Client();
             $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'POST', $goals );
         }
 
-        wp_send_json_success( array( 'message' => 'Goals saved — intelligence will update on next audit' ) );
+        wp_send_json_success( array(
+            'message'     => 'Goals saved — intelligence will update on next audit',
+            'keyword_map' => $keyword_map,
+        ) );
     }
 }

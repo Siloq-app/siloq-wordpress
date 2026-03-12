@@ -56,6 +56,17 @@ class Siloq_Goals {
             }
         }
 
+        // Include target_keywords if saved (new field, replaces geo_priority_pages)
+        if ( empty( $goals['target_keywords'] ) ) {
+            $kw_raw = get_option( 'siloq_target_keywords', '' );
+            if ( $kw_raw ) {
+                $keywords = json_decode( $kw_raw, true );
+                if ( is_array( $keywords ) && ! empty( $keywords ) ) {
+                    $goals['target_keywords'] = $keywords;
+                }
+            }
+        }
+
         return $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'POST', $goals );
     }
 }
