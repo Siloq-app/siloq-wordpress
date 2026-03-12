@@ -1309,7 +1309,7 @@
     var $list = $('#siloq-schema-pages-list');
     $list.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading schema status...</span></div>');
     $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
-      action: 'siloq_get_schema_status',
+      action: 'siloq_get_all_schema_status',
       nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
     }, function (res) {
       schemaLoaded = true;

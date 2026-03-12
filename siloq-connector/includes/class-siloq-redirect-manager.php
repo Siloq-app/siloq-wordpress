@@ -88,13 +88,13 @@ class Siloq_Redirect_Manager {
         if ( $exists ) {
             $col = $wpdb->get_results( "SHOW COLUMNS FROM `{$table_name}` LIKE 'enabled'" );
             if ( empty( $col ) ) {
-                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `status_code`" );
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `enabled` TINYINT(1) NOT NULL DEFAULT 1" );
                 $wpdb->query( "ALTER TABLE `{$table_name}` ADD KEY `enabled` (`enabled`)" );
             }
             // Add status_code column if missing (older installs created before the column was added)
             $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table_name}` LIKE 'status_code'" );
             if ( ! $col_exists ) {
-                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `status_code` int(3) NOT NULL DEFAULT 301 AFTER `hits`" );
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `status_code` int(3) NOT NULL DEFAULT 301" );
             }
         }
 
