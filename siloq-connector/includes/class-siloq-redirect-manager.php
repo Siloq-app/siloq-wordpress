@@ -96,6 +96,21 @@ class Siloq_Redirect_Manager {
             if ( ! $col_exists ) {
                 $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `status_code` int(3) NOT NULL DEFAULT 301" );
             }
+            // Add created_at column if missing
+            $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table_name}` LIKE 'created_at'" );
+            if ( ! $col_exists ) {
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `created_at` datetime NOT NULL DEFAULT '2000-01-01 00:00:00'" );
+            }
+            // Add updated_at column if missing
+            $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table_name}` LIKE 'updated_at'" );
+            if ( ! $col_exists ) {
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `updated_at` datetime NOT NULL DEFAULT '2000-01-01 00:00:00'" );
+            }
+            // Add redirect_type column if missing
+            $col_exists = $wpdb->get_var( "SHOW COLUMNS FROM `{$table_name}` LIKE 'redirect_type'" );
+            if ( ! $col_exists ) {
+                $wpdb->query( "ALTER TABLE `{$table_name}` ADD COLUMN `redirect_type` varchar(20) NOT NULL DEFAULT 'manual'" );
+            }
         }
 
         return $exists;
