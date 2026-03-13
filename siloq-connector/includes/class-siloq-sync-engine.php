@@ -109,13 +109,14 @@ class Siloq_Sync_Engine {
         $post_types = function_exists('get_siloq_crawlable_post_types')
             ? get_siloq_crawlable_post_types()
             : array('page', 'post');
-
-        // Exclude koops and JetEngine CPT slugs at the sync-query level (Bug 4)
-        $extra_excluded = array('koops', 'jet_cct', 'jet-smart-filters');
-        $excluded_post_types = defined('SILOQ_EXCLUDED_POST_TYPES') ? array_merge((array) SILOQ_EXCLUDED_POST_TYPES, $extra_excluded) : $extra_excluded;
-        $post_types = array_values(array_diff((array) $post_types, $excluded_post_types));
+        // Note: koops, jet_cct, jet-smart-filters and all plugin CPTs are now
+        // excluded centrally in get_siloq_crawlable_post_types() — no local patch needed.
 
         $site_url = get_site_url();
+
+        // Respect manually excluded page IDs (set via "Remove from Siloq" button in audit).
+        $excluded_ids = get_option('siloq_excluded_page_ids', array());
+        if (!is_array($excluded_ids)) $excluded_ids = array();
 
         // Fetch one batch of posts at the given offset.
         // Using get_posts with numberposts + offset for real pagination.
@@ -130,6 +131,7 @@ class Siloq_Sync_Engine {
             'no_found_rows'          => true,
             'update_post_meta_cache' => false,
             'update_post_term_cache' => false,
+            'post__not_in'           => $excluded_ids,
         ) );
 
         // Also get total count (separate lightweight query, only on first batch)

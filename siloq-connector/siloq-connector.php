@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.183
+ * Version: 1.5.185
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.183');
+define('SILOQ_VERSION', '1.5.185');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -401,6 +401,7 @@ class Siloq_Connector {
         add_action('wp_ajax_nopriv_siloq_run_audit_background', array($this, 'ajax_run_audit_background'));
         add_action('wp_ajax_siloq_audit_status',         array($this, 'ajax_audit_status'));
         add_action('siloq_audit_cron_job',               array($this, 'run_audit_cron_job'));
+        add_action('wp_ajax_siloq_exclude_page',         array($this, 'ajax_exclude_page'));
 
         // Internal links — backend apply handler (Bug 6)
         add_action('wp_ajax_siloq_add_internal_link', array($this, 'ajax_add_internal_link'));
@@ -2665,6 +2666,73 @@ Required:
             'role'     => $role,
             'api_sync' => $api_ok,
         ));
+    }
+
+    /**
+     /**
+     * AJAX: Exclude a specific page from Siloq indexing.
+     * Adds the post ID to siloq_excluded_page_ids option, deletes it from the
+     * API, and removes it from the cached audit results.
+     */
+    public function ajax_exclude_page() {
+        check_ajax_referer('siloq_ajax_nonce', 'nonce');
+        if (!current_user_can('edit_pages')) {
+            wp_send_json_error(array('message' => 'Unauthorized'));
+        }
+
+        $post_id = intval($_POST['post_id'] ?? 0);
+        if (!$post_id) {
+            wp_send_json_error(array('message' => 'Invalid post ID'));
+        }
+
+        // 1. Add to excluded list
+        $excluded = get_option('siloq_excluded_page_ids', array());
+        if (!is_array($excluded)) $excluded = array();
+        if (!in_array($post_id, $excluded, true)) {
+            $excluded[] = $post_id;
+            update_option('siloq_excluded_page_ids', $excluded);
+        }
+
+        // 2. Delete from API
+        $site_id = get_option('siloq_site_id');
+        $api_key = get_option('siloq_api_key');
+        $api_base = defined('SILOQ_API_BASE') ? SILOQ_API_BASE : 'https://api.siloq.app';
+        if ($site_id && $api_key) {
+            // Try to find the API page ID by post_id
+            $list_resp = wp_remote_get(
+                trailingslashit($api_base) . "api/v1/sites/{$site_id}/pages/?post_id={$post_id}",
+                array('headers' => array('X-API-Key' => $api_key, 'Accept' => 'application/json'), 'timeout' => 10)
+            );
+            if (!is_wp_error($list_resp)) {
+                $list_body = json_decode(wp_remote_retrieve_body($list_resp), true);
+                $api_page_id = null;
+                // Handle both paginated {results:[...]} and flat array formats
+                $items = isset($list_body['results']) ? $list_body['results'] : (is_array($list_body) ? $list_body : array());
+                foreach ($items as $item) {
+                    if (isset($item['post_id']) && intval($item['post_id']) === $post_id) {
+                        $api_page_id = $item['id'] ?? null;
+                        break;
+                    }
+                }
+                if ($api_page_id) {
+                    wp_remote_request(
+                        trailingslashit($api_base) . "api/v1/sites/{$site_id}/pages/{$api_page_id}/",
+                        array('method' => 'DELETE', 'headers' => array('X-API-Key' => $api_key), 'timeout' => 10)
+                    );
+                }
+            }
+        }
+
+        // 3. Remove from cached audit results so it doesn't show on next page load
+        $audit = get_transient('siloq_audit_results');
+        if (is_array($audit) && !empty($audit['pages'])) {
+            $audit['pages'] = array_values(array_filter($audit['pages'], function($p) use ($post_id) {
+                return intval($p['post_id'] ?? 0) !== $post_id;
+            }));
+            set_transient('siloq_audit_results', $audit, 6 * HOUR_IN_SECONDS);
+        }
+
+        wp_send_json_success(array('message' => 'Page excluded from Siloq.'));
     }
 
     /**

@@ -91,6 +91,43 @@ function get_siloq_crawlable_post_types() {
         'scheduled-action',
         // WP/plugin cache
         'oembed_cache',
+        // JetEngine / JetSmartFilters — data layers, not indexable pages
+        'jet_cct',             // JetEngine custom content type
+        'jet-smart-filters',   // JetSmartFilters post type
+        'jet-engine',
+        'jet-engine-taxonomy',
+        'e-loop-item',         // Elementor Loop Item template
+        // Koops plugin — service listing widget CPT, never a real SEO page
+        'koops',
+        'our-service-koops',
+        'our_service_koops',
+        // Gravity Forms / Ninja Forms / WPForms entries
+        'gf_form',
+        'nf_form',
+        'wpforms',
+        // ACF field groups — internal config, not content
+        'acf-field-group',
+        'acf-field',
+        // Testimonial / Portfolio plugin CPTs with no standalone URLs
+        'testimonial',
+        'testimonials',
+        'portfolio',
+        'portfolio_page',
+        // Generic "listing" CPTs from directory plugins (not product/service listings with real URLs)
+        'listing',
+        'listings',
+        // WP Job Manager
+        'job_listing',
+        // Misc plugin internals
+        'wp-types-group',
+        'toolset-layout',
+        'wpcf-usermeta',
+        'frm_display',         // Formidable Forms views
+        'frm_form',            // Formidable Forms
+        'mc4wp-form',          // Mailchimp for WP
+        'tribe_events',        // The Events Calendar
+        'tribe_venue',
+        'tribe_organizer',
     );
 
     /**
@@ -114,6 +151,18 @@ function get_siloq_crawlable_post_types() {
         $saved_types = array_unique( array_merge( $saved_types, array( 'page', 'post' ) ) );
         $crawlable = array_values( array_intersect( $crawlable, $saved_types ) );
     }
+
+    // Hard-block: even if someone explicitly saved these in Advanced Settings,
+    // they must never appear in Siloq. Plugin internals, not real SEO pages.
+    $never_index = array(
+        'koops', 'our-service-koops', 'our_service_koops',
+        'jet_cct', 'jet-smart-filters', 'e-loop-item',
+        'revision', 'attachment', 'nav_menu_item',
+        'wp_template', 'wp_template_part', 'elementor_library',
+        'acf-field-group', 'acf-field', 'wpcode',
+        'scheduled-action', 'oembed_cache',
+    );
+    $crawlable = array_values( array_diff( $crawlable, $never_index ) );
 
     return $crawlable;
 }
