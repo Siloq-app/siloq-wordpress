@@ -4710,10 +4710,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             btn.text('Done').css({background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0'});
                         } else {
                             var msg = (r && r.data && r.data.message) ? r.data.message : 'Auto-add failed.';
-                            if (r && r.data && r.data.hub_edit_url) {
-                                msg += ' <a href="' + r.data.hub_edit_url + '" target="_blank">Edit manually</a>';
+                            // Only append manual edit link if NOT a no_api_key response (message already includes it)
+                            if (r && r.data && r.data.hub_edit_url && !r.data.no_api_key) {
+                                msg += ' <a href="' + r.data.hub_edit_url + '" target="_blank">Edit manually →</a>';
                             }
-                            suggDiv.html(msg).slideDown(200);
+                            suggDiv.html('<div style="font-size:11px;line-height:1.6;padding:8px 10px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;margin-top:6px">' + msg + '</div>').slideDown(200);
                             btn.text('Auto-Add Link').prop('disabled', false);
                             wrap.find('.siloq-orphan-suggest-btn').prop('disabled', false);
                         }
@@ -7957,11 +7958,18 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $spoke_title   = get_the_title( $spoke_id );
         $spoke_url     = get_permalink( $spoke_id );
 
-        $api_key = get_option( 'siloq_anthropic_api_key', '' );
+        $api_key        = get_option( 'siloq_anthropic_api_key', '' );
+        $settings_url   = admin_url( 'admin.php?page=siloq-settings&tab=ai' );
+        $billing_url    = admin_url( 'admin.php?page=siloq-settings&tab=billing' );
         if ( empty( $api_key ) ) {
             wp_send_json_error( array(
-                'message'      => 'Auto-add requires your Anthropic API key. Set it in Settings → AI Settings, or manually add a link on "' . $hub_title . '".',
+                'no_api_key'   => true,
+                'message'      => 'Auto-Add Link requires an AI key to work. You have two options: '
+                    . '(1) <strong>Bring Your Own Key (BYOK):</strong> <a href="https://console.anthropic.com/" target="_blank">Get a free Claude API key at console.anthropic.com</a>, then add it in <a href="' . esc_url( $settings_url ) . '">Settings → AI Settings</a>. You\'ll be billed directly by Anthropic at their standard rates. '
+                    . '(2) <strong>Let Siloq handle it:</strong> Enable Siloq-Managed AI in <a href="' . esc_url( $billing_url ) . '">your billing settings</a> — we cover the API cost and charge token cost + 5% transaction fee. '
+                    . 'Or: <a href="' . esc_url( $hub_edit_url ) . '">Manually add a link on "' . esc_html( $hub_title ) . '" →</a>',
                 'hub_edit_url' => $hub_edit_url,
+                'hub_title'    => $hub_title,
             ) );
             return;
         }
