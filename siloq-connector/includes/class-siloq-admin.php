@@ -2198,6 +2198,48 @@ foreach ($all_synced_ids as $oid) {
     $true_orphan_posts[] = $oid;
 }
 
+// Pre-compute expected linker (hub) for each orphan page
+foreach ($true_orphan_posts as $oid) {
+    $expected = 0;
+    // 1. Direct parent
+    $parent_id = wp_get_post_parent_id($oid);
+    if ($parent_id && get_post_status($parent_id) === 'publish') {
+        $expected = $parent_id;
+    }
+    // 2. Find most relevant hub page by title similarity
+    if (!$expected && !empty($hub_data)) {
+        $spoke_title = strtolower(get_the_title($oid));
+        $best_score = 0;
+        foreach ($hub_data as $h) {
+            $role = get_post_meta($h['id'], '_siloq_page_role', true);
+            if (!in_array($role, array('hub', 'apex_hub', 'pillar', ''), true) && $role !== false) continue;
+            $hub_title = strtolower($h['title']);
+            $hub_kw    = strtolower($h['keyword']);
+            $score = 0;
+            // Check keyword match
+            if ($hub_kw && strpos($spoke_title, $hub_kw) !== false) {
+                $score += 10;
+            }
+            // Check title word overlap
+            $hub_words = array_filter(explode(' ', preg_replace('/[^a-z0-9 ]/', '', $hub_title)));
+            foreach ($hub_words as $w) {
+                if (strlen($w) > 2 && strpos($spoke_title, $w) !== false) $score += 2;
+            }
+            if ($score > $best_score) {
+                $best_score = $score;
+                $expected = $h['id'];
+            }
+        }
+        // If no keyword/title match, use first hub as fallback
+        if (!$expected) {
+            $expected = $hub_data[0]['id'];
+        }
+    }
+    if ($expected) {
+        update_post_meta($oid, '_siloq_expected_linker_id', $expected);
+    }
+}
+
 // Score label
 if ($site_score >= 90) { $score_grade = 'Excellent!'; $score_color_cls = 'teal'; }
 elseif ($site_score >= 75) { $score_grade = 'Good · Room to Grow'; $score_color_cls = 'teal'; }
@@ -2537,7 +2579,11 @@ $img_audit_items = $img_audit_raw ? json_decode($img_audit_raw, true) : array();
     <?php elseif ($fix_mode === 'elementor' && $fix_url): ?>
     <a href="<?php echo esc_url($fix_url); ?>" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Edit in Elementor</a>
     <?php elseif ($fix_mode === 'internal_links' && $act_post_id): ?>
-    <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="view_links" data-post-id="<?php echo $act_post_id; ?>" style="font-size:11px;padding:6px 12px;white-space:nowrap;cursor:pointer">View Internal Links</button>
+    <div class="siloq-orphan-fix-wrap" data-spoke-id="<?php echo intval($act_post_id); ?>" data-spoke-title="<?php echo esc_attr(get_the_title($act_post_id)); ?>" data-spoke-url="<?php echo esc_url(get_permalink($act_post_id)); ?>" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-orphan-suggest-btn" style="font-size:11px;padding:5px 10px">See Fix</button>
+      <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-orphan-autolink-btn" style="font-size:11px;padding:5px 10px">Auto-Add Link</button>
+      <div class="siloq-orphan-suggestion" style="display:none;font-size:11px;color:#374151;margin-top:4px;padding:6px 10px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;width:100%"></div>
+    </div>
     <?php elseif ($fix_url): ?>
     <a href="<?php echo esc_url($fix_url); ?>" target="_blank" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;white-space:nowrap">Fix It &rarr;</a>
     <?php endif; ?>
@@ -2785,7 +2831,14 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
       <div class="siloq-orphan-strip-sub">Nothing on your site links to these pages. They exist but are invisible to search engines.</div>
       <div class="siloq-orphan-chips">
         <?php foreach (array_slice($true_orphan_posts, 0, 5) as $oid): ?>
-        <span class="siloq-orphan-chip"><?php echo esc_html(get_the_title($oid)); ?></span>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span class="siloq-orphan-chip"><?php echo esc_html(get_the_title($oid)); ?></span>
+          <div class="siloq-orphan-fix-wrap" data-spoke-id="<?php echo intval($oid); ?>" data-spoke-title="<?php echo esc_attr(get_the_title($oid)); ?>" data-spoke-url="<?php echo esc_url(get_permalink($oid)); ?>">
+            <button class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-orphan-suggest-btn" style="font-size:10px;padding:3px 8px">See Fix</button>
+            <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-orphan-autolink-btn" style="font-size:10px;padding:3px 8px">Auto-Add Link</button>
+            <div class="siloq-orphan-suggestion" style="display:none;font-size:11px;color:#374151;margin-top:4px;padding:6px 10px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0"></div>
+          </div>
+        </div>
         <?php endforeach; ?>
       </div>
     </div>
@@ -2912,6 +2965,12 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
       <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_meta" data-post-id="<?php echo intval($ap_post_id); ?>" data-type="description" style="font-size:10px;padding:3px 9px;white-space:nowrap;">Fix It</button>
       <?php elseif ($ap_fix_type === 'schema' && $ap_post_id): ?>
       <button class="siloq-fix-btn siloq-btn siloq-btn--primary" data-action="fix_schema" data-post-id="<?php echo intval($ap_post_id); ?>" style="font-size:10px;padding:3px 9px;white-space:nowrap;">Fix It</button>
+      <?php elseif ($ap_post_id && (stripos($ap['issue'], 'no internal links') !== false || stripos($ap['issue'], 'orphan') !== false)): ?>
+      <div class="siloq-orphan-fix-wrap" data-spoke-id="<?php echo intval($ap_post_id); ?>" data-spoke-title="<?php echo esc_attr($ap['title']); ?>" data-spoke-url="<?php echo esc_url(get_permalink($ap_post_id)); ?>" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <button class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-orphan-suggest-btn" style="font-size:10px;padding:3px 8px">See Fix</button>
+        <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-orphan-autolink-btn" style="font-size:10px;padding:3px 8px">Auto-Add Link</button>
+        <div class="siloq-orphan-suggestion" style="display:none;font-size:11px;color:#374151;margin-top:4px;padding:6px 10px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;width:100%"></div>
+      </div>
       <?php elseif (!empty($ap['elementor_url'])): ?>
       <a href="<?php echo esc_url($ap['elementor_url']); ?>" target="_blank" class="siloq-page-fix-link">Fix &rarr;</a>
       <?php endif; ?>
@@ -4597,6 +4656,74 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     wrap.style.maxHeight = isOpen ? '0' : '500px';
                     chev.classList.toggle('open', !isOpen);
                 }
+
+                // Orphan fix: See Fix button
+                jQuery(document).on('click', '.siloq-orphan-suggest-btn', function() {
+                    var wrap = jQuery(this).closest('.siloq-orphan-fix-wrap');
+                    var spokeId = wrap.data('spoke-id');
+                    var suggDiv = wrap.find('.siloq-orphan-suggestion');
+                    var btn = jQuery(this);
+                    btn.text('Loading...').prop('disabled', true);
+                    jQuery.post(ajaxurl, {
+                        action: 'siloq_get_orphan_suggestion',
+                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                        spoke_id: spokeId
+                    }, function(r) {
+                        btn.text('See Fix').prop('disabled', false);
+                        if (r && r.success && r.data) {
+                            var html = r.data.suggestion;
+                            if (r.data.hub_edit_url) {
+                                html += ' <a href="' + r.data.hub_edit_url + '" target="_blank">Edit ' + r.data.hub_title + ' &rarr;</a>';
+                            }
+                            suggDiv.html(html).slideDown(200);
+                        } else {
+                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Could not load suggestion.';
+                            suggDiv.html(msg).slideDown(200);
+                        }
+                    }).fail(function() {
+                        btn.text('See Fix').prop('disabled', false);
+                        suggDiv.html('Request failed. Please try again.').slideDown(200);
+                    });
+                });
+
+                // Orphan fix: Auto-Add Link button
+                jQuery(document).on('click', '.siloq-orphan-autolink-btn', function() {
+                    var wrap = jQuery(this).closest('.siloq-orphan-fix-wrap');
+                    var spokeId = wrap.data('spoke-id');
+                    var suggDiv = wrap.find('.siloq-orphan-suggestion');
+                    var btns = wrap.find('.siloq-orphan-suggest-btn, .siloq-orphan-autolink-btn');
+                    var btn = jQuery(this);
+                    btn.text('Adding link...').prop('disabled', true);
+                    wrap.find('.siloq-orphan-suggest-btn').prop('disabled', true);
+                    jQuery.post(ajaxurl, {
+                        action: 'siloq_auto_add_internal_link',
+                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                        spoke_id: spokeId
+                    }, function(r) {
+                        if (r && r.success && r.data) {
+                            var html = r.data.message;
+                            if (r.data.hub_edit_url) {
+                                html += ' — <a href="' + r.data.hub_edit_url + '" target="_blank">Review edit</a>';
+                            }
+                            suggDiv.html(html).slideDown(200);
+                            btns.prop('disabled', true);
+                            btn.text('Done').css({background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0'});
+                        } else {
+                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Auto-add failed.';
+                            // Only append manual edit link if NOT a no_api_key response (message already includes it)
+                            if (r && r.data && r.data.hub_edit_url && !r.data.no_api_key) {
+                                msg += ' <a href="' + r.data.hub_edit_url + '" target="_blank">Edit manually →</a>';
+                            }
+                            suggDiv.html('<div style="font-size:11px;line-height:1.6;padding:8px 10px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;margin-top:6px">' + msg + '</div>').slideDown(200);
+                            btn.text('Auto-Add Link').prop('disabled', false);
+                            wrap.find('.siloq-orphan-suggest-btn').prop('disabled', false);
+                        }
+                    }).fail(function() {
+                        btn.text('Auto-Add Link').prop('disabled', false);
+                        wrap.find('.siloq-orphan-suggest-btn').prop('disabled', false);
+                        suggDiv.html('Request failed. Please try again.').slideDown(200);
+                    });
+                });
 
                 // Create a blank draft page and switch to Pages tab (for gap analysis cards)
                 function siloqCreateGapDraft(btn, title, draftType) {
@@ -7767,6 +7894,128 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         wp_send_json_success( array(
             'message'     => 'Goals saved — intelligence will update on next audit',
             'keyword_map' => $keyword_map,
+        ) );
+    }
+
+    /**
+     * AJAX: Get orphan fix suggestion — reads pre-computed expected linker.
+     */
+    public static function ajax_get_orphan_suggestion() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+
+        $spoke_id = intval( $_POST['spoke_id'] ?? 0 );
+        if ( ! $spoke_id ) {
+            wp_send_json_error( array( 'message' => 'Missing spoke page ID.' ) );
+        }
+
+        $hub_id = intval( get_post_meta( $spoke_id, '_siloq_expected_linker_id', true ) );
+        if ( ! $hub_id || ! get_post( $hub_id ) ) {
+            wp_send_json_success( array(
+                'hub_id'     => 0,
+                'suggestion' => 'We could not automatically determine which page should link here. Manually add a link from your most relevant hub page.',
+            ) );
+            return;
+        }
+
+        $hub_title    = get_the_title( $hub_id );
+        $hub_edit_url = get_edit_post_link( $hub_id, 'raw' );
+
+        wp_send_json_success( array(
+            'hub_id'       => $hub_id,
+            'hub_title'    => $hub_title,
+            'hub_edit_url' => $hub_edit_url,
+            'suggestion'   => 'Your "' . $hub_title . '" page should contain a link to this page. Add it in the section where you list your relevant content.',
+        ) );
+    }
+
+    /**
+     * AJAX: Auto-add internal link from hub to spoke using Anthropic API.
+     */
+    public static function ajax_auto_add_internal_link() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+
+        $spoke_id = intval( $_POST['spoke_id'] ?? 0 );
+        if ( ! $spoke_id ) {
+            wp_send_json_error( array( 'message' => 'Missing spoke page ID.' ) );
+        }
+
+        $hub_id = intval( get_post_meta( $spoke_id, '_siloq_expected_linker_id', true ) );
+        if ( ! $hub_id || ! get_post( $hub_id ) ) {
+            wp_send_json_error( array( 'message' => 'Could not determine which page should link here. Use See Fix for manual guidance.' ) );
+            return;
+        }
+
+        $hub_post      = get_post( $hub_id );
+        $hub_title     = $hub_post->post_title;
+        $hub_content   = $hub_post->post_content;
+        $hub_edit_url  = get_edit_post_link( $hub_id, 'raw' );
+        $spoke_title   = get_the_title( $spoke_id );
+        $spoke_url     = get_permalink( $spoke_id );
+
+        $api_key        = get_option( 'siloq_anthropic_api_key', '' );
+        $settings_url   = admin_url( 'admin.php?page=siloq-settings&tab=ai' );
+        $billing_url    = admin_url( 'admin.php?page=siloq-settings&tab=billing' );
+        if ( empty( $api_key ) ) {
+            wp_send_json_error( array(
+                'no_api_key'   => true,
+                'message'      => 'Auto-Add Link requires an AI key to work. You have two options: '
+                    . '(1) <strong>Bring Your Own Key (BYOK):</strong> <a href="https://console.anthropic.com/" target="_blank">Get a free Claude API key at console.anthropic.com</a>, then add it in <a href="' . esc_url( $settings_url ) . '">Settings → AI Settings</a>. You\'ll be billed directly by Anthropic at their standard rates. '
+                    . '(2) <strong>Let Siloq handle it:</strong> Enable Siloq-Managed AI in <a href="' . esc_url( $billing_url ) . '">your billing settings</a> — we cover the API cost and charge token cost + 5% transaction fee. '
+                    . 'Or: <a href="' . esc_url( $hub_edit_url ) . '">Manually add a link on "' . esc_html( $hub_title ) . '" →</a>',
+                'hub_edit_url' => $hub_edit_url,
+                'hub_title'    => $hub_title,
+            ) );
+            return;
+        }
+
+        $prompt = 'The following page exists on this website: "' . $spoke_title . '" at ' . $spoke_url . ".\n"
+            . 'It is a spoke/supporting page under the hub page titled "' . $hub_title . '".' . "\n"
+            . "Here is the current hub page content:\n\n" . $hub_content . "\n\n"
+            . 'Identify the most contextually appropriate location in the hub page content to naturally insert an internal link to the spoke page. '
+            . 'Insert it as an HTML anchor tag: <a href="' . $spoke_url . '">' . $spoke_title . '</a>. '
+            . 'Do not add the link in navigation elements, headers, or footers — place it in a contextually relevant sentence in the body content. '
+            . 'Return ONLY the full updated hub page content with the link inserted. Do not add any explanation.';
+
+        $resp = wp_remote_post( 'https://api.anthropic.com/v1/messages', array(
+            'timeout' => 90,
+            'headers' => array(
+                'x-api-key'         => $api_key,
+                'anthropic-version' => '2023-06-01',
+                'content-type'      => 'application/json',
+            ),
+            'body' => wp_json_encode( array(
+                'model'      => 'claude-3-5-haiku-20241022',
+                'max_tokens' => 4000,
+                'messages'   => array( array( 'role' => 'user', 'content' => $prompt ) ),
+            ) ),
+        ) );
+
+        if ( is_wp_error( $resp ) ) {
+            wp_send_json_error( array( 'message' => 'API error: ' . $resp->get_error_message() ) );
+            return;
+        }
+
+        $code = wp_remote_retrieve_response_code( $resp );
+        $body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+        if ( $code !== 200 || ! isset( $body['content'][0]['text'] ) ) {
+            $err = isset( $body['error']['message'] ) ? $body['error']['message'] : 'Unknown API error (HTTP ' . $code . ')';
+            wp_send_json_error( array( 'message' => 'API error: ' . $err ) );
+            return;
+        }
+
+        $updated_content = $body['content'][0]['text'];
+        wp_update_post( array( 'ID' => $hub_id, 'post_content' => $updated_content ) );
+
+        wp_send_json_success( array(
+            'message'      => '✅ Link added to "' . $hub_title . '"',
+            'hub_edit_url' => $hub_edit_url,
         ) );
     }
 }
