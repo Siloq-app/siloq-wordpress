@@ -7729,6 +7729,53 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         // Persist plan data locally so the dashboard can reload it
         if ( is_array( $data ) ) {
             $data['generated_at'] = current_time( 'mysql' );
+
+            // If the API returned empty hub/spoke arrays, populate from WP-local
+            // post meta so the Site Architecture section always shows real data
+            // (API may not have classification data if sync hasn't processed roles yet)
+            $intel = isset( $data['intelligence'] ) && is_array( $data['intelligence'] ) ? $data['intelligence'] : array();
+            if ( empty( $intel['hub_pages'] ) || empty( $intel['spoke_pages'] ) ) {
+                $local_hub_pages   = array();
+                $local_spoke_pages = array();
+                $local_orphans     = array();
+
+                $all_synced = get_posts( array(
+                    'post_type'      => array( 'page', 'post' ),
+                    'post_status'    => 'publish',
+                    'numberposts'    => 200,
+                    'meta_key'       => '_siloq_synced',
+                    'meta_value'     => '1',
+                ) );
+
+                foreach ( $all_synced as $p ) {
+                    $role = get_post_meta( $p->ID, '_siloq_page_role', true )
+                         ?: get_post_meta( $p->ID, 'page_type_classification', true );
+                    $url  = get_permalink( $p->ID );
+                    if ( in_array( $role, array( 'hub', 'apex_hub' ), true ) ) {
+                        $local_hub_pages[] = array(
+                            'page_id' => $p->ID,
+                            'title'   => $p->post_title,
+                            'url'     => $url,
+                        );
+                    } elseif ( $role === 'spoke' || $role === 'supporting' ) {
+                        $hub_parent = intval( get_post_meta( $p->ID, '_siloq_expected_linker_id', true ) )
+                                   ?: wp_get_post_parent_id( $p->ID );
+                        $local_spoke_pages[] = array(
+                            'page_id'     => $p->ID,
+                            'title'       => $p->post_title,
+                            'url'         => $url,
+                            'hub_page_id' => $hub_parent,
+                        );
+                    }
+                }
+
+                if ( empty( $intel['hub_pages'] ) )   $intel['hub_pages']   = $local_hub_pages;
+                if ( empty( $intel['spoke_pages'] ) )  $intel['spoke_pages']  = $local_spoke_pages;
+                if ( empty( $intel['orphan_pages'] ) ) $intel['orphan_pages'] = $local_orphans;
+
+                $data['intelligence'] = $intel;
+            }
+
             update_option( 'siloq_plan_data', wp_json_encode( $data ), false );
         }
 
@@ -7923,7 +7970,60 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
 
         $hub_id = intval( get_post_meta( $spoke_id, '_siloq_expected_linker_id', true ) );
+
+        // If not pre-computed, resolve on the fly and save for next time
         if ( ! $hub_id || ! get_post( $hub_id ) ) {
+            $hub_id = 0;
+
+            // 1. Direct WP parent
+            $parent_id = wp_get_post_parent_id( $spoke_id );
+            if ( $parent_id && get_post_status( $parent_id ) === 'publish' ) {
+                $hub_id = $parent_id;
+            }
+
+            // 2. Search for most relevant hub by keyword/title match
+            if ( ! $hub_id ) {
+                $spoke_title_lower = strtolower( get_the_title( $spoke_id ) );
+                $hub_posts = get_posts( array(
+                    'post_type'   => array( 'page', 'post' ),
+                    'post_status' => 'publish',
+                    'numberposts' => 50,
+                    'meta_query'  => array(
+                        'relation' => 'OR',
+                        array( 'key' => '_siloq_page_role', 'value' => 'hub',      'compare' => '=' ),
+                        array( 'key' => '_siloq_page_role', 'value' => 'apex_hub', 'compare' => '=' ),
+                        array( 'key' => 'page_type_classification', 'value' => 'hub', 'compare' => '=' ),
+                    ),
+                ) );
+
+                $best_score = 0;
+                foreach ( $hub_posts as $hp ) {
+                    $hub_title_lower = strtolower( $hp->post_title );
+                    $hub_words = array_filter( explode( ' ', preg_replace( '/[^a-z0-9 ]/', '', $hub_title_lower ) ) );
+                    $score = 0;
+                    foreach ( $hub_words as $w ) {
+                        if ( strlen( $w ) > 2 && strpos( $spoke_title_lower, $w ) !== false ) {
+                            $score += 2;
+                        }
+                    }
+                    if ( $score > $best_score ) {
+                        $best_score = $score;
+                        $hub_id     = $hp->ID;
+                    }
+                }
+
+                // Fallback: use first hub found
+                if ( ! $hub_id && ! empty( $hub_posts ) ) {
+                    $hub_id = $hub_posts[0]->ID;
+                }
+            }
+
+            if ( $hub_id ) {
+                update_post_meta( $spoke_id, '_siloq_expected_linker_id', $hub_id );
+            }
+        }
+
+        if ( ! $hub_id ) {
             wp_send_json_success( array(
                 'hub_id'     => 0,
                 'suggestion' => 'We could not automatically determine which page should link here. Manually add a link from your most relevant hub page.',

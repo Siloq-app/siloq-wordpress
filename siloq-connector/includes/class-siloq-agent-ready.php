@@ -670,12 +670,31 @@ class Siloq_Agent_Ready {
             ];
         }
 
-        $schema_applied = (int) $wpdb->get_var(
+        // Count from post meta flag (_siloq_schema_applied = 1)
+        $schema_via_meta = (int) $wpdb->get_var(
             "SELECT COUNT(DISTINCT post_id)
              FROM {$wpdb->postmeta}
              WHERE meta_key = '_siloq_schema_applied' AND meta_value = '1'"
         );
 
+        // Also count from the Schema Architect DB table (more reliable — this is
+        // what actually gets injected into wp_head, post meta can fall out of sync)
+        $schema_table  = $wpdb->prefix . 'siloq_schema';
+        $schema_via_db = 0;
+        if ( $wpdb->get_var( "SHOW TABLES LIKE '{$schema_table}'" ) === $schema_table ) {
+            $schema_via_db = (int) $wpdb->get_var(
+                "SELECT COUNT(DISTINCT post_id) FROM {$schema_table} WHERE is_active = 1"
+            );
+        }
+
+        // Also count pages with _siloq_applied_types meta set (Schema Architect writes this)
+        $schema_via_types = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT post_id)
+             FROM {$wpdb->postmeta}
+             WHERE meta_key = '_siloq_applied_types' AND meta_value != '' AND meta_value IS NOT NULL"
+        );
+
+        $schema_applied = max( $schema_via_meta, $schema_via_db, $schema_via_types );
         $pct = round( ( $schema_applied / $total_synced ) * 100 );
 
         if ( $pct >= 50 ) {
