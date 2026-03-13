@@ -2610,7 +2610,7 @@ $audit_fresh = !empty($audit_results);
       );
       $tc = $type_colors[$ap_type] ?? array('#6b7280','#f3f4f6');
     ?>
-    <div class="siloq-audit-page-row" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;cursor:pointer" onclick="this.nextElementSibling?.classList.toggle('open')">
+    <div class="siloq-audit-page-row" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;cursor:pointer" onclick="var s=this.nextElementSibling;if(s&&s.classList.contains('siloq-audit-actions')){s.style.display=s.style.display==='none'?'block':'none';this.querySelector('span[data-chev]')&&(this.querySelector('span[data-chev]').textContent=s.style.display==='block'?'▲':'▼');}">
       <div style="width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;background:<?php echo $ap_bg; ?>;color:<?php echo $ap_clr; ?>"><?php echo $ap_score; ?></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?php echo esc_html($ap_title); ?></div>
@@ -2623,7 +2623,7 @@ $audit_fresh = !empty($audit_results);
       </div>
       <button class="siloq-exclude-page-btn" data-post-id="<?php echo intval($ap['post_id'] ?? 0); ?>" onclick="event.stopPropagation();siloqExcludePage(this)" title="Remove from Siloq" style="background:none;border:none;cursor:pointer;padding:2px 5px;color:#9ca3af;font-size:10px;border-radius:4px;flex-shrink:0" onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#9ca3af'">&#10005;</button>
       <?php if (!empty($ap['actions'])): ?>
-      <span style="font-size:10px;color:#9ca3af;pointer-events:none">&#9660;</span>
+      <span data-chev style="font-size:10px;color:#9ca3af;pointer-events:none">&#9660;</span>
       <?php endif; ?>
     </div>
     <?php if (!empty($ap['actions'])): ?>
