@@ -149,11 +149,50 @@ class Siloq_Schema_Architect {
         $external       = self::detect_external_schema( $post_id );
         $conflict_mode  = self::get_setting( 'conflict_mode', 'replace' );
 
+        // Runtime scan: check current output buffer for JSON-LD blocks already output this request.
+        // Catches cases where AIOSEO fires wp_head before or after us in the same request.
+        $runtime_detected_types = array();
+        if ( ob_get_level() > 0 ) {
+            $buf = ob_get_contents();
+            if ( $buf ) {
+                preg_match_all(
+                    '/\<script[^>]+type=["\']application\/ld\+json["\'][^>]*\>(.*?)\<\/script\>/si',
+                    $buf,
+                    $ld_matches
+                );
+                foreach ( $ld_matches[1] as $ld_block ) {
+                    $decoded = json_decode( $ld_block, true );
+                    if ( isset( $decoded['@type'] ) ) {
+                        $runtime_detected_types[] = $decoded['@type'];
+                    }
+                    if ( isset( $decoded['@graph'] ) && is_array( $decoded['@graph'] ) ) {
+                        foreach ( $decoded['@graph'] as $node ) {
+                            if ( isset( $node['@type'] ) ) {
+                                $runtime_detected_types[] = $node['@type'];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // FAQPage, WebPage, WebSite — Google rejects both if two sources output these simultaneously.
+        // Always skip if external detection flags them, regardless of conflict_mode.
+        $never_duplicate = array( 'FAQPage', 'WebPage', 'WebSite' );
+
         foreach ( $schemas as $schema ) {
             $json_ld = json_decode( $schema->schema_json, true );
             if ( ! $json_ld ) continue;
 
             if ( $external && in_array( $schema->schema_type, $external ) && $conflict_mode === 'skip' ) {
+                continue;
+            }
+
+            if ( $external && in_array( $schema->schema_type, $never_duplicate ) && in_array( $schema->schema_type, $external ) ) {
+                continue;
+            }
+
+            if ( in_array( $schema->schema_type, $never_duplicate ) && in_array( $schema->schema_type, $runtime_detected_types ) ) {
                 continue;
             }
 

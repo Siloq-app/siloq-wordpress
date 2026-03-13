@@ -126,7 +126,10 @@ class Siloq_Agent_Ready {
         $type_label = $type_labels[ $biz_type ] ?? 'Business';
         $location   = trim( $city . ( $city && $state ? ', ' : '' ) . $state );
 
-        $city_pages = self::get_city_pages();
+        $content_pages = self::get_site_content_pages();
+        $hub_pages     = $content_pages['hub_pages'];
+        $service_pages = $content_pages['service_pages'];
+        $city_pages    = $content_pages['city_pages'];
 
         $L = []; // lines
 
@@ -140,6 +143,16 @@ class Siloq_Agent_Ready {
         if ( $location )      $L[] = "Location: {$location}";
         if ( $founding_year ) $L[] = "Founded: {$founding_year}";
         $L[] = "Website: {$site_url}";
+        $phone   = get_option( 'siloq_phone', '' );
+        $address = get_option( 'siloq_address', '' );
+        $zip     = get_option( 'siloq_zip', '' );
+        if ( $phone ) {
+            $L[] = "Phone: {$phone}";
+        }
+        if ( $address ) {
+            $full_addr = trim( $address . ( $zip ? ", {$zip}" : '' ) . ( $location ? ", {$location}" : '' ) );
+            $L[] = "Address: {$full_addr}";
+        }
         $L[] = "Authority Manifest: {$site_url}.well-known/authority-manifest.json";
         $L[] = '';
 
@@ -184,9 +197,24 @@ class Siloq_Agent_Ready {
         }
         $L[] = '';
 
-        // City pages
+        if ( ! empty( $hub_pages ) ) {
+            $L[] = '## Hub Pages';
+            foreach ( $hub_pages as $hp ) {
+                $L[] = "- {$hp['title']}: {$hp['url']}";
+            }
+            $L[] = '';
+        }
+
+        if ( ! empty( $service_pages ) ) {
+            $L[] = '## Service Pages';
+            foreach ( array_slice( $service_pages, 0, 30 ) as $sp ) {
+                $L[] = "- {$sp['title']}: {$sp['url']}";
+            }
+            $L[] = '';
+        }
+
         if ( ! empty( $city_pages ) ) {
-            $L[] = '## City Pages';
+            $L[] = '## Location Pages';
             foreach ( $city_pages as $cp ) {
                 $L[] = "- {$cp['title']}: {$cp['url']}";
             }
@@ -328,7 +356,42 @@ class Siloq_Agent_Ready {
         // Build list of missing data
         $missing = [];
         if ( ! $name )                 $missing[] = 'Business Name';
-        if ( count( $services ) < 3 )  $missing[] = count( $services ) . '/3 services';
+        // Compare hub pages on the site against the business profile services list.
+        // Flag hub pages not mentioned in profile so user knows to add them.
+        $hub_post_query = get_posts( array(
+            'post_type'   => array( 'page', 'post' ),
+            'post_status' => 'publish',
+            'numberposts' => 50,
+            'meta_query'  => array(
+                'relation' => 'OR',
+                array( 'key' => '_siloq_page_role',         'value' => 'hub',      'compare' => '=' ),
+                array( 'key' => '_siloq_page_role',         'value' => 'apex_hub', 'compare' => '=' ),
+                array( 'key' => 'page_type_classification', 'value' => 'hub',      'compare' => '=' ),
+            ),
+        ) );
+
+        $profile_services_lower = array_map( 'strtolower', array_map( 'trim', $services ) );
+        $unlisted_hubs = array();
+        foreach ( $hub_post_query as $hp ) {
+            $title_lower = strtolower( trim( $hp->post_title ) );
+            $found = false;
+            foreach ( $profile_services_lower as $ps ) {
+                if ( $ps && ( strpos( $title_lower, $ps ) !== false || strpos( $ps, $title_lower ) !== false ) ) {
+                    $found = true;
+                    break;
+                }
+            }
+            if ( ! $found ) {
+                $unlisted_hubs[] = $hp->post_title;
+            }
+        }
+
+        if ( ! empty( $unlisted_hubs ) ) {
+            update_option( 'siloq_unlisted_hub_services', wp_json_encode( array_slice( $unlisted_hubs, 0, 10 ) ), false );
+            $missing[] = count( $unlisted_hubs ) . ' service page(s) not in profile';
+        } elseif ( count( $services ) < 2 ) {
+            $missing[] = count( $services ) . '/2+ services in profile';
+        }
         if ( ! $city && empty( $areas ) ) $missing[] = 'Location';
 
         // Red: files never generated
@@ -668,6 +731,79 @@ class Siloq_Agent_Ready {
     // ─────────────────────────────────────────────────────────────────────────
     // City / service area pages
     // ─────────────────────────────────────────────────────────────────────────
+
+    private static function get_site_content_pages() {
+        $hub_pages     = array();
+        $service_pages = array();
+        $city_pages    = array();
+        $seen_urls     = array();
+
+        // URL patterns that indicate plugin internals, templates, or junk — never include in llms.txt
+        $exclude_patterns = array(
+            '?elementor_library=',
+            '?jet-engine=',
+            'home-slider',
+            'home_slider',
+            'coming-soon',
+            'coming_soon',
+            '?s=',
+            '?page_id=',
+        );
+
+        // Generic titles that indicate non-content pages
+        $skip_titles = array( 'Content area', 'Home Slider', 'Coming Soon', 'Search Results', 'Untitled', '' );
+
+        $posts = get_posts( array(
+            'post_type'   => array( 'page', 'post' ),
+            'post_status' => 'publish',
+            'numberposts' => 200,
+            'orderby'     => 'menu_order title',
+            'order'       => 'ASC',
+            'meta_query'  => array(
+                'relation' => 'OR',
+                array( 'key' => '_siloq_page_role', 'compare' => 'EXISTS' ),
+                array( 'key' => '_siloq_synced',    'compare' => 'EXISTS' ),
+            ),
+        ) );
+
+        foreach ( $posts as $p ) {
+            $url = get_permalink( $p->ID );
+            if ( ! $url ) continue;
+
+            // Filter bad URLs
+            $bad = false;
+            foreach ( $exclude_patterns as $pat ) {
+                if ( strpos( $url, $pat ) !== false ) {
+                    $bad = true;
+                    break;
+                }
+            }
+            if ( $bad ) continue;
+
+            // Deduplicate by URL
+            $url_key = rtrim( $url, '/' );
+            if ( isset( $seen_urls[ $url_key ] ) ) continue;
+            $seen_urls[ $url_key ] = true;
+
+            // Filter junk titles
+            $title = trim( $p->post_title );
+            if ( in_array( $title, $skip_titles ) || strlen( $title ) <= 3 ) continue;
+
+            $role           = get_post_meta( $p->ID, '_siloq_page_role', true );
+            $classification = get_post_meta( $p->ID, 'page_type_classification', true );
+            $effective_role = $role ?: $classification;
+
+            if ( in_array( $effective_role, array( 'hub', 'apex_hub' ) ) ) {
+                $hub_pages[] = array( 'title' => $title, 'url' => $url );
+            } elseif ( $effective_role === 'spoke' ) {
+                $city_pages[] = array( 'title' => $title, 'url' => $url );
+            } else {
+                $service_pages[] = array( 'title' => $title, 'url' => $url );
+            }
+        }
+
+        return compact( 'hub_pages', 'service_pages', 'city_pages' );
+    }
 
     private static function get_city_pages() {
         global $wpdb;

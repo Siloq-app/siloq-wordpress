@@ -3050,6 +3050,17 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
     </p>
     <?php endif; ?>
 
+    <?php
+    $unlisted_json = get_option( 'siloq_unlisted_hub_services', '' );
+    $unlisted_svcs = $unlisted_json ? json_decode( $unlisted_json, true ) : array();
+    if ( ! empty( $unlisted_svcs ) ) : ?>
+    <div style="font-size:11px;margin-top:6px;padding:6px 10px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0">
+        <strong>Service pages not in your business profile:</strong>
+        <?php echo esc_html( implode( ', ', $unlisted_svcs ) ); ?> &mdash;
+        <a href="<?php echo esc_url( admin_url( 'admin.php?page=siloq-settings&tab=business' ) ); ?>">Add to profile &rarr;</a>
+    </div>
+    <?php endif; ?>
+
     <!-- Generate / Regenerate button -->
     <div style="margin-bottom:18px;">
       <?php if ( $_agent_status['status'] === 'not_ready' ) : ?>
