@@ -114,6 +114,10 @@ class Siloq_Sync_Engine {
 
         $site_url = get_site_url();
 
+        // Respect manually excluded page IDs (set via "Remove from Siloq" button in audit).
+        $excluded_ids = get_option('siloq_excluded_page_ids', array());
+        if (!is_array($excluded_ids)) $excluded_ids = array();
+
         // Fetch one batch of posts at the given offset.
         // Using get_posts with numberposts + offset for real pagination.
         $batch_ids = get_posts( array(
@@ -127,6 +131,7 @@ class Siloq_Sync_Engine {
             'no_found_rows'          => true,
             'update_post_meta_cache' => false,
             'update_post_term_cache' => false,
+            'post__not_in'           => $excluded_ids,
         ) );
 
         // Also get total count (separate lightweight query, only on first batch)

@@ -2610,7 +2610,7 @@ $audit_fresh = !empty($audit_results);
       );
       $tc = $type_colors[$ap_type] ?? array('#6b7280','#f3f4f6');
     ?>
-    <div class="siloq-audit-page-row" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;cursor:pointer" onclick="this.querySelector('.siloq-audit-actions')?.classList.toggle('open')">
+    <div class="siloq-audit-page-row" style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e5e7eb;cursor:pointer" onclick="this.nextElementSibling?.classList.toggle('open')">
       <div style="width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;background:<?php echo $ap_bg; ?>;color:<?php echo $ap_clr; ?>"><?php echo $ap_score; ?></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?php echo esc_html($ap_title); ?></div>
@@ -2621,8 +2621,9 @@ $audit_fresh = !empty($audit_results);
           <?php endif; ?>
         </div>
       </div>
+      <button class="siloq-exclude-page-btn" data-post-id="<?php echo intval($ap['post_id'] ?? 0); ?>" onclick="event.stopPropagation();siloqExcludePage(this)" title="Remove from Siloq" style="background:none;border:none;cursor:pointer;padding:2px 5px;color:#9ca3af;font-size:10px;border-radius:4px;flex-shrink:0" onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#9ca3af'">&#10005;</button>
       <?php if (!empty($ap['actions'])): ?>
-      <span style="font-size:10px;color:#9ca3af">&#9660;</span>
+      <span style="font-size:10px;color:#9ca3af;pointer-events:none">&#9660;</span>
       <?php endif; ?>
     </div>
     <?php if (!empty($ap['actions'])): ?>
@@ -2658,6 +2659,36 @@ $audit_fresh = !empty($audit_results);
 </style>
 
 <script>
+function siloqExcludePage(btn) {
+    var postId = parseInt(btn.dataset.postId, 10);
+    if (!postId) return;
+    if (!confirm('Remove this page from Siloq? It will no longer appear in audits or be synced.')) return;
+    btn.disabled = true;
+    btn.textContent = '…';
+    jQuery.post(ajaxurl, {
+        action: 'siloq_exclude_page',
+        nonce: siloqDash.nonce,
+        post_id: postId
+    }, function(resp) {
+        if (resp.success) {
+            // Remove the whole row + its sibling actions panel from the DOM
+            var row = btn.closest('.siloq-audit-page-row');
+            var next = row ? row.nextElementSibling : null;
+            if (next && next.classList.contains('siloq-audit-actions')) next.remove();
+            if (row) row.remove();
+        } else {
+            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Failed to exclude.';
+            alert(msg);
+            btn.disabled = false;
+            btn.textContent = '✕';
+        }
+    }).fail(function() {
+        alert('Network error — please try again.');
+        btn.disabled = false;
+        btn.textContent = '✕';
+    });
+}
+
 function siloqRunAudit(btn) {
     btn.disabled = true;
     btn.textContent = 'Running...';
