@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.190] — 2026-03-14
+
+### Added
+- **Depth Engine tab** — new admin tab between SEO/GEO Plan and Pages. Silo selector dropdown fetches silos from the API, displays 4 score cards (Semantic Density, Topical Closure, Coverage Breadth, Freshness) color-coded by threshold (green/yellow/orange/red), mistake flag alerts, and a collapsible Gap Report with Critical Gaps, Thin Content, and Standard Gaps sections. Each gap item shows a priority badge and an "Add to Plan" button that pushes the subtopic to the SEO plan via the API.
+- **Run Depth Scan button** — triggers AI subtopic map generation then refreshes depth scores in one click.
+- **AJAX endpoints** — `siloq_get_silos`, `siloq_get_depth_scores`, `siloq_get_gap_report`, `siloq_run_depth_scan`, `siloq_add_to_plan` — all proxy to the Siloq Topical Depth Engine API.
+
 ## [1.5.117] — 2026-03-06
 
 ### Added
