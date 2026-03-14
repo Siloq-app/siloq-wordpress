@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.189
+ * Version: 1.5.190
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.189');
+define('SILOQ_VERSION', '1.5.190');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -419,6 +419,13 @@ class Siloq_Connector {
         // Brand Voice settings
         add_action('wp_ajax_siloq_save_brand_voice', array('Siloq_Admin', 'ajax_save_brand_voice'));
         add_action('wp_ajax_siloq_sync_brand_voice', array('Siloq_Admin', 'ajax_sync_brand_voice'));
+
+        // Depth Engine handlers
+        add_action('wp_ajax_siloq_get_silos', array('Siloq_Admin', 'ajax_get_silos'));
+        add_action('wp_ajax_siloq_get_depth_scores', array('Siloq_Admin', 'ajax_get_depth_scores'));
+        add_action('wp_ajax_siloq_get_gap_report', array('Siloq_Admin', 'ajax_get_gap_report'));
+        add_action('wp_ajax_siloq_run_depth_scan', array('Siloq_Admin', 'ajax_run_depth_scan'));
+        add_action('wp_ajax_siloq_add_to_plan', array('Siloq_Admin', 'ajax_add_to_plan'));
 
         // Intelligence endpoint (Generate SEO Plan button)
         add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));

@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.190] — 2026-03-14
+
+### Added
+- **Depth Engine tab** — new WP admin tab with silo selector, score cards (Semantic Density, Topical Closure, Coverage Breadth, Freshness), collapsible gap report (Critical/Thin/Standard), and Add to Plan buttons.
+- **AJAX endpoints** — `siloq_get_silos`, `siloq_get_depth_scores`, `siloq_get_gap_report`, `siloq_run_depth_scan`, `siloq_add_to_plan`.
+
 ## [1.5.117] — 2026-03-06
 
 ### Added
