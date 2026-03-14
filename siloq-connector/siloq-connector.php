@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.192
+ * Version: 1.5.193
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -366,6 +366,10 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_bulk_apply_schema',         array('Siloq_Admin', 'ajax_bulk_apply_schema'));
         add_action('wp_ajax_siloq_detect_service_hub',         array($this, 'ajax_detect_service_hub'));
         add_action('wp_ajax_siloq_toggle_redirect',            array('Siloq_Admin', 'ajax_toggle_redirect'));
+        // Reposition + Rename intelligence (v1.5.193)
+        add_action('wp_ajax_siloq_reposition_page',             array('Siloq_Admin', 'ajax_reposition_page'));
+        add_action('wp_ajax_siloq_approve_rename',              array('Siloq_Admin', 'ajax_approve_rename'));
+        add_action('wp_ajax_siloq_dismiss_rename',              array('Siloq_Admin', 'ajax_dismiss_rename'));
 
         // Page role override
         add_action('wp_ajax_siloq_set_page_role', array($this, 'ajax_set_page_role'));

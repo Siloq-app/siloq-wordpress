@@ -2104,21 +2104,53 @@ foreach ($all_synced_pages as $hp) {
     $analysis_raw = get_post_meta($hp->ID, '_siloq_analysis_data', true);
     $analysis = is_array($analysis_raw) ? $analysis_raw : (is_string($analysis_raw) ? json_decode($analysis_raw, true) : array());
     $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : '';
-    $children = get_posts(array('post_type' => 'any', 'post_parent' => $hp->ID, 'post_status' => 'publish', 'posts_per_page' => -1));
-    $is_hub = ($page_type === 'hub') || ($page_type === 'apex_hub') || (count($children) > 0 && $hp->post_parent == 0);
+    // Primary: WP post_parent children
+    $children = get_posts(array(
+        'post_type'      => 'any',
+        'post_parent'    => $hp->ID,
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+    ));
+
+    // Secondary: URL-path children (handles /our-services/ vs /services/ mismatch)
+    $hub_path      = trim( parse_url( get_permalink( $hp->ID ), PHP_URL_PATH ), '/' );
+    $url_children  = array();
+    $parent_mismatch_ids = array();
+    if ( $hub_path ) {
+        foreach ( $all_synced_pages as $candidate ) {
+            if ( $candidate->ID === $hp->ID ) continue;
+            $candidate_path = trim( parse_url( get_permalink( $candidate->ID ), PHP_URL_PATH ), '/' );
+            $hub_slug = basename( $hub_path );
+            $candidate_segments = explode( '/', $candidate_path );
+            if ( count( $candidate_segments ) >= 2 ) {
+                $parent_slug = $candidate_segments[ count($candidate_segments) - 2 ];
+                if ( $parent_slug === $hub_slug || strpos( $candidate_path, $hub_path . '/' ) === 0 ) {
+                    $already_child = false;
+                    foreach ( $children as $c ) { if ( $c->ID === $candidate->ID ) { $already_child = true; break; } }
+                    if ( ! $already_child ) {
+                        $url_children[] = $candidate;
+                        $parent_mismatch_ids[] = $candidate->ID;
+                    }
+                }
+            }
+        }
+    }
+    $all_children  = array_merge( $children, $url_children );
+    $is_hub = ($page_type === 'hub') || ($page_type === 'apex_hub') || (count($all_children) > 0 && $hp->post_parent == 0);
     if (!$is_hub) { $non_hub_ids[] = $hp->ID; continue; }
     $score = isset($analysis['score']) ? intval($analysis['score']) : 0;
     $missing_supporting = isset($analysis['missing_supporting']) ? (array)$analysis['missing_supporting'] : array();
     $hub_data[] = array(
-        'id'           => $hp->ID,
-        'title'        => get_the_title($hp->ID),
-        'url'          => get_permalink($hp->ID),
-        'edit_url'     => get_edit_post_link($hp->ID, 'raw'),
-        'elementor_url'=> admin_url('post.php?post=' . $hp->ID . '&action=elementor'),
-        'score'        => $score,
-        'children'     => $children,
-        'missing'      => $missing_supporting,
-        'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
+        'id'                   => $hp->ID,
+        'title'                => get_the_title($hp->ID),
+        'url'                  => get_permalink($hp->ID),
+        'edit_url'             => get_edit_post_link($hp->ID, 'raw'),
+        'elementor_url'        => admin_url('post.php?post=' . $hp->ID . '&action=elementor'),
+        'score'                => $score,
+        'children'             => $all_children,
+        'missing'              => $missing_supporting,
+        'keyword'              => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
+        'parent_mismatch_ids'  => $parent_mismatch_ids,
     );
 }
 // If no hubs found (flat site), use top-level pages as hubs
@@ -2150,6 +2182,95 @@ if (empty($hub_data)) {
             'missing'      => $missing_supporting,
             'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
         );
+    }
+}
+
+// ── Reposition check: location pages filed under services hub ──
+$service_cities = json_decode( get_option('siloq_service_cities', '[]'), true );
+if (!is_array($service_cities)) $service_cities = array();
+$service_areas = json_decode( get_option('siloq_service_areas', '[]'), true );
+if (!is_array($service_areas)) $service_areas = array();
+$all_cities = array_unique(array_merge($service_cities, $service_areas));
+
+foreach ($hub_data as $hub) {
+    $hub_url = strtolower($hub['url']);
+    if (strpos($hub_url, 'service-area') !== false || strpos($hub_url, 'locations') !== false) continue;
+
+    // Find the service-areas hub (for reposition target)
+    $sa_hub_id = null;
+    foreach ($hub_data as $h2) {
+        if (strpos(strtolower($h2['url']), 'service-area') !== false || strpos(strtolower($h2['url']), 'locations') !== false) {
+            $sa_hub_id = $h2['id'];
+            break;
+        }
+    }
+
+    foreach ($hub['children'] as $child) {
+        $child_title = $child->post_title;
+        foreach ($all_cities as $city) {
+            $city = trim($city);
+            if (empty($city)) continue;
+            if (stripos($child_title, $city) !== false) {
+                update_post_meta($child->ID, '_siloq_reposition_flag', array(
+                    'reason'        => 'location_under_services',
+                    'city'          => $city,
+                    'current_hub'   => $hub['id'],
+                    'target_hub_id' => $sa_hub_id,
+                    'flagged_at'    => current_time('mysql'),
+                ));
+                break; // one flag per page
+            }
+        }
+    }
+}
+
+// ── Rename recommendation: service page title contains city = cannibalization risk ──
+$primary_services = json_decode( get_option('siloq_primary_services', '[]'), true );
+if (!is_array($primary_services)) $primary_services = array();
+
+foreach ($hub_data as $hub) {
+    $hub_url = strtolower($hub['url']);
+    if (strpos($hub_url, 'service-area') !== false) continue;
+
+    foreach ($hub['children'] as $child) {
+        $child_title = $child->post_title;
+
+        // Check if title has a city name
+        $city_in_title = null;
+        foreach ($all_cities as $city) {
+            $city = trim($city);
+            if (empty($city)) continue;
+            if (stripos($child_title, $city) !== false) {
+                $city_in_title = $city;
+                break;
+            }
+        }
+        if (!$city_in_title) continue;
+
+        // Check if a dedicated city page exists for this city
+        $city_page_exists = false;
+        foreach ($all_synced_pages as $p) {
+            $p_meta = get_post_meta($p->ID, '_siloq_page_type', true);
+            if ($p_meta === 'city' || $p_meta === 'service_area') {
+                if (stripos($p->post_title, $city_in_title) !== false) {
+                    $city_page_exists = true;
+                    break;
+                }
+            }
+        }
+
+        // Build suggested rename: strip city name + MO/state suffix
+        $suggested = preg_replace('/\s+(serving|in|near)?\s+' . preg_quote($city_in_title, '/') . '(\s*,?\s*(MO|KS|Kansas City|Missouri))?/i', '', $child_title);
+        $suggested = trim($suggested);
+
+        update_post_meta($child->ID, '_siloq_rename_suggestion', array(
+            'reason'          => 'city_in_service_title',
+            'city'            => $city_in_title,
+            'current_title'   => $child_title,
+            'suggested_title' => $suggested ?: $child_title,
+            'city_page_exists'=> $city_page_exists,
+            'flagged_at'      => current_time('mysql'),
+        ));
     }
 }
 
@@ -3469,6 +3590,154 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 </script>
 <?php endif; ?>
 <!-- ── /URL Restructure ─────────────────────────────────────────────────── -->
+
+<!-- ── Reposition Recommendations ── -->
+<?php
+$_reposition_pages = get_posts(array(
+    'post_type'   => 'any',
+    'post_status' => 'publish',
+    'numberposts' => -1,
+    'meta_query'  => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS')),
+));
+if ( ! empty( $_reposition_pages ) ) : ?>
+<div class="siloq-card" style="margin-bottom:16px;border:2px solid #f97316;">
+    <h3 style="font-size:15px;font-weight:700;margin:0 0 10px;color:#1e293b;">Location Pages Under Wrong Hub</h3>
+    <p style="font-size:12px;color:#64748b;margin:0 0 12px;">These pages contain a city name but are filed under your Services hub instead of Service Areas.</p>
+    <?php foreach ( $_reposition_pages as $_rp ) :
+        $_rf = get_post_meta( $_rp->ID, '_siloq_reposition_flag', true );
+        if ( ! is_array( $_rf ) ) continue;
+    ?>
+    <div class="siloq-reposition-row" data-post-id="<?php echo intval($_rp->ID); ?>" data-target-hub="<?php echo intval( isset($_rf['target_hub_id']) ? $_rf['target_hub_id'] : 0 ); ?>" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin-bottom:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+            <span style="font-size:13px;font-weight:600;color:#9a3412;"><?php echo esc_html( $_rp->post_title ); ?></span>
+            <span style="font-size:11px;color:#c2410c;margin-left:8px;">is a location page filed under Services. Move to Service Areas.</span>
+        </div>
+        <div style="display:flex;gap:6px;">
+            <button type="button" class="siloq-btn siloq-btn--primary siloq-btn--sm siloq-reposition-move-btn" style="font-size:11px;padding:4px 10px;">Move to Service Areas</button>
+        </div>
+    </div>
+    <?php endforeach; ?>
+    <div id="siloq-reposition-msg" style="display:none;margin-top:10px;font-size:12px;padding:7px 12px;border-radius:6px;"></div>
+</div>
+<?php endif; ?>
+
+<!-- ── Rename Recommendations ── -->
+<?php
+$_rename_pages = get_posts(array(
+    'post_type'   => 'any',
+    'post_status' => 'publish',
+    'numberposts' => -1,
+    'meta_query'  => array(array('key' => '_siloq_rename_suggestion', 'compare' => 'EXISTS')),
+));
+$_rename_with_city = array();
+foreach ( $_rename_pages as $_rnp ) {
+    $_rs = get_post_meta( $_rnp->ID, '_siloq_rename_suggestion', true );
+    if ( is_array( $_rs ) && ! empty( $_rs['city_page_exists'] ) ) {
+        $_rename_with_city[] = array( 'post' => $_rnp, 'meta' => $_rs );
+    }
+}
+if ( ! empty( $_rename_with_city ) ) : ?>
+<div class="siloq-card" style="margin-bottom:16px;border:2px solid #eab308;">
+    <h3 style="font-size:15px;font-weight:700;margin:0 0 10px;color:#1e293b;">Rename Recommendations — City in Service Title</h3>
+    <p style="font-size:12px;color:#64748b;margin:0 0 12px;">These service pages target a city name but you have a dedicated city page. Renaming removes cannibalization risk.</p>
+    <?php foreach ( $_rename_with_city as $_rc ) :
+        $_rnp = $_rc['post'];
+        $_rs  = $_rc['meta'];
+    ?>
+    <div class="siloq-rename-row" data-post-id="<?php echo intval($_rnp->ID); ?>" data-new-title="<?php echo esc_attr( $_rs['suggested_title'] ); ?>" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin-bottom:6px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+            <span style="font-size:13px;font-weight:600;color:#854d0e;"><?php echo esc_html( $_rs['current_title'] ); ?></span>
+            <span style="font-size:11px;color:#a16207;margin-left:6px;">targets <strong><?php echo esc_html( $_rs['city'] ); ?></strong> but you have a dedicated city page.</span>
+            <div style="font-size:11px;color:#65a30d;margin-top:2px;">Suggested: <strong><?php echo esc_html( $_rs['suggested_title'] ); ?></strong></div>
+        </div>
+        <div style="display:flex;gap:6px;">
+            <button type="button" class="siloq-btn siloq-btn--primary siloq-btn--sm siloq-rename-approve-btn" style="font-size:11px;padding:4px 10px;">Approve Rename</button>
+            <button type="button" class="siloq-btn siloq-btn--outline siloq-btn--sm siloq-rename-dismiss-btn" style="font-size:11px;padding:4px 10px;">Dismiss</button>
+        </div>
+    </div>
+    <?php endforeach; ?>
+    <div id="siloq-rename-msg" style="display:none;margin-top:10px;font-size:12px;padding:7px 12px;border-radius:6px;"></div>
+</div>
+<?php endif; ?>
+
+<script type="text/javascript">
+(function($) {
+    var _ajaxUrl = (typeof siloqAjax !== 'undefined' ? siloqAjax.ajaxurl : ajaxurl);
+    var _nonce   = (typeof siloqAjax !== 'undefined' ? siloqAjax.nonce : '');
+
+    // Reposition: Move to Service Areas
+    $(document).on('click', '.siloq-reposition-move-btn', function() {
+        var $btn = $(this);
+        var $row = $btn.closest('.siloq-reposition-row');
+        var postId    = $row.data('post-id');
+        var targetHub = $row.data('target-hub');
+        $btn.prop('disabled', true).text('Moving...');
+        $.post(_ajaxUrl, {
+            action: 'siloq_reposition_page',
+            nonce: _nonce,
+            post_id: postId,
+            target_hub_id: targetHub
+        }, function(r) {
+            if (r.success) {
+                $row.css({'background':'#ecfdf5','border-color':'#6ee7b7'});
+                $btn.text('Moved').css('color','#059669');
+            } else {
+                $btn.prop('disabled', false).text('Move to Service Areas');
+                $('#siloq-reposition-msg').css({'background':'#fee2e2','color':'#991b1b','border':'1px solid #fca5a5'}).text(r.data || 'Failed').show();
+            }
+        }).fail(function() {
+            $btn.prop('disabled', false).text('Move to Service Areas');
+        });
+    });
+
+    // Rename: Approve
+    $(document).on('click', '.siloq-rename-approve-btn', function() {
+        var $btn = $(this);
+        var $row = $btn.closest('.siloq-rename-row');
+        var postId   = $row.data('post-id');
+        var newTitle = $row.data('new-title');
+        $btn.prop('disabled', true).text('Renaming...');
+        $.post(_ajaxUrl, {
+            action: 'siloq_approve_rename',
+            nonce: _nonce,
+            post_id: postId,
+            new_title: newTitle
+        }, function(r) {
+            if (r.success) {
+                $row.css({'background':'#ecfdf5','border-color':'#6ee7b7'});
+                $btn.text('Renamed').css('color','#059669');
+                $row.find('.siloq-rename-dismiss-btn').remove();
+            } else {
+                $btn.prop('disabled', false).text('Approve Rename');
+                $('#siloq-rename-msg').css({'background':'#fee2e2','color':'#991b1b','border':'1px solid #fca5a5'}).text(r.data || 'Failed').show();
+            }
+        }).fail(function() {
+            $btn.prop('disabled', false).text('Approve Rename');
+        });
+    });
+
+    // Rename: Dismiss
+    $(document).on('click', '.siloq-rename-dismiss-btn', function() {
+        var $btn = $(this);
+        var $row = $btn.closest('.siloq-rename-row');
+        var postId = $row.data('post-id');
+        $btn.prop('disabled', true).text('Dismissing...');
+        $.post(_ajaxUrl, {
+            action: 'siloq_dismiss_rename',
+            nonce: _nonce,
+            post_id: postId
+        }, function(r) {
+            if (r.success) {
+                $row.slideUp(200, function() { $row.remove(); });
+            } else {
+                $btn.prop('disabled', false).text('Dismiss');
+            }
+        }).fail(function() {
+            $btn.prop('disabled', false).text('Dismiss');
+        });
+    });
+}(jQuery));
+</script>
 
 <!-- Section 2: Priority Actions -->
                     <div class="siloq-card" style="margin-bottom:16px;">
@@ -7409,6 +7678,104 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
         $ok = Siloq_Redirect_Manager::get_instance()->toggle_redirect( $id );
         wp_send_json_success( [ 'toggled' => $ok ] );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REPOSITION + RENAME AJAX HANDLERS  (v1.5.193)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Reposition a page: set post_parent to target hub, create 301 redirect, clear flag.
+     */
+    public static function ajax_reposition_page() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Unauthorized' );
+        }
+        $post_id       = intval( $_POST['post_id'] ?? 0 );
+        $target_hub_id = intval( $_POST['target_hub_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( 'Missing post_id.' );
+        }
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            wp_send_json_error( 'Post not found.' );
+        }
+        $old_url = get_permalink( $post_id );
+
+        // Update parent
+        wp_update_post( array(
+            'ID'          => $post_id,
+            'post_parent' => $target_hub_id,
+        ) );
+
+        // Create 301 redirect from old URL to new URL
+        $new_url  = get_permalink( $post_id );
+        $old_path = trim( parse_url( $old_url, PHP_URL_PATH ), '/' );
+        $new_path = trim( parse_url( $new_url, PHP_URL_PATH ), '/' );
+        if ( $old_path !== $new_path && class_exists( 'Siloq_Redirect_Manager' ) ) {
+            Siloq_Redirect_Manager::get_instance()->add_redirect( '/' . $old_path, '/' . $new_path, 301 );
+        }
+
+        // Clear flag
+        delete_post_meta( $post_id, '_siloq_reposition_flag' );
+
+        wp_send_json_success( array( 'old_url' => $old_url, 'new_url' => $new_url ) );
+    }
+
+    /**
+     * Approve a rename: update post_title + post_name, clear meta.
+     */
+    public static function ajax_approve_rename() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Unauthorized' );
+        }
+        $post_id   = intval( $_POST['post_id'] ?? 0 );
+        $new_title = sanitize_text_field( $_POST['new_title'] ?? '' );
+        if ( ! $post_id || ! $new_title ) {
+            wp_send_json_error( 'Missing post_id or new_title.' );
+        }
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            wp_send_json_error( 'Post not found.' );
+        }
+        $old_url = get_permalink( $post_id );
+
+        wp_update_post( array(
+            'ID'         => $post_id,
+            'post_title' => $new_title,
+            'post_name'  => sanitize_title( $new_title ),
+        ) );
+
+        // Create 301 redirect from old URL to new URL
+        $new_url  = get_permalink( $post_id );
+        $old_path = trim( parse_url( $old_url, PHP_URL_PATH ), '/' );
+        $new_path = trim( parse_url( $new_url, PHP_URL_PATH ), '/' );
+        if ( $old_path !== $new_path && class_exists( 'Siloq_Redirect_Manager' ) ) {
+            Siloq_Redirect_Manager::get_instance()->add_redirect( '/' . $old_path, '/' . $new_path, 301 );
+        }
+
+        // Clear meta
+        delete_post_meta( $post_id, '_siloq_rename_suggestion' );
+
+        wp_send_json_success( array( 'new_title' => $new_title, 'old_url' => $old_url, 'new_url' => $new_url ) );
+    }
+
+    /**
+     * Dismiss a rename suggestion.
+     */
+    public static function ajax_dismiss_rename() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Unauthorized' );
+        }
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( 'Missing post_id.' );
+        }
+        delete_post_meta( $post_id, '_siloq_rename_suggestion' );
+        wp_send_json_success();
     }
 
     // ═══════════════════════════════════════════════════════════════
