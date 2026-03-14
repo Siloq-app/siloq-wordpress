@@ -4726,6 +4726,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         'foot_traffic'      => 'More foot traffic',
         'brand_awareness'   => 'Build brand awareness',
         'service_rankings'  => 'Rank for specific services',
+        'geo_citations'     => 'Rank in AI assistants (ChatGPT, Gemini, Perplexity)',
     );
     foreach ($goal_options as $val => $label): ?>
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;">
