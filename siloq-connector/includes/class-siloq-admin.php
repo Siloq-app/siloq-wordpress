@@ -4837,14 +4837,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             if (v) keywords.push(v);
         });
 
-        var postData = {
-            action: 'siloq_save_goals_tab',
-            nonce: (typeof siloqDash !== 'undefined') ? siloqDash.nonce : '',
-            primary_goal: primaryGoal,
-            'priority_services[]': services,
-            'priority_cities[]': cities,
-            'target_keywords[]': keywords
-        };
+        var nonce = (typeof siloqAdminData !== 'undefined') ? siloqAdminData.nonce : ((typeof siloqDash !== 'undefined') ? siloqDash.nonce : '');
+        var postData = $.param({action: 'siloq_save_goals_tab', nonce: nonce, primary_goal: primaryGoal})
+            + '&' + $.param({'priority_services[]': services})
+            + '&' + $.param({'priority_cities[]': cities})
+            + '&' + $.param({'target_keywords[]': keywords});
 
         $.post(ajaxurl, postData, function(res){
             $btn.prop('disabled', false).text('💾 Save Goals');
