@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.201
+ * Version: 1.5.202
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -2453,70 +2453,122 @@ RULES:
         // Build primary keyword: "Electrician CityName, ST"
         $primary_keyword = ucfirst($service_label) . ' ' . $city_name . ($biz_state ? ', ' . $biz_state : '');
 
-        // Try Claude first — full Siloq City Page Spec v1.0
+        // Try Claude first — Siloq City Page Spec v2.0 (Universal — all industries)
         $anthropic_key = get_option('siloq_anthropic_api_key', '');
+        // Gather additional entity context for the prompt
+        $biz_type_raw   = get_option('siloq_business_type', 'local_service');
+        $biz_license    = get_option('siloq_license_info', '');
+        $biz_phone_disp = $phone_raw ? $phone_raw : '';
+
+        // Map business_type slug to human label + industry context triggers
+        $industry_context_map = array(
+            'electrical'       => array('label'=>'Electrical Contractor','triggers'=>'housing stock age, permit requirements by city, electrical code adoption (NEC version), EV charger demand, panel amperage common in local housing era'),
+            'hvac'             => array('label'=>'HVAC Contractor','triggers'=>'climate zone, heating/cooling degree days, common system types in local housing, utility rebate programs, seasonal demand patterns'),
+            'plumbing'         => array('label'=>'Plumbing Contractor','triggers'=>'water quality (hard water, mineral content), common pipe materials by housing age, sewer system type (public vs septic), freeze risk'),
+            'roofing'          => array('label'=>'Roofing Contractor','triggers'=>'storm/hail frequency, wind zone, common roofing materials in area, local building code wind requirements, insurance claim patterns'),
+            'pest_control'     => array('label'=>'Pest Control','triggers'=>'regional pest species prevalence, climate/moisture factors, termite risk zone, local vegetation'),
+            'landscaping'      => array('label'=>'Landscaping','triggers'=>'climate zone, plant hardiness zone, HOA prevalence and restrictions, water restriction status, seasonal demand'),
+            'general_contractor'=> array('label'=>'General Contractor','triggers'=>'housing stock age, local permit office requirements, common renovation needs by area, HOA restrictions'),
+            'dental'           => array('label'=>'Dental Practice','triggers'=>'population demographics and growth, insurance coverage patterns, specialist vs family practice availability, school-age family concentration'),
+            'medical'          => array('label'=>'Medical Practice','triggers'=>'population demographics, common conditions in area, insurance patterns, proximity to hospitals or urgent care'),
+            'legal'            => array('label'=>'Law Firm','triggers'=>'state-specific law, local court systems, jurisdiction procedures, local accident/incident patterns, local industry'),
+            'financial'        => array('label'=>'Financial Services','triggers'=>'local industry concentration, regional tax considerations, local business demographics, retirement community presence'),
+            'accounting'       => array('label'=>'Accounting Firm','triggers'=>'local business industry mix, seasonal tax patterns, local payroll complexity'),
+            'real_estate'      => array('label'=>'Real Estate','triggers'=>'local market conditions, neighborhood dynamics, school district reputation, recent growth patterns'),
+            'auto_repair'      => array('label'=>'Auto Repair','triggers'=>'climate effects on vehicles (rust, heat, cold), local commute distances, common vehicle types in market'),
+            'cleaning'         => array('label'=>'Cleaning Service','triggers'=>'housing type mix (apartments vs houses), local allergen/air quality factors, HOA service needs, rental property concentration'),
+            'remodeling'       => array('label'=>'Remodeling Contractor','triggers'=>'housing stock age and style, load-bearing wall prevalence, permit requirements, HOA design restrictions'),
+            'painting'         => array('label'=>'Painting Contractor','triggers'=>'housing age and exterior material, climate effects on paint, HOA color restrictions'),
+            'flooring'         => array('label'=>'Flooring Contractor','triggers'=>'housing age and subfloor type, humidity levels affecting wood, local style preferences'),
+            'concrete'         => array('label'=>'Concrete Contractor','triggers'=>'soil type, freeze-thaw cycles, local code for flatwork, drainage requirements'),
+            'chiropractic'     => array('label'=>'Chiropractic Practice','triggers'=>'local occupation types (desk workers, manual labor), sports activity levels, auto accident rate'),
+            'physical_therapy' => array('label'=>'Physical Therapy Practice','triggers'=>'local recreational sports culture, aging demographics, post-surgical referral patterns'),
+            'optometry'        => array('label'=>'Optometry Practice','triggers'=>'school-age family density, aging population, insurance network coverage'),
+            'insurance'        => array('label'=>'Insurance Agency','triggers'=>'local risk factors (flood zone, storm risk, crime rate), local industry, homeowner vs renter mix'),
+        );
+        $industry_default = array('label' => ucwords(str_replace('_',' ',$biz_type_raw)), 'triggers' => 'local housing or business characteristics, growth patterns, demographic factors, and any city-specific regulations or conditions relevant to this service');
+        $industry_info = isset($industry_context_map[$biz_type_raw]) ? $industry_context_map[$biz_type_raw] : $industry_default;
+        $industry_label   = $industry_info['label'];
+        $industry_triggers = $industry_info['triggers'];
+
         if (!empty($anthropic_key)) {
-            $system = 'You are an expert SEO content writer. You build city service pages that comply with the Siloq City Page Optimization Spec v1.0. This spec exists because keyword-stuffed city pages with the city name in every heading are over-optimized and penalized. Your job is to write pages that pass the genuine local substance test: "Could this page exist if the business had never actually served this city?" The answer must be NO — because the page contains real local knowledge, not city name substitution.
+            $system = 'You are an expert SEO content writer. You generate city service pages that comply with the Siloq City Page Optimization Spec v2.0.
 
-HARD RULES — violations disqualify the page:
-1. City name in headings: MAXIMUM 30% of total headings. H1 always counts as one. With 6 headings, city name appears in H1 + at most 1 H2. Zero additional H2s with city name is also acceptable.
-2. Page must contain at least 3 specific local references that cannot be copy-pasted for a different city.
-3. FAQ section is required — minimum 4 questions.
-4. Do NOT write generic statements like "We are proud to serve the residents of [City]" — meaningless, adds nothing.
-5. No placeholder text like "[insert detail]" or "[add statistic]".
-6. Output raw HTML only. No markdown. No code fences.';
+This spec exists because keyword-stuffed city pages fail. The core test: "Could this page exist if the business had never actually served this city?" If yes — it is a doorway page and must not be published. Your job is to ensure the answer is NO.
 
-            $user_prompt = 'Write a city service page for ' . $biz_name . '.
+UNIVERSAL HARD RULES (all industries, all cities):
+1. HEADING RULE — HARD STOP: City name allowed in MAXIMUM 30% of total headings. H1 always has the city name (that counts as 1). Beyond H1, city name in AT MOST 1 additional H2. Using city name in 2+ additional H2s is a spec violation.
+2. LOCAL SUBSTANCE: Page must contain minimum 2 specific local geographic references (neighborhoods, landmarks, corridors, local market facts) that cannot be copy-pasted for a different city.
+3. FAQ REQUIRED: Minimum 4 questions. Every FAQ answer must contain at least one city-specific reference. Generic answers fail.
+4. NO FABRICATION: If specific local details are not provided, write factual general content and flag placeholders. Do not invent job examples, statistics, or local facts.
+5. NO GENERIC PHRASES: "We are proud to serve the residents of [City]" adds zero value. "We are committed to quality" is not a trust signal. Do not include these.
+6. ONE PRIMARY CTA: Not three competing options. Single clear action.
+7. NO CITY NAME IN CTA: "Ready to schedule in [City]?" is a spec violation. Use "Schedule Your Service Call" or "Call Us Today."
+8. Output raw HTML only. No markdown. No code fences. No placeholder brackets like [insert here].';
 
-Business: ' . $biz_name . '
-Phone: ' . $phone_raw . '
-Business base location: ' . $location . '
-Target city: ' . $city_name . ($biz_state ? ', ' . $biz_state : '') . '
+            $user_prompt = 'Generate a city service page for this business:
+
+ENTITY PROFILE:
+Business name: ' . $biz_name . '
+Industry: ' . $industry_label . '
+Business base: ' . $location . '
 Primary service: ' . $service_label . '
 All services: ' . ($services_list ? $services_list : $service_label) . '
-Page H1: ' . $primary_keyword . ($hub_url ? "\nService Areas hub: " . $hub_title . ' (' . $hub_url . ')' : '') . '
+Phone: ' . $biz_phone_disp . ($biz_license ? "\nLicense/credentials: " . $biz_license : '') . ($hub_url ? "\nService area hub page: " . $hub_title . ' (' . $hub_url . ')' : '') . '
 
-==== REQUIRED CONTENT STRUCTURE ====
+TARGET CITY: ' . $city_name . ($biz_state ? ', ' . $biz_state : '') . '
+PAGE H1: ' . $primary_keyword . '
 
-SECTION 1 — GEO LAYER (Layer 1 — 40-80 words, one paragraph):
-Purpose: Prove the business knows and serves ' . $city_name . ' specifically.
-Must include: business name + ' . $city_name . ' + ' . $service_label . ' + ONE specific local detail that cannot apply to any other city (housing stock age, growth pattern, geographic characteristic, local demand driver, or response time context from ' . $location . ' to ' . $city_name . ').
-Must NOT include: "We are proud to serve", generic phrases, city name substitution language.
+==== INDUSTRY LOCAL CONTEXT TRIGGERS ====
+For a ' . $industry_label . ' in ' . $city_name . ', the GEO layer should draw on: ' . $industry_triggers . '
+Research these factors for ' . $city_name . ' and embed genuine local knowledge. If you are not certain of a specific local fact, write around it using real general industry knowledge for the region rather than fabricating specifics.
 
-SECTION 2 — SEO LAYER (Layer 2 — 600+ words):
-H2 HEADING RULES — HARD STOP:
-- The H1 already contains "' . $city_name . '". That counts as 1 of your allowed city-name headings.
-- You may use "' . $city_name . '" in AT MOST 1 additional H2. Using it in more than 1 additional H2 fails the spec.
-- Most H2s must describe the SERVICE or a useful topic WITHOUT mentioning the city name.
-- CORRECT H2 examples: "Electrical Services We Offer", "Panel Upgrades and Rewiring", "Signs You Need an Electrician", "How We Work", "Why Choose a Licensed Electrician"
-- WRONG H2 examples (these all fail): "Electrical Services in ' . $city_name . '", "Why ' . $city_name . ' Homeowners Choose Us", "Electricians Serving ' . $city_name . '"
+==== REQUIRED PAGE STRUCTURE ====
 
-Body content requirements:
-- Explain what services are offered and what each involves — 2+ sentences per service with local context where genuine
-- Reference local market specifics for ' . $city_name . ': housing age, growth patterns, neighborhood context, permit requirements, or local service demand. These must be real and specific, not generic.
-- ' . ($hub_url ? 'Link to the Service Areas hub (' . $hub_title . ') naturally at least twice' : 'Reference the broader service area coverage naturally') . '
-- Self-contained paragraphs — no "as mentioned above"
+LAYER 1 — GEO (one paragraph, 60-100 words):
+Lead with this. Establish genuine entity-to-place relationship.
+Requirements:
+- Minimum 2 specific local references: neighborhoods, local market characteristics, housing stock, growth patterns, geographic context, or distance/travel context from ' . $location . ' to ' . $city_name . '
+- Must demonstrate the business actually knows this city — not city name substitution
+- Must NOT pass the template test: this paragraph cannot be reused for a different city by swapping the name
+- FORBIDDEN phrases: "We are proud to serve", "residents of [City] deserve"
 
-SECTION 3 — FAQ LAYER (required, 5-6 questions):
+LAYER 2 — SERVICE DEPTH (500+ words, multiple H2 sections):
+H2 HEADING ENFORCEMENT — CRITICAL:
+- H1 already contains "' . $city_name . '". That is heading #1 with city name.
+- You may add "' . $city_name . '" to AT MOST 1 more H2. Any more than that fails the 30% rule.
+- Write most H2s about the SERVICE ITSELF, not the location.
+- CORRECT: "Services We Provide", "When to Call a ' . ucfirst($service_label) . '", "How Our Process Works", "What to Expect", "Why Credentials Matter"
+- WRONG (spec violations): "' . ucfirst($service_label) . ' Services in ' . $city_name . '", "Why ' . $city_name . ' Residents Trust Us", "Serving ' . $city_name . ' with Quality Work"
+
+Service descriptions:
+- Each service: minimum 2 sentences (what it is + why a customer in ' . $city_name . ' specifically would need it)
+- Embed local context where genuine — housing age, local climate factors, local code requirements
+- Do not force local references into every service — only where a real connection exists
+- ' . ($hub_url ? 'Link to "' . $hub_title . '" naturally at least twice in the body' : 'Reference service area coverage naturally') . '
+
+LAYER 3 — FAQ (required, 5-6 questions):
 H2: "Frequently Asked Questions"
-Write 5-6 questions as H3 tags with 2-4 sentence answers. Question categories to cover (pick at least 3):
-- Service scope: "Do you serve [specific ' . $city_name . ' neighborhood]?" — answer must name actual neighborhoods
-- Process/logistics: "How quickly can you reach ' . $city_name . '?" — answer must give real distance/time context from ' . $location . '
-- Pricing: "What does [service] cost in ' . $city_name . '?" — answer mentions local factors affecting price
-- Credentials: "Are you licensed and insured in ' . $biz_state . '?" — answer confirms license type
-- Local specifics: a question about local housing, codes, or common local service need
+Structure: each question as H3, answer as one or more <p> tags.
+Cover at least 3 of these 5 categories:
+- SERVICE SCOPE: Does the business serve specific ' . $city_name . ' neighborhoods? Name them.
+- LOGISTICS: How does the business reach ' . $city_name . ' from ' . $location . '? Give real travel/response context.
+- PRICING: What factors affect cost for this service in ' . $city_name . '? Local factors (permits, market rates, housing age).
+- CREDENTIALS: What licenses, certifications, or insurance does the business carry? Specific to ' . ($biz_state ? $biz_state : 'this state') . '.
+- LOCAL SPECIFICS: A question about ' . $city_name . ' housing, local codes, or a common local service trigger for ' . $industry_label . '.
+Each answer MUST contain at least one ' . $city_name . '-specific reference. Generic answers fail.
+FORBIDDEN question types: "Who is the best ' . $service_label . ' in ' . $city_name . '?" — keywords dressed as questions.
 
-EVERY FAQ answer must contain at least one specific local reference to ' . $city_name . '. Generic answers that could apply to any city fail the spec.
+LAYER 4 — CRO / TRUST (1-2 paragraphs + single CTA):
+- Specific credentials: license type' . ($biz_state ? ' in ' . $biz_state : '') . ', insurance, permit practices
+- One humanizing element: named person, local office, years serving this market, or specific operational detail
+- Single CTA with phone ' . ($tel_link ? $tel_link : $biz_phone_disp) . ' as clickable tel: link
+- CTA must NOT contain "' . $city_name . '" — use "Schedule Your Service Call" or "Call Us Today"
 
-Do NOT include: keyword-stuffed questions like "Who is the best electrician in ' . $city_name . '?" — this is not a real question.
-
-SECTION 4 — CRO LAYER (Layer 3 — 1-2 paragraphs):
-Trust credentials: license type, insurance, permit-pulling practice. One humanizing element (local office, named technician, community connection, or specific operational detail).
-Single CTA: Phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as clickable tel: link. Do NOT stuff city name into CTA ("Ready to schedule in ' . $city_name . '?" is a spec violation — use "Schedule Your Service Call" or "Call Us Today" instead).
-
-==== TARGET ====
-Minimum 1,000 words. Distribution: ~15% GEO, ~45% SEO body, ~20% FAQ, ~20% CRO/trust.
-The finished page must pass this test: "Could this page exist for a business that has never served ' . $city_name . '?" — the answer must be NO.';
+==== TARGETS ====
+Total: 1,000+ words (standard city page).
+Distribution: ~15% GEO, ~45% service depth, ~20% FAQ, ~20% CRO/trust.
+Before outputting, verify: city name heading count ÷ total heading count ≤ 30%. If it fails, revise headings.';
 
             $content = $this->call_claude_for_content($system, $user_prompt);
             if (!empty($content)) {
