@@ -3041,7 +3041,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
             <div class="siloq-spoke-kw"><?php echo is_array($ms) && isset($ms['keyword']) ? esc_html('"' . $ms['keyword'] . '"') : 'Create to build topical authority'; ?></div>
             <div class="siloq-spoke-bot">
               <div class="siloq-spoke-missing-hint">Create this page</div>
-              <button class="siloq-spoke-btn create" onclick="siloqCreateDraft(this,'<?php echo esc_js(is_array($ms) && isset($ms['title']) ? $ms['title'] : 'New Supporting Page'); ?>')">+ Draft</button>
+              <button class="siloq-spoke-btn create siloq-create-page-btn" data-title="<?php echo esc_attr(is_array($ms) && isset($ms['title']) ? $ms['title'] : 'New Supporting Page'); ?>" data-type="generic">+ Create Page</button>
             </div>
           </div>
           <?php endforeach; ?>
@@ -5227,60 +5227,66 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     });
                 });
 
-                // Create a blank draft page and switch to Pages tab (for gap analysis cards)
-                function siloqCreateGapDraft(btn, title, draftType) {
+                // Shared page-creation handler — reads title/type from data attributes
+                // to avoid inline JS quote/apostrophe issues.
+                function siloqDoCreatePage(btn) {
+                    var title     = btn.getAttribute('data-title');
+                    var draftType = btn.getAttribute('data-type') || 'generic';
+                    if (!title) { btn.textContent = 'No title'; return; }
                     btn.textContent = 'Creating...';
                     btn.disabled = true;
                     jQuery.post(ajaxurl, {
-                        action: 'siloq_add_page',
-                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
-                        title: title
+                        action:     'siloq_create_draft_page',
+                        nonce:      '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                        title:      title,
+                        draft_type: draftType
                     }, function(r) {
-                        if (r && r.success) {
-                            btn.textContent = '✓ Draft Created';
+                        if (r && r.success && r.data && r.data.edit_url) {
+                            btn.textContent = '✓ Page Created';
                             btn.style.background = '#f0fdf4';
                             btn.style.color = '#16a34a';
-                            var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
-                            if (pagesBtn) { pagesBtn.click(); }
+                            btn.style.borderColor = '#bbf7d0';
+                            // Open the new page in the WP editor in a new tab
+                            window.open(r.data.edit_url, '_blank');
+                        } else if (r && r.data && r.data.cannibal) {
+                            // Page already exists — link to it instead of creating duplicate
+                            btn.textContent = '⚠ Page exists';
+                            btn.style.background = '#fffbeb';
+                            btn.style.color = '#92400e';
+                            btn.style.borderColor = '#fcd34d';
+                            btn.title = r.data.message;
+                            btn.disabled = false;
+                            if (r.data.edit_url) {
+                                btn.onclick = function(){ window.open(r.data.edit_url, '_blank'); };
+                            }
                         } else {
-                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed';
+                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
                             btn.textContent = msg;
                             btn.disabled = false;
                         }
                     }).fail(function(xhr) {
-                        btn.textContent = 'HTTP ' + xhr.status + ' — retry';
+                        btn.textContent = 'Error ' + xhr.status + ' — retry';
                         btn.disabled = false;
                     });
                 }
 
-                // Create draft post from missing spoke card
-                function siloqCreateDraft(btn, title) {
-                    btn.textContent = 'Creating...';
-                    btn.disabled = true;
-                    jQuery.post(ajaxurl, {
-                        action: 'siloq_add_page',
-                        nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
-                        title: title
-                    }, function(r) {
-                        if (r && r.success) {
-                            btn.textContent = '✓ Created';
-                            btn.style.background = '#f0fdf4';
-                            btn.style.color = '#16a34a';
-                            btn.style.boxShadow = 'none';
-                            var spoke = btn.closest('.siloq-spoke-card');
-                            if (spoke) { spoke.style.borderColor = '#22c55e'; spoke.style.borderStyle = 'solid'; }
-                            var pagesBtn = document.querySelector('[aria-controls="siloq-tab-pages"]');
-                            if (pagesBtn) { pagesBtn.click(); }
-                        } else {
-                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed';
-                            btn.textContent = msg;
-                            btn.disabled = false;
-                        }
-                    }).fail(function(xhr) {
-                        btn.textContent = 'HTTP ' + xhr.status + ' — retry';
-                        btn.disabled = false;
-                    });
+                // Legacy wrappers kept for backward compat (spoke cards etc)
+                function siloqCreateGapDraft(btn, title, draftType) {
+                    btn.setAttribute('data-title', title);
+                    btn.setAttribute('data-type', draftType || 'generic');
+                    siloqDoCreatePage(btn);
                 }
+                function siloqCreateDraft(btn, title) {
+                    btn.setAttribute('data-title', title);
+                    btn.setAttribute('data-type', 'generic');
+                    siloqDoCreatePage(btn);
+                }
+
+                // Delegated click handler for all .siloq-create-page-btn buttons
+                // (avoids inline onclick entirely — safe with apostrophes/quotes)
+                jQuery(document).on('click', '.siloq-create-page-btn', function() {
+                    siloqDoCreatePage(this);
+                });
 
                 function siloqAddSpoke(hubId) {
                     var title = prompt('Enter the title for the new supporting page:');
@@ -7184,7 +7190,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         <p style="font-size:14px;font-weight:700;color:#1e3a5f;margin:0 0 6px;"><?php echo esc_html( $card_title ); ?></p>
                         <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
                     </div>
-                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $card_title ); ?>,'service')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;">Create Draft &rarr;</button>
+                    <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-create-page-btn" data-title="<?php echo esc_attr( $card_title ); ?>" data-type="service" style="white-space:nowrap;">Create Page &rarr;</button>
                 </div>
             </div>
             <?php
@@ -7237,7 +7243,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         <p style="font-size:14px;font-weight:700;color:#2e1065;margin:0 0 6px;"><?php echo esc_html( $suggested_title ); ?></p>
                         <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
                     </div>
-                    <button onclick="siloqCreateGapDraft(this,<?php echo wp_json_encode( $suggested_title ); ?>,'city')" class="siloq-btn siloq-btn--sm siloq-btn--primary" style="white-space:nowrap;background:#7c3aed;border-color:#7c3aed;">Create Draft &rarr;</button>
+                    <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-create-page-btn" data-title="<?php echo esc_attr( $suggested_title ); ?>" data-type="city" style="white-space:nowrap;background:#7c3aed;border-color:#7c3aed;">Create Page &rarr;</button>
                 </div>
             </div>
             <?php
