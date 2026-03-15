@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.199
+ * Version: 1.5.200
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -2376,24 +2376,40 @@ Clear call to action. Business phone number as clickable tel: link. Direct the r
 
 Output raw HTML only. No markdown, no code fences. No placeholder text like "[insert here]". Start with the GEO capsule paragraph, then the SEO body with H2s, then the CRO section.';
 
-            $user_prompt = 'Write a page for ' . $biz_name . ' targeting the keyword "' . $primary_keyword . '".
+            $user_prompt = 'Write a service page for ' . $biz_name . ' about: "' . $title . '".
 
 Business: ' . $biz_name . '
 Phone: ' . $phone_raw . '
 Location: ' . $location . '
-Target page keyword: ' . $primary_keyword . '
-Page role: SERVICE SPOKE — this page ranks for a specific service. It links UP to the Services hub.' . ($hub_url ? "\nHub page to link back to: " . $hub_title . ' — ' . $hub_url : '') . '
-Service page topic: ' . $title . '
+Service topic: ' . $title . '
+Page role: SERVICE SPOKE — ranks for a specific service. Links up to the Services hub.' . ($hub_url ? "\nHub page: " . $hub_title . ' — ' . $hub_url : '') . '
 All services offered: ' . ($services_list ? $services_list : $service_lower) . '
 
-Required:
-- GEO capsule first (40-80 words, dense, mentions ' . $biz_name . ' + ' . $location . ' + ' . $service_lower . ')
-- Explain what the service is, why it matters, when to call
-- H2 headings written as questions people actually search (e.g. "How much does ' . $service_lower . ' cost?", "What happens during a ' . $service_lower . '?", "When should I call an electrician for ' . $service_lower . '?")
-- ' . ($hub_url ? 'Link to hub page (' . $hub_title . ') naturally at least twice in the body' : 'Mention the business service page naturally') . '
-- End with CTA including phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as a tel: link
-- 800+ words total
-- Do NOT use placeholder text like "[insert statistic here]" or "[add detail]"';
+CONTENT STRUCTURE (follow exactly):
+
+1. GEO CAPSULE (one paragraph, 40-80 words):
+Dense, factual. Mentions ' . $biz_name . ', ' . $location . ', and ' . $service_lower . '. Written so AI search engines can extract it as a direct answer.
+
+2. SEO BODY (600+ words):
+H2 rules — CRITICAL:
+- Write H2s as questions or topics about the SERVICE, not repeating the business name or location in every heading
+- Good examples: "What Is ' . ucwords($service_lower) . '?", "Signs You Need ' . ucwords($service_lower) . '", "How Much Does It Cost?", "What to Expect During Service", "Why This Matters for Your Home"
+- Do NOT repeat the location or business name in every H2
+- Cover: what the service is, when to call, what to expect, cost factors, safety/code context
+- ' . ($hub_url ? 'Link to "' . $hub_title . '" naturally at least twice' : '') . '
+
+3. FAQ SECTION (required):
+- H2: "Frequently Asked Questions"
+- 4-6 questions as H3 tags with 2-4 sentence answers each
+- Real questions: cost, timeline, licensing, permits, emergency availability, what\'s included
+
+4. CRO SECTION:
+Clear call to action. Phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as clickable tel: link.
+
+RULES:
+- 900+ words total
+- Do NOT use placeholder text
+- Output raw HTML only. No markdown, no code fences.';
 
             $content = $this->call_claude_for_content($system, $user_prompt);
             if (!empty($content)) {
@@ -2455,23 +2471,42 @@ Clear call to action. Business phone number as clickable tel: link. Direct the r
 
 Output raw HTML only. No markdown, no code fences. No placeholder text like "[insert here]". Start with the GEO capsule paragraph, then the SEO body with H2s, then the CRO section.';
 
-            $user_prompt = 'Write a page for ' . $biz_name . ' targeting the keyword "' . $primary_keyword . '".
+            $user_prompt = 'Write a city service page for ' . $biz_name . ' targeting: "' . $primary_keyword . '".
 
 Business: ' . $biz_name . '
 Phone: ' . $phone_raw . '
 Location: ' . $location . '
-Target page keyword: ' . $primary_keyword . '
 Target city: ' . $city_name . '
-Page role: CITY SPOKE — this page ranks for services in ' . $city_name . '. It links UP to the Service Areas hub.' . ($hub_url ? "\nHub page to link back to: " . $hub_title . ' — ' . $hub_url : '') . '
+Page role: CITY SPOKE — ranks for ' . $service_label . ' in ' . $city_name . '. Links up to the Service Areas hub.' . ($hub_url ? "\nHub page: " . $hub_title . ' — ' . $hub_url : '') . '
 Services offered: ' . ($services_list ? $services_list : $service_label) . '
 
-Required:
-- GEO capsule first (40-80 words, dense, mentions ' . $biz_name . ' + ' . $city_name . ' + ' . $service_label . ')
-- H2 headings as real search questions (e.g. "Do you serve ' . $city_name . '?", "How quickly can an electrician reach ' . $city_name . '?", "What ' . $service_label . ' services are available in ' . $city_name . '?")
-- ' . ($hub_url ? 'Link to hub page (' . $hub_title . ') naturally at least twice in the body' : 'Mention the business service areas page naturally') . '
-- End with CTA including phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as a tel: link
-- 800+ words total
-- Do NOT use placeholder text like "[insert statistic here]" or "[add detail]"';
+CONTENT STRUCTURE (follow exactly):
+
+1. GEO CAPSULE (one paragraph, 40-80 words):
+Dense, factual. Mentions ' . $biz_name . ', ' . $city_name . ', and ' . $service_label . '. Written so AI search engines can extract it as a direct answer. No marketing fluff.
+
+2. SEO BODY (600+ words, multiple H2 sections):
+H2 rules — CRITICAL:
+- Use ' . $city_name . ' in H2s NO MORE THAN ONCE. Most H2s should describe the service or question WITHOUT the city name.
+- Good H2 examples: "What Electrical Services Do We Offer?", "Signs You Need an Electrician", "Why Licensed Electricians Matter", "How to Schedule Service"
+- Bad H2 examples (do NOT do this): "Why ' . $city_name . ' Homeowners Trust Us", "' . $city_name . ' Electrical Services", "Electricians in ' . $city_name . '"
+- Write paragraphs that are genuinely useful and specific. Reference real scenarios, code requirements, or common problems.
+- ' . ($hub_url ? 'Link to "' . $hub_title . '" naturally at least twice' : '') . '
+
+3. FAQ SECTION (required):
+- H2: "Frequently Asked Questions"
+- 4-6 questions as H3 tags, each with a 2-4 sentence answer
+- Questions should be real things people search: "How much does it cost?", "Are you licensed and insured?", "Do you offer emergency service?", "How long does [service] take?", "Do you pull permits?"
+- Use FAQ markup compatible with schema (simple H3 + p structure)
+
+4. CRO SECTION (1-2 paragraphs):
+Clear call to action. Phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as clickable tel: link. Direct to hub page.
+
+RULES:
+- 900+ words total
+- Do NOT repeat ' . $city_name . ' in every sentence or heading
+- Do NOT use placeholder text like "[insert detail]" or "[add statistic]"
+- Output raw HTML only. No markdown, no code fences.';
 
             $content = $this->call_claude_for_content($system, $user_prompt);
             if (!empty($content)) {

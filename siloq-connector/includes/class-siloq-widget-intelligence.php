@@ -430,7 +430,7 @@ class Siloq_Widget_Intelligence {
                 ],
                 'body' => wp_json_encode( [
                     'model'      => 'claude-sonnet-4-6',
-                    'max_tokens' => 1024,
+                    'max_tokens' => 2048,
                     'system'     => $ai_system_prompt,
                     'messages'   => [ [ 'role' => 'user', 'content' => $edit_instruction ] ],
                 ] ),
