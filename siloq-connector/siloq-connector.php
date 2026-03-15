@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.196
+ * Version: 1.5.197
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -426,10 +426,13 @@ class Siloq_Connector {
 
         // Depth Engine handlers
         add_action('wp_ajax_siloq_get_silos', array('Siloq_Admin', 'ajax_get_silos'));
+        add_action('wp_ajax_siloq_get_local_silos', array('Siloq_Admin', 'ajax_get_local_silos'));
+        add_action('wp_ajax_siloq_save_topic_boundary', array('Siloq_Admin', 'ajax_save_topic_boundary'));
         add_action('wp_ajax_siloq_get_depth_scores', array('Siloq_Admin', 'ajax_get_depth_scores'));
         add_action('wp_ajax_siloq_get_gap_report', array('Siloq_Admin', 'ajax_get_gap_report'));
         add_action('wp_ajax_siloq_run_depth_scan', array('Siloq_Admin', 'ajax_run_depth_scan'));
         add_action('wp_ajax_siloq_add_to_plan', array('Siloq_Admin', 'ajax_add_to_plan'));
+        add_action('wp_ajax_siloq_bulk_add_to_plan', array('Siloq_Admin', 'ajax_bulk_add_to_plan'));
 
         // Intelligence endpoint (Generate SEO Plan button)
         add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));

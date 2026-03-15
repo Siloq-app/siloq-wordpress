@@ -4723,79 +4723,209 @@ if ( ! empty( $_rename_with_city ) ) : ?>
 
             <!-- ═══════ DEPTH ENGINE TAB ═══════ -->
             <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
-                <div class="siloq-card">
-                    <div class="siloq-card-header">
-                        <h3 class="siloq-card-title">Topical Depth Engine</h3>
-                    </div>
-                    <div id="siloq-depth-engine-root">
-                        <div id="siloq-depth-silo-selector" style="margin-bottom:16px;">
-                            <label for="siloq-depth-silo-select" style="font-weight:600;margin-right:8px;">Select Silo:</label>
-                            <select id="siloq-depth-silo-select" style="min-width:260px;padding:6px 10px;border:1px solid #ccc;border-radius:4px;">
-                                <option value="">Loading silos...</option>
-                            </select>
-                            <button id="siloq-depth-scan-btn" class="button button-primary" style="margin-left:12px;" disabled>Run Depth Scan</button>
-                            <span id="siloq-depth-spinner" class="spinner" style="float:none;margin-top:0;"></span>
+<?php
+$_depth_primary_services = json_decode( get_option('siloq_primary_services', '[]'), true );
+if ( ! is_array( $_depth_primary_services ) ) $_depth_primary_services = array();
+$_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
+?>
+                <!-- STATE 1: Silo List -->
+                <div id="siloq-depth-state-list">
+                    <div class="siloq-card">
+                        <div class="siloq-card-header">
+                            <h3 class="siloq-card-title">Topical Depth Engine</h3>
                         </div>
-                        <div id="siloq-depth-scores" style="display:none;">
-                            <div id="siloq-depth-mistake-flags" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:16px;color:#856404;"></div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
-                                <div class="siloq-card" id="siloq-score-semantic" style="text-align:center;padding:18px;">
-                                    <div style="font-size:13px;color:#666;margin-bottom:4px;">Semantic Density</div>
-                                    <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">—</div>
-                                </div>
-                                <div class="siloq-card" id="siloq-score-closure" style="text-align:center;padding:18px;">
-                                    <div style="font-size:13px;color:#666;margin-bottom:4px;">Topical Closure</div>
-                                    <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">—</div>
-                                </div>
-                                <div class="siloq-card" id="siloq-score-breadth" style="text-align:center;padding:18px;">
-                                    <div style="font-size:13px;color:#666;margin-bottom:4px;">Coverage Breadth</div>
-                                    <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">—</div>
-                                </div>
-                                <div class="siloq-card" id="siloq-score-freshness" style="text-align:center;padding:18px;">
-                                    <div style="font-size:13px;color:#666;margin-bottom:4px;">Freshness</div>
-                                    <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">—</div>
+                        <p style="color:#666;margin:0 0 16px;">Select a silo to analyze its content depth and get AI-powered recommendations.</p>
+                        <div id="siloq-depth-silo-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;">
+                            <div style="text-align:center;padding:30px;color:#888;"><span class="spinner is-active" style="float:none;"></span> Loading hub pages&hellip;</div>
+                        </div>
+                        <div id="siloq-depth-no-hubs" style="display:none;text-align:center;padding:40px 0;color:#888;">
+                            <p>No hub pages found. Go to the <strong>Dashboard</strong> tab and sync your site first.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STATE 2: Topic Boundary Setup -->
+                <div id="siloq-depth-state-setup" style="display:none;">
+                    <div class="siloq-card">
+                        <div class="siloq-card-header">
+                            <button id="siloq-depth-back-setup" class="button" style="margin-right:12px;">&larr; Back to silos</button>
+                            <h3 class="siloq-card-title" id="siloq-depth-setup-title" style="display:inline;vertical-align:middle;"></h3>
+                        </div>
+                        <form id="siloq-depth-boundary-form" style="max-width:600px;">
+                            <input type="hidden" id="siloq-depth-setup-post-id" value="">
+
+                            <div style="margin-bottom:16px;">
+                                <label for="siloq-depth-core-topic" style="display:block;font-weight:600;margin-bottom:4px;">What is this silo about?</label>
+                                <input type="text" id="siloq-depth-core-topic" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;" placeholder="e.g. Residential Electrical Services" required>
+                            </div>
+
+                            <div style="margin-bottom:16px;">
+                                <label style="display:block;font-weight:600;margin-bottom:4px;">Related topics to include</label>
+                                <p style="color:#888;font-size:12px;margin:0 0 6px;">Topics that are related and should be covered in this silo</p>
+                                <div class="siloq-tag-input-wrap" id="siloq-depth-adjacent-wrap">
+                                    <div class="siloq-tag-chips" id="siloq-depth-adjacent-chips"></div>
+                                    <input type="text" class="siloq-tag-text" id="siloq-depth-adjacent-input" placeholder="Type and press Enter or comma" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;">
+                                    <input type="hidden" id="siloq-depth-adjacent-hidden" value="">
                                 </div>
                             </div>
+
+                            <div style="margin-bottom:16px;">
+                                <label style="display:block;font-weight:600;margin-bottom:4px;">Topics to exclude</label>
+                                <p style="color:#888;font-size:12px;margin:0 0 6px;">Topics that belong in a different silo</p>
+                                <div class="siloq-tag-input-wrap" id="siloq-depth-exclude-wrap">
+                                    <div class="siloq-tag-chips" id="siloq-depth-exclude-chips"></div>
+                                    <input type="text" class="siloq-tag-text" id="siloq-depth-exclude-input" placeholder="Type and press Enter or comma" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;">
+                                    <input type="hidden" id="siloq-depth-exclude-hidden" value="">
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom:20px;">
+                                <label for="siloq-depth-entity-type" style="display:block;font-weight:600;margin-bottom:4px;">Entity Type</label>
+                                <select id="siloq-depth-entity-type" style="min-width:260px;padding:6px 10px;border:1px solid #ccc;border-radius:4px;">
+                                    <option value="local_business">Local Business</option>
+                                    <option value="ecommerce">E-Commerce</option>
+                                    <option value="publisher">Publisher</option>
+                                    <option value="b2b_saas">B2B SaaS</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" class="button button-primary button-hero" id="siloq-depth-start-scan-btn">Start Depth Analysis &rarr;</button>
+                            <span id="siloq-depth-scan-spinner" class="spinner" style="float:none;margin-top:0;"></span>
+                            <div id="siloq-depth-scan-status" style="display:none;margin-top:12px;padding:12px 16px;background:#f0f6ff;border:1px solid #b3d4fc;border-radius:6px;color:#1a4a8a;font-weight:500;"></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- STATE 3: Results View -->
+                <div id="siloq-depth-state-results" style="display:none;">
+                    <div class="siloq-card">
+                        <div class="siloq-card-header" style="display:flex;align-items:center;justify-content:space-between;">
+                            <div>
+                                <button id="siloq-depth-back-results" class="button" style="margin-right:12px;">&larr; Back to silos</button>
+                                <h3 class="siloq-card-title" id="siloq-depth-results-title" style="display:inline;vertical-align:middle;"></h3>
+                                <span id="siloq-depth-last-scanned" style="color:#888;font-size:12px;margin-left:12px;"></span>
+                            </div>
+                            <button id="siloq-depth-rescan-btn" class="button button-primary">Rescan</button>
                         </div>
-                        <div id="siloq-depth-gaps" style="display:none;">
+
+                        <!-- Score Cards -->
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;">
+                            <div class="siloq-card" id="siloq-score-semantic" style="text-align:center;padding:18px;">
+                                <div style="font-size:13px;color:#666;margin-bottom:4px;">Semantic Density</div>
+                                <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">&mdash;</div>
+                            </div>
+                            <div class="siloq-card" id="siloq-score-closure" style="text-align:center;padding:18px;">
+                                <div style="font-size:13px;color:#666;margin-bottom:4px;">Topical Closure</div>
+                                <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">&mdash;</div>
+                            </div>
+                            <div class="siloq-card" id="siloq-score-breadth" style="text-align:center;padding:18px;">
+                                <div style="font-size:13px;color:#666;margin-bottom:4px;">Coverage Breadth %</div>
+                                <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">&mdash;</div>
+                            </div>
+                            <div class="siloq-card" id="siloq-score-freshness" style="text-align:center;padding:18px;">
+                                <div style="font-size:13px;color:#666;margin-bottom:4px;">Freshness</div>
+                                <div class="siloq-depth-score-val" style="font-size:32px;font-weight:700;line-height:1.2;">&mdash;</div>
+                            </div>
+                        </div>
+
+                        <!-- Mistake Flags -->
+                        <div id="siloq-depth-mistake-flags" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;margin-bottom:16px;color:#856404;"></div>
+
+                        <!-- Gap Report -->
+                        <div id="siloq-depth-gaps">
                             <h4 style="margin:0 0 12px;">Gap Report</h4>
+
                             <div id="siloq-depth-critical-wrap" style="margin-bottom:14px;">
-                                <button class="siloq-depth-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.siloq-depth-chev').classList.toggle('open')" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;padding:6px 0;color:#dc3545;">
-                                    <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> Critical Gaps <span id="siloq-depth-critical-count" class="siloq-badge siloq-badge--red" style="margin-left:6px;">0</span>
-                                </button>
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                                    <button class="siloq-depth-toggle" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.siloq-depth-chev').classList.toggle('open')" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;padding:6px 0;color:#dc3545;">
+                                        <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> &#128308; Critical Gaps <span id="siloq-depth-critical-count" class="siloq-badge siloq-badge--red" style="margin-left:6px;">0</span>
+                                    </button>
+                                    <button class="button button-small" id="siloq-depth-bulk-critical" style="display:none;">Add All Critical to Plan</button>
+                                </div>
                                 <div id="siloq-depth-critical-list" style="display:none;margin-left:18px;"></div>
                             </div>
+
                             <div id="siloq-depth-thin-wrap" style="margin-bottom:14px;">
                                 <button class="siloq-depth-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.siloq-depth-chev').classList.toggle('open')" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;padding:6px 0;color:#e6a700;">
-                                    <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> Thin Content <span id="siloq-depth-thin-count" class="siloq-badge siloq-badge--yellow" style="margin-left:6px;">0</span>
+                                    <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> &#128993; Thin Content <span id="siloq-depth-thin-count" class="siloq-badge siloq-badge--yellow" style="margin-left:6px;">0</span>
                                 </button>
                                 <div id="siloq-depth-thin-list" style="display:none;margin-left:18px;"></div>
                             </div>
+
                             <div id="siloq-depth-standard-wrap" style="margin-bottom:14px;">
                                 <button class="siloq-depth-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.siloq-depth-chev').classList.toggle('open')" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;padding:6px 0;color:#555;">
-                                    <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> Standard Gaps <span id="siloq-depth-standard-count" class="siloq-badge" style="margin-left:6px;">0</span>
+                                    <span class="siloq-depth-chev" style="display:inline-block;transition:transform .2s;margin-right:4px;">&#9654;</span> &#128203; Standard Gaps <span id="siloq-depth-standard-count" class="siloq-badge" style="margin-left:6px;">0</span>
                                 </button>
                                 <div id="siloq-depth-standard-list" style="display:none;margin-left:18px;"></div>
                             </div>
                         </div>
-                        <div id="siloq-depth-empty" style="text-align:center;padding:40px 0;color:#888;">
-                            <p>Select a silo above to view its topical depth scores and gap report.</p>
-                        </div>
                     </div>
                 </div>
+
                 <style>
                     .siloq-depth-chev.open { transform: rotate(90deg); }
                     .siloq-depth-gap-item { display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee; }
                     .siloq-depth-gap-item:last-child { border-bottom:none; }
                     .siloq-depth-priority { display:inline-block;min-width:36px;text-align:center;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;color:#fff; }
+                    .siloq-depth-hub-card { border:1px solid #e0e0e0;border-radius:8px;padding:20px;background:#fff;transition:box-shadow .2s; }
+                    .siloq-depth-hub-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+                    .siloq-tag-chips { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px; }
+                    .siloq-tag-chip { display:inline-flex;align-items:center;gap:4px;background:#e8f0fe;color:#1a4a8a;padding:4px 10px;border-radius:14px;font-size:13px; }
+                    .siloq-tag-chip .siloq-tag-x { cursor:pointer;font-weight:700;color:#999;margin-left:2px; }
+                    .siloq-tag-chip .siloq-tag-x:hover { color:#dc3545; }
                 </style>
                 <script>
                 (function($) {
                     var depthNonce = '<?php echo esc_js( wp_create_nonce("siloq_ajax_nonce") ); ?>';
-                    var $select = $('#siloq-depth-silo-select');
-                    var $scanBtn = $('#siloq-depth-scan-btn');
-                    var $spinner = $('#siloq-depth-spinner');
+                    var defaultBizType = '<?php echo esc_js( $_depth_biz_type ); ?>';
+                    var defaultServices = <?php echo wp_json_encode( array_values( $_depth_primary_services ) ); ?>;
+                    var currentPostId = null;
+                    var currentSiloId = null;
+                    var silosData = [];
 
+                    // ─── Tag input helper ───
+                    function initTagInput(inputId, chipsId, hiddenId, prefill) {
+                        var tags = prefill ? prefill.slice() : [];
+                        var $input = $('#' + inputId);
+                        var $chips = $('#' + chipsId);
+                        var $hidden = $('#' + hiddenId);
+
+                        function render() {
+                            $chips.empty();
+                            tags.forEach(function(tag, i) {
+                                $chips.append('<span class="siloq-tag-chip">' + $('<span>').text(tag).html() + ' <span class="siloq-tag-x" data-idx="' + i + '">&times;</span></span>');
+                            });
+                            $hidden.val(tags.join(','));
+                        }
+                        function addTag(val) {
+                            val = val.trim();
+                            if (val && tags.indexOf(val) === -1) { tags.push(val); render(); }
+                        }
+                        $input.on('keydown', function(e) {
+                            if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault();
+                                addTag($input.val().replace(/,/g, ''));
+                                $input.val('');
+                            }
+                        });
+                        $chips.on('click', '.siloq-tag-x', function() {
+                            tags.splice($(this).data('idx'), 1);
+                            render();
+                        });
+                        render();
+                        return { getTags: function() { return tags; }, setTags: function(t) { tags = t.slice(); render(); } };
+                    }
+
+                    var adjacentTags = null;
+                    var excludeTags = null;
+
+                    // ─── State transitions ───
+                    function showState(state) {
+                        $('#siloq-depth-state-list, #siloq-depth-state-setup, #siloq-depth-state-results').hide();
+                        $('#siloq-depth-state-' + state).show();
+                    }
+
+                    // ─── Score color ───
                     function scoreColor(val) {
                         if (val >= 80) return '#22c55e';
                         if (val >= 60) return '#eab308';
@@ -4810,124 +4940,274 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         $card.css('border-left', '4px solid ' + scoreColor(num));
                     }
 
-                    function renderGapItem(item) {
-                        var bg = item.priority >= 80 ? '#dc3545' : (item.priority >= 70 ? '#e6a700' : '#6c757d');
+                    // ─── Gap item rendering ───
+                    function renderCriticalGapItem(item) {
+                        var bg = '#dc3545';
+                        var label = $('<span>').text(item.label || item.subtopic_label || 'Untitled').html();
                         return '<div class="siloq-depth-gap-item">' +
-                            '<span>' + $('<span>').text(item.label || item.subtopic_label || item.page_title || 'Untitled').html() + '</span>' +
+                            '<span>' + label + '</span>' +
                             '<span style="display:flex;align-items:center;gap:8px;">' +
                                 '<span class="siloq-depth-priority" style="background:' + bg + ';">' + Math.round(item.priority || 0) + '</span>' +
+                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(label).html() + '" data-type="service">Create Page &rarr;</button>' +
                                 (item.id ? '<button class="button button-small siloq-depth-add-plan" data-id="' + item.id + '">Add to Plan</button>' : '') +
                             '</span>' +
                         '</div>';
                     }
 
+                    function renderThinGapItem(item) {
+                        var label = $('<span>').text(item.page_title || item.label || 'Untitled').html();
+                        var editUrl = item.edit_url || (item.page_id ? '<?php echo esc_js( admin_url("post.php?action=edit&post=") ); ?>' + item.page_id : '');
+                        return '<div class="siloq-depth-gap-item">' +
+                            '<span>' + label + '</span>' +
+                            '<span style="display:flex;align-items:center;gap:8px;">' +
+                                '<span class="siloq-depth-priority" style="background:#e6a700;">' + Math.round(item.priority || 0) + '</span>' +
+                                (editUrl ? '<a href="' + editUrl + '" class="button button-small" target="_blank">Open Editor &rarr;</a>' : '') +
+                            '</span>' +
+                        '</div>';
+                    }
+
+                    function renderStandardGapItem(item) {
+                        var label = $('<span>').text(item.label || item.subtopic_label || 'Untitled').html();
+                        return '<div class="siloq-depth-gap-item">' +
+                            '<span>' + label + '</span>' +
+                            '<span style="display:flex;align-items:center;gap:8px;">' +
+                                '<span class="siloq-depth-priority" style="background:#6c757d;">' + Math.round(item.priority || 0) + '</span>' +
+                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(label).html() + '" data-type="service">Create Page &rarr;</button>' +
+                                (item.id ? '<button class="button button-small siloq-depth-add-plan" data-id="' + item.id + '">Add to Plan</button>' : '') +
+                            '</span>' +
+                        '</div>';
+                    }
+
+                    // ─── STATE 1: Load local silos ───
                     function loadSilos() {
-                        $.post(ajaxurl, { action: 'siloq_get_silos', nonce: depthNonce }, function(res) {
-                            $select.empty();
+                        var $grid = $('#siloq-depth-silo-grid');
+                        $.post(ajaxurl, { action: 'siloq_get_local_silos', nonce: depthNonce }, function(res) {
                             if (res.success && res.data && res.data.length) {
-                                $select.append('<option value="">-- Choose a silo --</option>');
-                                $.each(res.data, function(i, s) {
-                                    var label = s.name || s.label || ('Silo #' + s.id);
-                                    if (s.health_score) label += ' (' + Math.round(s.health_score) + ')';
-                                    $select.append($('<option>').val(s.id).text(label));
+                                silosData = res.data;
+                                $grid.empty();
+                                $.each(res.data, function(i, hub) {
+                                    var hasResults = !!hub.last_scanned;
+                                    var html = '<div class="siloq-depth-hub-card">' +
+                                        '<h4 style="margin:0 0 6px;">' + $('<span>').text(hub.title).html() + '</h4>' +
+                                        '<p style="color:#888;font-size:12px;margin:0 0 10px;word-break:break-all;">' + $('<span>').text(hub.url).html() + '</p>' +
+                                        '<span class="siloq-badge" style="margin-bottom:12px;display:inline-block;">' + hub.spoke_count + ' spoke pages</span>' +
+                                        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+                                            '<button class="button button-primary siloq-depth-setup-btn" data-post-id="' + hub.post_id + '">Setup &amp; Scan &rarr;</button>' +
+                                            (hasResults ? '<button class="button siloq-depth-view-btn" data-post-id="' + hub.post_id + '">View Results</button>' : '') +
+                                        '</div>' +
+                                    '</div>';
+                                    $grid.append(html);
                                 });
-                                $scanBtn.prop('disabled', false);
+                                $('#siloq-depth-no-hubs').hide();
                             } else {
-                                $select.append('<option value="">No silos found</option>');
+                                $grid.empty();
+                                $('#siloq-depth-no-hubs').show();
                             }
+                        }).fail(function() {
+                            $grid.html('<p style="color:#dc3545;">Failed to load hub pages.</p>');
                         });
                     }
 
-                    function loadSiloData(siloId) {
-                        if (!siloId) {
-                            $('#siloq-depth-scores, #siloq-depth-gaps').hide();
-                            $('#siloq-depth-empty').show();
-                            return;
-                        }
-                        $spinner.addClass('is-active');
-                        $('#siloq-depth-empty').hide();
+                    // ─── STATE 2: Setup & Scan ───
+                    function openSetup(postId) {
+                        var hub = silosData.find(function(s) { return s.post_id == postId; });
+                        if (!hub) return;
+                        currentPostId = postId;
+                        currentSiloId = hub.api_silo_id;
 
-                        var doneCount = 0;
-                        function checkDone() { if (++doneCount >= 2) $spinner.removeClass('is-active'); }
+                        $('#siloq-depth-setup-title').text(hub.title);
+                        $('#siloq-depth-setup-post-id').val(postId);
+                        $('#siloq-depth-core-topic').val(hub.boundary ? hub.boundary.core_topic : hub.title);
+
+                        // Map business type
+                        var bizMap = { local_service: 'local_business', ecommerce: 'ecommerce', publisher: 'publisher', b2b_saas: 'b2b_saas' };
+                        var entitySel = (hub.boundary && hub.boundary.entity_type) ? hub.boundary.entity_type : (bizMap[defaultBizType] || defaultBizType);
+                        $('#siloq-depth-entity-type').val(entitySel);
+
+                        // Init tag inputs
+                        var adjPrefill = (hub.boundary && hub.boundary.adjacent_topics) ? hub.boundary.adjacent_topics : defaultServices;
+                        var exclPrefill = (hub.boundary && hub.boundary.out_of_scope_topics) ? hub.boundary.out_of_scope_topics : [];
+                        adjacentTags = initTagInput('siloq-depth-adjacent-input', 'siloq-depth-adjacent-chips', 'siloq-depth-adjacent-hidden', adjPrefill);
+                        excludeTags = initTagInput('siloq-depth-exclude-input', 'siloq-depth-exclude-chips', 'siloq-depth-exclude-hidden', exclPrefill);
+
+                        $('#siloq-depth-scan-status').hide();
+                        $('#siloq-depth-start-scan-btn').prop('disabled', false).text('Start Depth Analysis \u2192');
+                        showState('setup');
+                    }
+
+                    // ─── STATE 3: Results ───
+                    function openResults(postId) {
+                        var hub = silosData.find(function(s) { return s.post_id == postId; });
+                        if (!hub) return;
+                        currentPostId = postId;
+                        currentSiloId = hub.api_silo_id;
+
+                        $('#siloq-depth-results-title').text(hub.title);
+                        $('#siloq-depth-last-scanned').text(hub.last_scanned ? 'Last scanned: ' + hub.last_scanned : '');
+
+                        loadResultsData(postId);
+                        showState('results');
+                    }
+
+                    function loadResultsData(postId) {
+                        var hub = silosData.find(function(s) { return s.post_id == postId; });
+                        var siloId = hub ? hub.api_silo_id : currentSiloId;
+                        if (!siloId) return;
 
                         // Load scores
-                        $.post(ajaxurl, { action: 'siloq_get_depth_scores', nonce: depthNonce, silo_id: siloId }, function(res) {
+                        $.post(ajaxurl, { action: 'siloq_get_depth_scores', nonce: depthNonce, silo_id: siloId, post_id: postId }, function(res) {
                             if (res.success && res.data) {
                                 var d = res.data;
                                 renderScoreCard('#siloq-score-semantic', d.semantic_density_score || 0);
                                 renderScoreCard('#siloq-score-closure', d.topical_closure_score || 0);
                                 renderScoreCard('#siloq-score-breadth', d.coverage_breadth_pct || 0);
                                 renderScoreCard('#siloq-score-freshness', d.freshness_score || 0);
-                                $('#siloq-depth-scores').show();
 
                                 var flags = d.depth_mistake_flags || [];
                                 if (flags.length) {
-                                    var html = '<strong>Depth Flags:</strong> ' + flags.map(function(f) { return $('<span>').text(f).html(); }).join(', ');
-                                    $('#siloq-depth-mistake-flags').html(html).show();
+                                    $('#siloq-depth-mistake-flags').html('<strong>Depth Flags:</strong> ' + flags.map(function(f) { return $('<span>').text(f).html(); }).join(', ')).show();
                                 } else {
                                     $('#siloq-depth-mistake-flags').hide();
                                 }
                             }
-                            checkDone();
                         });
 
                         // Load gap report
-                        $.post(ajaxurl, { action: 'siloq_get_gap_report', nonce: depthNonce, silo_id: siloId }, function(res) {
+                        $.post(ajaxurl, { action: 'siloq_get_gap_report', nonce: depthNonce, silo_id: siloId, post_id: postId }, function(res) {
                             if (res.success && res.data) {
                                 var d = res.data;
                                 var critical = (d.critical_gaps || []).filter(function(g) { return (g.priority || 0) >= 80; });
-                                var thin = (d.thin_pages || []).filter(function(g) { return (g.priority || 0) >= 70; });
+                                var thin = d.thin_pages || [];
                                 var standard = (d.standard_gaps || []).filter(function(g) { var p = g.priority || 0; return p >= 50 && p < 80; });
 
                                 $('#siloq-depth-critical-count').text(critical.length);
-                                $('#siloq-depth-critical-list').html(critical.length ? critical.map(renderGapItem).join('') : '<p style="color:#888;">None</p>');
+                                $('#siloq-depth-critical-list').html(critical.length ? critical.map(renderCriticalGapItem).join('') : '<p style="color:#888;">None</p>');
+                                $('#siloq-depth-bulk-critical').toggle(critical.length > 0);
 
                                 $('#siloq-depth-thin-count').text(thin.length);
-                                $('#siloq-depth-thin-list').html(thin.length ? thin.map(renderGapItem).join('') : '<p style="color:#888;">None</p>');
+                                $('#siloq-depth-thin-list').html(thin.length ? thin.map(renderThinGapItem).join('') : '<p style="color:#888;">None</p>');
 
                                 $('#siloq-depth-standard-count').text(standard.length);
-                                $('#siloq-depth-standard-list').html(standard.length ? standard.map(renderGapItem).join('') : '<p style="color:#888;">None</p>');
-
-                                $('#siloq-depth-gaps').show();
+                                $('#siloq-depth-standard-list').html(standard.length ? standard.map(renderStandardGapItem).join('') : '<p style="color:#888;">None</p>');
                             }
-                            checkDone();
                         });
                     }
 
-                    $select.on('change', function() { loadSiloData($(this).val()); });
+                    // ─── Event handlers ───
 
-                    $scanBtn.on('click', function() {
-                        var siloId = $select.val();
-                        if (!siloId) return;
-                        $scanBtn.prop('disabled', true).text('Scanning...');
+                    // Setup & Scan button
+                    $(document).on('click', '.siloq-depth-setup-btn', function() { openSetup($(this).data('post-id')); });
+                    // View Results button
+                    $(document).on('click', '.siloq-depth-view-btn', function() { openResults($(this).data('post-id')); });
+                    // Back buttons
+                    $('#siloq-depth-back-setup, #siloq-depth-back-results').on('click', function() { showState('list'); loadSilos(); });
+
+                    // Form submit — save boundary + run scan
+                    $('#siloq-depth-boundary-form').on('submit', function(e) {
+                        e.preventDefault();
+                        var postId = $('#siloq-depth-setup-post-id').val();
+                        var coreTopic = $('#siloq-depth-core-topic').val().trim();
+                        if (!coreTopic) { alert('Core topic is required.'); return; }
+
+                        var $btn = $('#siloq-depth-start-scan-btn');
+                        var $status = $('#siloq-depth-scan-status');
+                        var $spinner = $('#siloq-depth-scan-spinner');
+                        $btn.prop('disabled', true).text('Saving...');
                         $spinner.addClass('is-active');
-                        $.post(ajaxurl, { action: 'siloq_run_depth_scan', nonce: depthNonce, silo_id: siloId }, function(res) {
-                            $scanBtn.prop('disabled', false).text('Run Depth Scan');
-                            $spinner.removeClass('is-active');
-                            if (res.success) {
-                                loadSiloData(siloId);
-                            } else {
-                                alert('Scan failed: ' + (res.data && res.data.message ? res.data.message : 'Unknown error'));
+
+                        // Step 1: Save topic boundary
+                        $.post(ajaxurl, {
+                            action: 'siloq_save_topic_boundary',
+                            nonce: depthNonce,
+                            post_id: postId,
+                            core_topic: coreTopic,
+                            adjacent_topics: $('#siloq-depth-adjacent-hidden').val(),
+                            out_of_scope_topics: $('#siloq-depth-exclude-hidden').val(),
+                            entity_type: $('#siloq-depth-entity-type').val()
+                        }, function(res) {
+                            if (!res.success) {
+                                $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
+                                $spinner.removeClass('is-active');
+                                alert('Save failed: ' + (res.data && res.data.message ? res.data.message : 'Unknown error'));
+                                return;
                             }
+                            // Update local data
+                            currentSiloId = res.data.silo_id;
+                            var hub = silosData.find(function(s) { return s.post_id == postId; });
+                            if (hub) { hub.api_silo_id = currentSiloId; }
+
+                            // Step 2: Run depth scan
+                            $btn.text('Scanning...');
+                            $status.text('Generating subtopic map... this takes 30\u201360 seconds').show();
+
+                            $.post(ajaxurl, {
+                                action: 'siloq_run_depth_scan',
+                                nonce: depthNonce,
+                                silo_id: currentSiloId,
+                                post_id: postId
+                            }, function(scanRes) {
+                                $spinner.removeClass('is-active');
+                                $status.hide();
+                                if (scanRes.success) {
+                                    // Update last_scanned in local data
+                                    if (hub) { hub.last_scanned = new Date().toISOString(); }
+                                    openResults(postId);
+                                } else {
+                                    $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
+                                    alert('Scan failed: ' + (scanRes.data && scanRes.data.message ? scanRes.data.message : 'Unknown error'));
+                                }
+                            }).fail(function() {
+                                $spinner.removeClass('is-active');
+                                $status.hide();
+                                $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
+                                alert('Scan request failed.');
+                            });
                         }).fail(function() {
-                            $scanBtn.prop('disabled', false).text('Run Depth Scan');
+                            $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
                             $spinner.removeClass('is-active');
-                            alert('Scan request failed.');
+                            alert('Save request failed.');
                         });
                     });
 
-                    // Add to Plan click handler
+                    // Rescan button
+                    $('#siloq-depth-rescan-btn').on('click', function() {
+                        if (currentPostId) openSetup(currentPostId);
+                    });
+
+                    // Add to Plan
                     $(document).on('click', '.siloq-depth-add-plan', function() {
                         var $btn = $(this);
                         var subtopicId = $btn.data('id');
-                        var siloId = $select.val();
-                        if (!siloId || !subtopicId) return;
+                        if (!currentSiloId || !subtopicId) return;
                         $btn.prop('disabled', true).text('Adding...');
-                        $.post(ajaxurl, { action: 'siloq_add_to_plan', nonce: depthNonce, silo_id: siloId, subtopic_id: subtopicId }, function(res) {
+                        $.post(ajaxurl, { action: 'siloq_add_to_plan', nonce: depthNonce, silo_id: currentSiloId, subtopic_id: subtopicId }, function(res) {
                             if (res.success) {
-                                $btn.text('Added').css('color', '#22c55e');
+                                $btn.text('\u2713 Added').css('color', '#22c55e');
                             } else {
                                 $btn.prop('disabled', false).text('Add to Plan');
+                                alert('Failed: ' + (res.data && res.data.message ? res.data.message : 'Unknown error'));
+                            }
+                        });
+                    });
+
+                    // Bulk Add Critical to Plan
+                    $('#siloq-depth-bulk-critical').on('click', function() {
+                        var $btn = $(this);
+                        var ids = [];
+                        $('#siloq-depth-critical-list .siloq-depth-add-plan').each(function() { ids.push($(this).data('id')); });
+                        if (!ids.length || !currentSiloId) return;
+                        $btn.prop('disabled', true).text('Adding all...');
+                        $.post(ajaxurl, {
+                            action: 'siloq_bulk_add_to_plan',
+                            nonce: depthNonce,
+                            silo_id: currentSiloId,
+                            subtopic_ids: ids
+                        }, function(res) {
+                            if (res.success) {
+                                $btn.text('\u2713 All Added').css('color', '#22c55e');
+                                $('#siloq-depth-critical-list .siloq-depth-add-plan').text('\u2713 Added').prop('disabled', true).css('color', '#22c55e');
+                            } else {
+                                $btn.prop('disabled', false).text('Add All Critical to Plan');
                                 alert('Failed: ' + (res.data && res.data.message ? res.data.message : 'Unknown error'));
                             }
                         });
@@ -4938,7 +5218,6 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                     $(document).on('click', '[aria-controls="siloq-tab-depth-engine"]', function() {
                         if (!loaded) { loaded = true; loadSilos(); }
                     });
-                    // Also load if tab is active from URL hash
                     if (window.location.hash === '#siloq-tab-depth-engine') { loaded = true; loadSilos(); }
                 })(jQuery);
                 </script>
@@ -8786,13 +9065,136 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         wp_send_json_error( array( 'message' => $res['message'] ?? 'Failed to load silos.' ) );
     }
 
+    /**
+     * Get local hub pages as silos (no API call required).
+     */
+    public static function ajax_get_local_silos() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+            return;
+        }
+
+        $hubs = get_posts( array(
+            'post_type'      => 'page',
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'meta_query'     => array(
+                'relation' => 'OR',
+                array( 'key' => '_siloq_page_role', 'value' => 'hub', 'compare' => '=' ),
+                array( 'key' => '_siloq_page_role', 'value' => 'apex_hub', 'compare' => '=' ),
+            ),
+        ) );
+
+        $results = array();
+        foreach ( $hubs as $hub ) {
+            $spokes       = get_posts( array( 'post_parent' => $hub->ID, 'post_type' => 'page', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids' ) );
+            $api_silo_id  = get_post_meta( $hub->ID, '_siloq_api_silo_id', true );
+            $last_scanned = get_post_meta( $hub->ID, '_siloq_depth_last_scanned', true );
+            $boundary     = get_post_meta( $hub->ID, '_siloq_topic_boundary', true );
+
+            $results[] = array(
+                'post_id'      => $hub->ID,
+                'title'        => $hub->post_title,
+                'url'          => get_permalink( $hub->ID ),
+                'spoke_count'  => count( $spokes ),
+                'api_silo_id'  => $api_silo_id ?: null,
+                'last_scanned' => $last_scanned ?: null,
+                'boundary'     => $boundary ?: null,
+            );
+        }
+
+        wp_send_json_success( $results );
+    }
+
+    /**
+     * Save topic boundary to API and locally.
+     */
+    public static function ajax_save_topic_boundary() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+            return;
+        }
+
+        $post_id          = intval( $_POST['post_id'] ?? 0 );
+        $core_topic       = sanitize_text_field( $_POST['core_topic'] ?? '' );
+        $adjacent_raw     = sanitize_text_field( $_POST['adjacent_topics'] ?? '' );
+        $out_of_scope_raw = sanitize_text_field( $_POST['out_of_scope_topics'] ?? '' );
+        $entity_type      = sanitize_text_field( $_POST['entity_type'] ?? 'local_business' );
+
+        if ( ! $post_id || ! $core_topic ) {
+            wp_send_json_error( array( 'message' => 'Post ID and core topic required.' ) );
+            return;
+        }
+
+        $adjacent     = array_values( array_filter( array_map( 'trim', explode( ',', $adjacent_raw ) ) ) );
+        $out_of_scope = array_values( array_filter( array_map( 'trim', explode( ',', $out_of_scope_raw ) ) ) );
+
+        $boundary = array(
+            'core_topic'          => $core_topic,
+            'adjacent_topics'     => $adjacent,
+            'out_of_scope_topics' => $out_of_scope,
+            'entity_type'         => $entity_type,
+        );
+
+        // Save locally
+        update_post_meta( $post_id, '_siloq_topic_boundary', $boundary );
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'Site not connected to Siloq API.' ) );
+            return;
+        }
+
+        // Get or create silo in API
+        $api     = new Siloq_API_Client();
+        $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
+
+        if ( empty( $silo_id ) ) {
+            $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
+                'name'    => get_the_title( $post_id ),
+                'hub_url' => get_permalink( $post_id ),
+            ) );
+            if ( ! empty( $create_res['success'] ) && ! empty( $create_res['data']['id'] ) ) {
+                $silo_id = $create_res['data']['id'];
+                update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+            } else {
+                // Use post ID as fallback silo identifier
+                $silo_id = 'local-' . $post_id;
+                update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+            }
+        }
+
+        // Save topic boundary to API (if we have a real UUID silo ID)
+        if ( strpos( $silo_id, 'local-' ) !== 0 ) {
+            $api->post( '/sites/' . $site_id . '/silos/' . $silo_id . '/topic-boundary', $boundary );
+        }
+
+        wp_send_json_success( array( 'silo_id' => $silo_id, 'boundary' => $boundary ) );
+    }
+
+    /**
+     * Resolve silo_id from post_id if needed.
+     */
+    private static function resolve_silo_id() {
+        $silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
+        if ( empty( $silo_id ) ) {
+            $post_id = intval( $_POST['post_id'] ?? 0 );
+            if ( $post_id ) {
+                $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
+            }
+        }
+        return $silo_id;
+    }
+
     public static function ajax_get_depth_scores() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
         if ( ! current_user_can( 'edit_posts' ) ) {
             wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
         }
         $site_id = get_option( 'siloq_site_id', '' );
-        $silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
+        $silo_id = self::resolve_silo_id();
         if ( empty( $site_id ) || empty( $silo_id ) ) {
             wp_send_json_error( array( 'message' => 'Missing site or silo ID.' ) );
         }
@@ -8810,7 +9212,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
         }
         $site_id = get_option( 'siloq_site_id', '' );
-        $silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
+        $silo_id = self::resolve_silo_id();
         if ( empty( $site_id ) || empty( $silo_id ) ) {
             wp_send_json_error( array( 'message' => 'Missing site or silo ID.' ) );
         }
@@ -8828,7 +9230,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
         }
         $site_id = get_option( 'siloq_site_id', '' );
-        $silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
+        $silo_id = self::resolve_silo_id();
+        $post_id = intval( $_POST['post_id'] ?? 0 );
         if ( empty( $site_id ) || empty( $silo_id ) ) {
             wp_send_json_error( array( 'message' => 'Missing site or silo ID.' ) );
         }
@@ -8845,6 +9248,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $scores = $api->post( $base . '/depth-scores' );
         if ( empty( $scores['success'] ) ) {
             wp_send_json_error( array( 'message' => $scores['message'] ?? 'Score refresh failed.' ) );
+        }
+
+        // Update last scanned timestamp on the post
+        if ( $post_id ) {
+            update_post_meta( $post_id, '_siloq_depth_last_scanned', current_time( 'mysql' ) );
         }
 
         wp_send_json_success( array( 'message' => 'Depth scan complete.' ) );
@@ -8867,5 +9275,36 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_success( array( 'message' => 'Added to plan.' ) );
         }
         wp_send_json_error( array( 'message' => $res['message'] ?? 'Failed to add to plan.' ) );
+    }
+
+    /**
+     * Bulk add multiple subtopics to plan.
+     */
+    public static function ajax_bulk_add_to_plan() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+        $site_id      = get_option( 'siloq_site_id', '' );
+        $silo_id      = sanitize_text_field( $_POST['silo_id'] ?? '' );
+        $subtopic_ids = isset( $_POST['subtopic_ids'] ) ? array_map( 'sanitize_text_field', (array) $_POST['subtopic_ids'] ) : array();
+
+        if ( empty( $site_id ) || empty( $silo_id ) || empty( $subtopic_ids ) ) {
+            wp_send_json_error( array( 'message' => 'Missing required IDs.' ) );
+        }
+
+        $api     = new Siloq_API_Client();
+        $added   = 0;
+        $failed  = 0;
+        foreach ( $subtopic_ids as $subtopic_id ) {
+            $res = $api->post( '/sites/' . $site_id . '/silos/' . $silo_id . '/subtopics/' . $subtopic_id . '/add-to-plan' );
+            if ( ! empty( $res['success'] ) ) {
+                $added++;
+            } else {
+                $failed++;
+            }
+        }
+
+        wp_send_json_success( array( 'message' => $added . ' added to plan.', 'added' => $added, 'failed' => $failed ) );
     }
 }
