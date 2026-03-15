@@ -8154,10 +8154,52 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             $sync->reclassify_page_by_parent( $post_id );
         }
 
+        // Fix 6: Update internal links across all published pages/posts.
+        // Find every page whose content contains the old URL and replace with new URL.
+        $old_url_variants = array(
+            $old_url,                                        // full URL with trailing slash
+            rtrim( $old_url, '/' ),                         // without trailing slash
+            $old_path,                                       // path only e.g. /our-services/residential/
+            rtrim( $old_path, '/' ),                         // path without trailing slash
+        );
+        $old_url_variants = array_unique( array_filter( $old_url_variants ) );
+
+        $all_posts = get_posts( array(
+            'post_type'      => array( 'page', 'post' ),
+            'post_status'    => array( 'publish', 'draft' ),
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        ) );
+
+        $updated_count = 0;
+        foreach ( $all_posts as $pid ) {
+            if ( $pid === $post_id ) continue; // skip the restructured page itself
+            $p = get_post( $pid );
+            if ( ! $p ) continue;
+            $content = $p->post_content;
+            if ( empty( $content ) ) continue;
+
+            $new_content = $content;
+            foreach ( $old_url_variants as $old_variant ) {
+                if ( strpos( $new_content, $old_variant ) !== false ) {
+                    $new_content = str_replace( $old_variant, $new_url, $new_content );
+                }
+            }
+
+            if ( $new_content !== $content ) {
+                wp_update_post( array(
+                    'ID'           => $pid,
+                    'post_content' => $new_content,
+                ) );
+                $updated_count++;
+            }
+        }
+
         wp_send_json_success( array(
-            'message' => 'Restructured successfully.',
-            'old_url' => $old_url,
-            'new_url' => $new_url,
+            'message'       => 'Restructured successfully. Internal links updated in ' . $updated_count . ' page(s).',
+            'old_url'       => $old_url,
+            'new_url'       => $new_url,
+            'links_updated' => $updated_count,
         ) );
     }
 
