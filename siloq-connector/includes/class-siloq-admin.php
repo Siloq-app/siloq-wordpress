@@ -5106,7 +5106,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             if (v) keywords.push(v);
         });
 
-        var nonce = (typeof siloqAdminData !== 'undefined') ? siloqAdminData.nonce : ((typeof siloqDash !== 'undefined') ? siloqDash.nonce : '');
+        var nonce = (typeof siloqAdminData !== 'undefined' && siloqAdminData.ajax_nonce) ? siloqAdminData.ajax_nonce : ((typeof siloqDash !== 'undefined') ? siloqDash.nonce : '');
         var postData = $.param({action: 'siloq_save_goals_tab', nonce: nonce, primary_goal: primaryGoal})
             + '&' + $.param({'priority_services[]': services})
             + '&' + $.param({'priority_cities[]': cities})
