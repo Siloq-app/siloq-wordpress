@@ -9153,16 +9153,17 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         if ( empty( $silo_id ) ) {
             $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
-                'name'    => get_the_title( $post_id ),
-                'hub_url' => get_permalink( $post_id ),
+                'name'         => get_the_title( $post_id ),
+                'hub_url'      => get_permalink( $post_id ),
+                'hub_page_url' => get_permalink( $post_id ),
             ) );
             if ( ! empty( $create_res['success'] ) && ! empty( $create_res['data']['id'] ) ) {
                 $silo_id = $create_res['data']['id'];
                 update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
             } else {
-                // Use post ID as fallback silo identifier
-                $silo_id = 'local-' . $post_id;
-                update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+                $err_msg = isset( $create_res['message'] ) ? $create_res['message'] : 'Could not create silo in API.';
+                wp_send_json_error( array( 'message' => 'API error: ' . $err_msg . ' — Please ensure your site is connected and try again.' ) );
+                return;
             }
         }
 
