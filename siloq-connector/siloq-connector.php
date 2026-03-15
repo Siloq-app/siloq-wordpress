@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.200
+ * Version: 1.5.201
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -2453,60 +2453,70 @@ RULES:
         // Build primary keyword: "Electrician CityName, ST"
         $primary_keyword = ucfirst($service_label) . ' ' . $city_name . ($biz_state ? ', ' . $biz_state : '');
 
-        // Try Claude first
+        // Try Claude first — full Siloq City Page Spec v1.0
         $anthropic_key = get_option('siloq_anthropic_api_key', '');
         if (!empty($anthropic_key)) {
-            $system = 'You are an expert SEO content writer for ' . $biz_name . ', a service business in ' . $location . '.
+            $system = 'You are an expert SEO content writer. You build city service pages that comply with the Siloq City Page Optimization Spec v1.0. This spec exists because keyword-stuffed city pages with the city name in every heading are over-optimized and penalized. Your job is to write pages that pass the genuine local substance test: "Could this page exist if the business had never actually served this city?" The answer must be NO — because the page contains real local knowledge, not city name substitution.
 
-You write pages using the Three-Layer Content Model:
+HARD RULES — violations disqualify the page:
+1. City name in headings: MAXIMUM 30% of total headings. H1 always counts as one. With 6 headings, city name appears in H1 + at most 1 H2. Zero additional H2s with city name is also acceptable.
+2. Page must contain at least 3 specific local references that cannot be copy-pasted for a different city.
+3. FAQ section is required — minimum 4 questions.
+4. Do NOT write generic statements like "We are proud to serve the residents of [City]" — meaningless, adds nothing.
+5. No placeholder text like "[insert detail]" or "[add statistic]".
+6. Output raw HTML only. No markdown. No code fences.';
 
-LAYER 1 — GEO (Answer Capsule, 40-80 words):
-A single dense paragraph. Mentions ' . $biz_name . ', the target city, the service keyword, and one specific local detail. Written so AI search engines (ChatGPT, Perplexity, Google AI) can extract it as a direct answer. No fluff, no "we are pleased to offer."
-
-LAYER 2 — SEO (Main Body, 600+ words):
-Multiple paragraphs, H2 headings written as questions people actually search. Internal link to the hub page at least twice. Self-contained paragraphs — never "as mentioned above." Use specific data, local facts, or common scenarios where possible.
-
-LAYER 3 — CRO (Conversion, 1-2 paragraphs):
-Clear call to action. Business phone number as clickable tel: link. Direct the reader to the hub/service page. Make it easy to contact or schedule.
-
-Output raw HTML only. No markdown, no code fences. No placeholder text like "[insert here]". Start with the GEO capsule paragraph, then the SEO body with H2s, then the CRO section.';
-
-            $user_prompt = 'Write a city service page for ' . $biz_name . ' targeting: "' . $primary_keyword . '".
+            $user_prompt = 'Write a city service page for ' . $biz_name . '.
 
 Business: ' . $biz_name . '
 Phone: ' . $phone_raw . '
-Location: ' . $location . '
-Target city: ' . $city_name . '
-Page role: CITY SPOKE — ranks for ' . $service_label . ' in ' . $city_name . '. Links up to the Service Areas hub.' . ($hub_url ? "\nHub page: " . $hub_title . ' — ' . $hub_url : '') . '
-Services offered: ' . ($services_list ? $services_list : $service_label) . '
+Business base location: ' . $location . '
+Target city: ' . $city_name . ($biz_state ? ', ' . $biz_state : '') . '
+Primary service: ' . $service_label . '
+All services: ' . ($services_list ? $services_list : $service_label) . '
+Page H1: ' . $primary_keyword . ($hub_url ? "\nService Areas hub: " . $hub_title . ' (' . $hub_url . ')' : '') . '
 
-CONTENT STRUCTURE (follow exactly):
+==== REQUIRED CONTENT STRUCTURE ====
 
-1. GEO CAPSULE (one paragraph, 40-80 words):
-Dense, factual. Mentions ' . $biz_name . ', ' . $city_name . ', and ' . $service_label . '. Written so AI search engines can extract it as a direct answer. No marketing fluff.
+SECTION 1 — GEO LAYER (Layer 1 — 40-80 words, one paragraph):
+Purpose: Prove the business knows and serves ' . $city_name . ' specifically.
+Must include: business name + ' . $city_name . ' + ' . $service_label . ' + ONE specific local detail that cannot apply to any other city (housing stock age, growth pattern, geographic characteristic, local demand driver, or response time context from ' . $location . ' to ' . $city_name . ').
+Must NOT include: "We are proud to serve", generic phrases, city name substitution language.
 
-2. SEO BODY (600+ words, multiple H2 sections):
-H2 rules — CRITICAL:
-- Use ' . $city_name . ' in H2s NO MORE THAN ONCE. Most H2s should describe the service or question WITHOUT the city name.
-- Good H2 examples: "What Electrical Services Do We Offer?", "Signs You Need an Electrician", "Why Licensed Electricians Matter", "How to Schedule Service"
-- Bad H2 examples (do NOT do this): "Why ' . $city_name . ' Homeowners Trust Us", "' . $city_name . ' Electrical Services", "Electricians in ' . $city_name . '"
-- Write paragraphs that are genuinely useful and specific. Reference real scenarios, code requirements, or common problems.
-- ' . ($hub_url ? 'Link to "' . $hub_title . '" naturally at least twice' : '') . '
+SECTION 2 — SEO LAYER (Layer 2 — 600+ words):
+H2 HEADING RULES — HARD STOP:
+- The H1 already contains "' . $city_name . '". That counts as 1 of your allowed city-name headings.
+- You may use "' . $city_name . '" in AT MOST 1 additional H2. Using it in more than 1 additional H2 fails the spec.
+- Most H2s must describe the SERVICE or a useful topic WITHOUT mentioning the city name.
+- CORRECT H2 examples: "Electrical Services We Offer", "Panel Upgrades and Rewiring", "Signs You Need an Electrician", "How We Work", "Why Choose a Licensed Electrician"
+- WRONG H2 examples (these all fail): "Electrical Services in ' . $city_name . '", "Why ' . $city_name . ' Homeowners Choose Us", "Electricians Serving ' . $city_name . '"
 
-3. FAQ SECTION (required):
-- H2: "Frequently Asked Questions"
-- 4-6 questions as H3 tags, each with a 2-4 sentence answer
-- Questions should be real things people search: "How much does it cost?", "Are you licensed and insured?", "Do you offer emergency service?", "How long does [service] take?", "Do you pull permits?"
-- Use FAQ markup compatible with schema (simple H3 + p structure)
+Body content requirements:
+- Explain what services are offered and what each involves — 2+ sentences per service with local context where genuine
+- Reference local market specifics for ' . $city_name . ': housing age, growth patterns, neighborhood context, permit requirements, or local service demand. These must be real and specific, not generic.
+- ' . ($hub_url ? 'Link to the Service Areas hub (' . $hub_title . ') naturally at least twice' : 'Reference the broader service area coverage naturally') . '
+- Self-contained paragraphs — no "as mentioned above"
 
-4. CRO SECTION (1-2 paragraphs):
-Clear call to action. Phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as clickable tel: link. Direct to hub page.
+SECTION 3 — FAQ LAYER (required, 5-6 questions):
+H2: "Frequently Asked Questions"
+Write 5-6 questions as H3 tags with 2-4 sentence answers. Question categories to cover (pick at least 3):
+- Service scope: "Do you serve [specific ' . $city_name . ' neighborhood]?" — answer must name actual neighborhoods
+- Process/logistics: "How quickly can you reach ' . $city_name . '?" — answer must give real distance/time context from ' . $location . '
+- Pricing: "What does [service] cost in ' . $city_name . '?" — answer mentions local factors affecting price
+- Credentials: "Are you licensed and insured in ' . $biz_state . '?" — answer confirms license type
+- Local specifics: a question about local housing, codes, or common local service need
 
-RULES:
-- 900+ words total
-- Do NOT repeat ' . $city_name . ' in every sentence or heading
-- Do NOT use placeholder text like "[insert detail]" or "[add statistic]"
-- Output raw HTML only. No markdown, no code fences.';
+EVERY FAQ answer must contain at least one specific local reference to ' . $city_name . '. Generic answers that could apply to any city fail the spec.
+
+Do NOT include: keyword-stuffed questions like "Who is the best electrician in ' . $city_name . '?" — this is not a real question.
+
+SECTION 4 — CRO LAYER (Layer 3 — 1-2 paragraphs):
+Trust credentials: license type, insurance, permit-pulling practice. One humanizing element (local office, named technician, community connection, or specific operational detail).
+Single CTA: Phone ' . ($tel_link ? $tel_link : $phone_raw) . ' as clickable tel: link. Do NOT stuff city name into CTA ("Ready to schedule in ' . $city_name . '?" is a spec violation — use "Schedule Your Service Call" or "Call Us Today" instead).
+
+==== TARGET ====
+Minimum 1,000 words. Distribution: ~15% GEO, ~45% SEO body, ~20% FAQ, ~20% CRO/trust.
+The finished page must pass this test: "Could this page exist for a business that has never served ' . $city_name . '?" — the answer must be NO.';
 
             $content = $this->call_claude_for_content($system, $user_prompt);
             if (!empty($content)) {
