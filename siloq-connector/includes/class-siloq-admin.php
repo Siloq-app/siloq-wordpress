@@ -5521,23 +5521,26 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         draft_type: draftType
                     }, function(r) {
                         if (r && r.success && r.data && r.data.edit_url) {
-                            btn.textContent = '✓ Page Created';
-                            btn.style.background = '#f0fdf4';
-                            btn.style.color = '#16a34a';
-                            btn.style.borderColor = '#bbf7d0';
-                            // Open the new page in the WP editor in a new tab
-                            window.open(r.data.edit_url, '_blank');
+                            // Replace button with a success message + clickable Edit link
+                            // (window.open is blocked by browsers in AJAX callbacks)
+                            var editUrl = r.data.edit_url;
+                            var wrap = document.createElement('span');
+                            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
+                            wrap.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Created</span>'
+                                + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
+                                + 'style="background:#4f46e5;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
+                                + 'Edit Page →</a>';
+                            btn.parentNode.replaceChild(wrap, btn);
                         } else if (r && r.data && r.data.cannibal) {
-                            // Page already exists — link to it instead of creating duplicate
-                            btn.textContent = '⚠ Page exists';
-                            btn.style.background = '#fffbeb';
-                            btn.style.color = '#92400e';
-                            btn.style.borderColor = '#fcd34d';
-                            btn.title = r.data.message;
-                            btn.disabled = false;
-                            if (r.data.edit_url) {
-                                btn.onclick = function(){ window.open(r.data.edit_url, '_blank'); };
-                            }
+                            // Page already exists — show link to existing page
+                            var existUrl = r.data.edit_url || '';
+                            var wrap2 = document.createElement('span');
+                            wrap2.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
+                            wrap2.innerHTML = '<span style="color:#92400e;font-weight:600;">⚠ Already exists</span>'
+                                + (existUrl ? '<a href="' + existUrl + '" target="_blank" rel="noopener" '
+                                + 'style="background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
+                                + 'View Page →</a>' : '');
+                            btn.parentNode.replaceChild(wrap2, btn);
                         } else {
                             var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
                             btn.textContent = msg;
@@ -7424,6 +7427,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         // Only compare against siloq_primary_services option — NEVER parse from page titles
         $primary_services = json_decode( get_option( 'siloq_primary_services', '[]' ), true );
         if ( ! is_array( $primary_services ) ) $primary_services = array();
+        $primary_services = array_map( 'stripslashes', $primary_services );
 
         // Filter to clean service names only (≤5 words, no state abbreviations)
         $state_abbrs = array('AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
@@ -7487,7 +7491,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         foreach ( $service_areas as $city_entry ) {
             $city_name = is_array( $city_entry ) ? ( $city_entry['city'] ?? '' ) : (string) $city_entry;
-            $city_name = trim( $city_name );
+            $city_name = trim( stripslashes( $city_name ) );
             if ( empty( $city_name ) ) continue;
 
             $city_lower = strtolower( $city_name );
