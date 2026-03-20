@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.203
+ * Version: 1.5.204
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.203');
+define('SILOQ_VERSION', '1.5.204');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -171,6 +171,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-auto-redirect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-executor.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-events.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
@@ -3915,6 +3916,10 @@ function siloq_init() {
     // Initialize webhook handler — must run AFTER get_instance() loads dependencies
     if (class_exists('Siloq_Webhook_Handler')) {
         Siloq_Webhook_Handler::init();
+    }
+
+    if (class_exists('Siloq_Agent_Executor')) {
+        Siloq_Agent_Executor::init();
     }
     
     return $connector;
