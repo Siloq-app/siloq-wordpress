@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.202
+ * Version: 1.5.203
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.190');
+define('SILOQ_VERSION', '1.5.203');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -171,6 +171,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-auto-redirect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-page-events.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-junk-detector.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-builder-apply.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-theme-compat.php';
@@ -283,6 +284,10 @@ class Siloq_Connector {
 
         // Initialize Content Editor (AJAX: siloq_get_elementor_widgets, siloq_suggest_widget_edit)
         Siloq_Content_Editor::init();
+
+        // Initialize Page Events — outbound webhook to Siloq API on save_post / trashed_post
+        $page_events = new Siloq_Page_Events();
+        $page_events->register_hooks();
 
         // [siloq_scanner] shortcode + AJAX (front-end scanner for scan.siloq.ai)
         add_action( 'init', array( 'Siloq_Scanner_Shortcode', 'init' ) );
