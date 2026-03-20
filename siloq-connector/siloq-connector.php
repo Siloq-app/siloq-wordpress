@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.204
+ * Version: 1.5.205
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.204');
+define('SILOQ_VERSION', '1.5.205');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -186,6 +186,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-rules.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-scanner-shortcode.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-goals.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-pages.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -443,6 +444,11 @@ class Siloq_Connector {
         // Intelligence endpoint (Generate SEO Plan button)
         add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));
 
+        // Agent Approvals + Content Plan (Track 10)
+        add_action('wp_ajax_siloq_approve_action',     ['Siloq_Agent_Pages', 'ajax_approve_action']);
+        add_action('wp_ajax_siloq_dismiss_action',     ['Siloq_Agent_Pages', 'ajax_dismiss_action']);
+        add_action('wp_ajax_siloq_run_topical_audit',  ['Siloq_Agent_Pages', 'ajax_run_topical_audit']);
+
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -504,6 +510,24 @@ class Siloq_Connector {
             'manage_options',
             'siloq-image-brief',
             array($this, 'render_image_brief_page')
+        );
+
+        add_submenu_page(
+            'siloq-settings',
+            __('Agent Recommendations', 'siloq-connector'),
+            __('Approvals', 'siloq-connector'),
+            'manage_options',
+            'siloq-approvals',
+            ['Siloq_Agent_Pages', 'render_approvals_page']
+        );
+
+        add_submenu_page(
+            'siloq-settings',
+            __('Content Plan', 'siloq-connector'),
+            __('Content Plan', 'siloq-connector'),
+            'manage_options',
+            'siloq-content-plan',
+            ['Siloq_Agent_Pages', 'render_content_plan_page']
         );
     }
 
