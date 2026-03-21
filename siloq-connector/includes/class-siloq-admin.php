@@ -4042,55 +4042,127 @@ if ( ! empty( $_rename_with_city ) ) : ?>
 
             <!-- ═══════ GSC TAB ═══════ -->
             <div id="siloq-tab-gsc" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
-                <div class="siloq-card">
-                    <div class="siloq-gsc-status" style="text-align:center;padding:32px 16px;">
-                        <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
-                            <div id="siloq-gsc-property-picker-tab" class="notice notice-info" style="padding:16px;margin:12px 0;text-align:left;">
-                                <h3 style="margin:0 0 8px;">&#9989; Google account connected &mdash; choose your property</h3>
-                                <p style="color:#555;margin:0 0 12px;">Select which Search Console property to use for this site:</p>
-                                <div id="siloq-gsc-property-list-tab">Loading properties...</div>
-                                <p style="margin:12px 0 0;">
-                                    <button type="button" id="siloq-gsc-confirm-property-tab" class="siloq-btn siloq-btn--primary" disabled>Confirm Connection</button>
-                                    <button type="button" id="siloq-gsc-cancel-property-tab" class="siloq-btn siloq-btn--outline" style="margin-left:8px;">Cancel</button>
-                                </p>
-                            </div>
-                        <?php elseif ($gsc_connected): ?>
-                            <div class="siloq-gsc-status__icon">&#9989;</div>
-                            <h3>Google Search Console Connected</h3>
-                            <dl class="siloq-gsc-status__details">
-                                <dt>Property</dt>
-                                <dd><?php echo esc_html($gsc_property); ?></dd>
-                                <dt>Last Sync</dt>
-                                <dd><?php echo $gsc_last_sync ? esc_html($gsc_last_sync) : 'Never'; ?></dd>
-                            </dl>
-                            <?php
-                            $tab_impressions = intval(get_option('siloq_gsc_impressions_28d', 0));
-                            $tab_clicks      = intval(get_option('siloq_gsc_clicks_28d', 0));
-                            $tab_position    = floatval(get_option('siloq_gsc_avg_position', 0));
-                            ?>
-                            <div style="display:flex;gap:24px;justify-content:center;margin:20px 0;">
-                                <div><strong><?php echo number_format($tab_impressions); ?></strong><br><small>Impressions (28d)</small></div>
-                                <div><strong><?php echo number_format($tab_clicks); ?></strong><br><small>Clicks (28d)</small></div>
-                                <div><strong><?php echo $tab_position > 0 ? number_format($tab_position, 1) : '--'; ?></strong><br><small>Avg Position</small></div>
-                            </div>
-                            <div style="display:flex;gap:8px;justify-content:center">
-                                <button class="siloq-btn siloq-btn--primary" id="siloq-gsc-sync-btn-tab">Sync Now</button>
-                                <button class="siloq-btn siloq-btn--outline siloq-btn--danger" id="siloq-gsc-disconnect-btn-tab">Disconnect</button>
-                            </div>
-                            <span id="siloq-gsc-tab-msg" class="siloq-status-message" style="display:block;margin-top:8px;"></span>
-                        <?php else: ?>
-                            <div class="siloq-gsc-status__icon">&#128270;</div>
-                            <h3>Connect Google Search Console</h3>
-                            <p style="color:var(--siloq-muted);margin:8px 0 20px">Link your GSC property to unlock performance data and keyword insights.</p>
-                            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-                                <button type="button" id="siloq-gsc-connect-btn-tab" class="siloq-btn siloq-btn--primary">⚡ Connect Google Search Console</button>
-                                <button type="button" id="siloq-gsc-check-btn-tab" class="siloq-btn siloq-btn--outline">Check Connection</button>
-                            </div>
-                            <p style="color:var(--siloq-muted);font-size:13px;margin-top:12px;">Connect in the Siloq dashboard, then click "Check Connection" to confirm.</p>
-                            <span id="siloq-gsc-tab-msg" class="siloq-status-message" style="display:block;margin-top:8px;"></span>
-                        <?php endif; ?>
+                <div id="siloq-gsc-not-connected" style="display:none;text-align:center;padding:60px 20px;">
+                    <p style="font-size:15px;color:#555;">GSC is not connected yet.</p>
+                    <p style="color:#888;font-size:13px;">Connect in your <a href="https://app.siloq.ai" target="_blank">Siloq dashboard</a>, then return here.</p>
+                    <button id="siloq-gsc-recheck" class="button button-primary" style="margin-top:12px;">Check Connection</button>
+                </div>
+
+                <div id="siloq-gsc-connected" style="display:none;">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+                        <div class="siloq-card" style="text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#1a56db;" id="siloq-gsc-clicks">—</div>
+                            <div style="font-size:12px;color:#888;margin-top:4px;">Total Clicks</div>
+                        </div>
+                        <div class="siloq-card" style="text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#1a56db;" id="siloq-gsc-impressions">—</div>
+                            <div style="font-size:12px;color:#888;margin-top:4px;">Total Impressions</div>
+                        </div>
+                        <div class="siloq-card" style="text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#1a56db;" id="siloq-gsc-position">—</div>
+                            <div style="font-size:12px;color:#888;margin-top:4px;">Avg Position</div>
+                        </div>
+                        <div class="siloq-card" style="text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#1a56db;" id="siloq-gsc-pages">—</div>
+                            <div style="font-size:12px;color:#888;margin-top:4px;">Pages w/ Data</div>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                        <div class="siloq-card">
+                            <h3 style="font-size:14px;font-weight:600;margin:0 0 12px;">Top Queries</h3>
+                            <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid #e5e7eb;">
+                                        <th style="text-align:left;padding:6px 4px;color:#888;font-weight:500;">Query</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Impr.</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Clicks</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Pos.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="siloq-gsc-queries-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="siloq-card">
+                            <h3 style="font-size:14px;font-weight:600;margin:0 0 12px;">Top Pages</h3>
+                            <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="border-bottom:1px solid #e5e7eb;">
+                                        <th style="text-align:left;padding:6px 4px;color:#888;font-weight:500;">Page</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Impr.</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Clicks</th>
+                                        <th style="text-align:right;padding:6px 4px;color:#888;font-weight:500;">Pos.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="siloq-gsc-pages-body"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
+
+                <div id="siloq-gsc-loading" style="text-align:center;padding:60px;">
+                    <span class="spinner is-active" style="float:none;"></span>
+                    <p style="color:#888;margin-top:12px;">Loading GSC data...</p>
+                </div>
+
+                <script>
+                (function($) {
+                    var gscNonce = '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>';
+
+                    function siloqLoadGSC() {
+                        if ($('#siloq-gsc-connected').data('loaded')) return;
+                        $('#siloq-gsc-loading').show();
+                        $('#siloq-gsc-connected').hide();
+                        $('#siloq-gsc-not-connected').hide();
+
+                        $.post(ajaxurl, {
+                            action: 'siloq_get_gsc_summary',
+                            nonce: gscNonce
+                        }, function(res) {
+                            $('#siloq-gsc-loading').hide();
+                            if (!res.success || !res.data || !res.data.connected) {
+                                $('#siloq-gsc-not-connected').show();
+                                return;
+                            }
+                            var d = res.data;
+                            $('#siloq-gsc-clicks').text(d.summary.total_clicks.toLocaleString());
+                            $('#siloq-gsc-impressions').text(d.summary.total_impressions.toLocaleString());
+                            $('#siloq-gsc-position').text(d.summary.avg_position);
+                            $('#siloq-gsc-pages').text(d.summary.pages_with_data);
+
+                            var qHtml = '';
+                            $.each(d.top_queries, function(i, q) {
+                                qHtml += '<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 4px;">' + $('<span>').text(q.query).html() + '</td><td style="text-align:right;padding:6px 4px;">' + q.impressions.toLocaleString() + '</td><td style="text-align:right;padding:6px 4px;">' + q.clicks + '</td><td style="text-align:right;padding:6px 4px;">' + q.avg_position + '</td></tr>';
+                            });
+                            $('#siloq-gsc-queries-body').html(qHtml || '<tr><td colspan="4" style="padding:12px;color:#888;">No query data yet.</td></tr>');
+
+                            var pHtml = '';
+                            $.each(d.top_pages, function(i, p) {
+                                var slug = p.url.replace(/https?:\/\/[^\/]+/, '').replace(/\/$/, '') || '/';
+                                pHtml += '<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:6px 4px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + p.url + '">' + slug + '</td><td style="text-align:right;padding:6px 4px;">' + p.impressions.toLocaleString() + '</td><td style="text-align:right;padding:6px 4px;">' + p.clicks + '</td><td style="text-align:right;padding:6px 4px;">' + p.avg_position + '</td></tr>';
+                            });
+                            $('#siloq-gsc-pages-body').html(pHtml || '<tr><td colspan="4" style="padding:12px;color:#888;">No page data yet.</td></tr>');
+
+                            $('#siloq-gsc-connected').data('loaded', true).show();
+                        });
+                    }
+
+                    // Load GSC data when tab becomes active
+                    $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-gsc"]', function() {
+                        siloqLoadGSC();
+                    });
+
+                    // Also load if arriving via hash
+                    if (window.location.hash === '#siloq-tab-gsc') {
+                        siloqLoadGSC();
+                    }
+
+                    // Recheck button
+                    $(document).on('click', '#siloq-gsc-recheck', function() {
+                        $('#siloq-gsc-connected').data('loaded', false);
+                        siloqLoadGSC();
+                    });
+                })(jQuery);
+                </script>
             </div><!-- /gsc tab -->
 
             <!-- ═══════ SETTINGS TAB ═══════ -->
@@ -9317,6 +9389,26 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_success( $res['data'] );
         }
         wp_send_json_error( array( 'message' => $res['message'] ?? 'Failed to load gap report.' ) );
+    }
+
+    public static function ajax_get_gsc_summary() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+            return;
+        }
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'Site not connected.' ) );
+            return;
+        }
+        $api = new Siloq_API_Client();
+        $res = $api->get( '/sites/' . $site_id . '/gsc/summary' );
+        if ( ! empty( $res['success'] ) ) {
+            wp_send_json_success( $res['data'] );
+            return;
+        }
+        wp_send_json_error( array( 'message' => isset( $res['message'] ) ? $res['message'] : 'Failed to load GSC data.' ) );
     }
 
     public static function ajax_run_depth_scan() {

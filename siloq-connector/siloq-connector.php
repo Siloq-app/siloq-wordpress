@@ -437,6 +437,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_save_topic_boundary', array('Siloq_Admin', 'ajax_save_topic_boundary'));
         add_action('wp_ajax_siloq_get_depth_scores', array('Siloq_Admin', 'ajax_get_depth_scores'));
         add_action('wp_ajax_siloq_get_gap_report', array('Siloq_Admin', 'ajax_get_gap_report'));
+        add_action( 'wp_ajax_siloq_get_gsc_summary', array( 'Siloq_Admin', 'ajax_get_gsc_summary' ) );
         add_action('wp_ajax_siloq_run_depth_scan', array('Siloq_Admin', 'ajax_run_depth_scan'));
         add_action('wp_ajax_siloq_add_to_plan', array('Siloq_Admin', 'ajax_add_to_plan'));
         add_action('wp_ajax_siloq_bulk_add_to_plan', array('Siloq_Admin', 'ajax_bulk_add_to_plan'));
