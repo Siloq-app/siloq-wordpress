@@ -2083,10 +2083,10 @@ $api_silos = array();
 $api_silo_page_ids = array(); // WP post IDs already assigned to API silos
 $site_id_opt = get_option( 'siloq_site_id', '' );
 $api_key_opt = get_option( 'siloq_api_key', '' );
-$api_url_opt = get_option( 'siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app' );
+$api_url_opt = get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' );
 
 if ( ! empty( $site_id_opt ) && ! empty( $api_key_opt ) ) {
-    $silo_map_url = trailingslashit( $api_url_opt ) . 'api/v1/sites/' . $site_id_opt . '/silo-map/';
+    $silo_map_url = trailingslashit( $api_url_opt ) . 'sites/' . $site_id_opt . '/silo-map/';
     $resp = wp_remote_get( $silo_map_url, array(
         'headers' => array( 'Authorization' => 'Bearer ' . $api_key_opt ),
         'timeout' => 10,
