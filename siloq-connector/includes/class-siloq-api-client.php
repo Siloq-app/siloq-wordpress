@@ -223,8 +223,10 @@ class Siloq_API_Client {
             )
         );
         
-        if ($method === 'POST' && !empty($data)) {
-            $args['body'] = json_encode($data);
+        if ($method === 'POST') {
+            if (!empty($data)) {
+                $args['body'] = json_encode($data);
+            }
             $response = wp_remote_post($url, $args);
         } else {
             $response = wp_remote_get($url, $args);

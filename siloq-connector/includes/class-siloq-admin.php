@@ -2125,6 +2125,10 @@ if ( ! empty( $site_id_opt ) && ! empty( $api_key_opt ) ) {
 
                 if ( $hub_wp_id || count( $children_posts ) > 0 ) {
                     $api_silo_page_ids[] = $hub_wp_id;
+                    // Stamp hub WP post with role so SEO/GEO Plan local detection picks it up
+                    if ( $hub_wp_id ) {
+                        update_post_meta( $hub_wp_id, '_siloq_page_role', 'hub' );
+                    }
                     $api_silos[] = array(
                         'id'       => $hub_wp_id ?: 0,
                         'title'    => $api_silo['name'] ?? 'Silo',
@@ -2259,6 +2263,19 @@ if (!is_array($service_cities)) $service_cities = array();
 $service_areas = json_decode( get_option('siloq_service_areas', '[]'), true );
 if (!is_array($service_areas)) $service_areas = array();
 $all_cities = array_unique(array_merge($service_cities, $service_areas));
+
+// Clear stale reposition flags before re-evaluating — flags are only valid for current page load
+$_stale_flagged = get_posts(array(
+    'post_type'      => array('page', 'post'),
+    'post_status'    => 'publish',
+    'posts_per_page' => -1,
+    'meta_query'     => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS')),
+    'fields'         => 'ids',
+));
+foreach ($_stale_flagged as $_sfid) {
+    delete_post_meta($_sfid, '_siloq_reposition_flag');
+}
+unset($_stale_flagged, $_sfid);
 
 foreach ($hub_data as $hub) {
     $hub_url = strtolower($hub['url']);
