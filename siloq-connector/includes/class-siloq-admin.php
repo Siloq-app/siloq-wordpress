@@ -2071,11 +2071,14 @@ $missing_fields = array_filter($profile_fields, function($f) { return empty($f['
 $missing_count_profile = count($missing_fields);
 
 // Build hub data: pages marked as hub in analysis, OR pages that have child pages
+// Cap at 200 for dashboard hub/architecture detection — large WC sites have 700+ products
+// which makes N² loops too slow for synchronous page render. Full data available via AJAX/API.
 $all_synced_pages = get_posts(array(
-    'post_type'          => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'),
-    'post_type__not_in'  => array('koops', 'jet_cct', 'jet-smart-filters', 'attachment'),
+    'post_type'          => array('page', 'post'), // pages/posts only for hub detection; products don't have hub structure
     'post_status'        => 'publish',
-    'posts_per_page'     => -1,
+    'posts_per_page'     => 200,
+    'orderby'            => 'menu_order',
+    'order'              => 'ASC',
     'meta_query'         => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
 // Fetch silo map from API — more accurate than WP post_parent detection
@@ -2178,7 +2181,7 @@ foreach ($all_synced_pages as $hp) {
         'post_type'      => 'any',
         'post_parent'    => $hp->ID,
         'post_status'    => 'publish',
-        'posts_per_page' => -1,
+        'posts_per_page' => 100,
     ));
 
     // Secondary: URL-path children (handles /our-services/ vs /services/ mismatch)
@@ -2268,7 +2271,7 @@ $all_cities = array_unique(array_merge($service_cities, $service_areas));
 $_stale_flagged = get_posts(array(
     'post_type'      => array('page', 'post'),
     'post_status'    => 'publish',
-    'posts_per_page' => -1,
+    'posts_per_page' => 200,
     'meta_query'     => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS')),
     'fields'         => 'ids',
 ));
@@ -2380,7 +2383,7 @@ foreach ($hub_data as $h) {
 // Build a set of permalink paths that appear as href targets in any published page content.
 // This prevents city pages linked inside hub body content from being falsely flagged as orphans.
 $content_linked_paths = array();
-$all_published = get_posts(array('post_type' => array('page', 'post'), 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids'));
+$all_published = get_posts(array('post_type' => array('page', 'post'), 'post_status' => 'publish', 'posts_per_page' => 200, 'fields' => 'ids'));
 foreach ($all_published as $_pid) {
     $_p = get_post($_pid);
     if (!$_p || empty($_p->post_content)) continue;
@@ -3687,12 +3690,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
 <!-- ── Reposition Recommendations ── -->
 <?php
-$_reposition_pages = get_posts(array(
-    'post_type'   => 'any',
-    'post_status' => 'publish',
-    'numberposts' => -1,
-    'meta_query'  => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS')),
-));
+$_reposition_pages = get_posts(array('post_type' => array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS'))));
 if ( ! empty( $_reposition_pages ) ) : ?>
 <div class="siloq-card" style="margin-bottom:16px;border:2px solid #f97316;">
     <h3 style="font-size:15px;font-weight:700;margin:0 0 10px;color:#1e293b;">Location Pages Under Wrong Hub</h3>
@@ -3717,12 +3715,7 @@ if ( ! empty( $_reposition_pages ) ) : ?>
 
 <!-- ── Rename Recommendations ── -->
 <?php
-$_rename_pages = get_posts(array(
-    'post_type'   => 'any',
-    'post_status' => 'publish',
-    'numberposts' => -1,
-    'meta_query'  => array(array('key' => '_siloq_rename_suggestion', 'compare' => 'EXISTS')),
-));
+$_rename_pages = get_posts(array('post_type' => array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_rename_suggestion', 'compare' => 'EXISTS'))));
 $_rename_with_city = array();
 foreach ( $_rename_pages as $_rnp ) {
     $_rs = get_post_meta( $_rnp->ID, '_siloq_rename_suggestion', true );
