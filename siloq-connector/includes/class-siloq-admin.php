@@ -3567,12 +3567,16 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
             'numberposts' => -1,
             'meta_query'  => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
         ) );
-        $_plan_sa_hub_path = trailingslashit( get_site_url() ) . get_page_uri( $_plan_sa_hub ) . '/';
+        $_plan_sa_hub_url = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
         foreach ( $_plan_spokes as $_ps ) {
-            $slug = get_page_uri( $_ps );
             $page_url = trailingslashit( get_permalink( $_ps->ID ) );
-            // Only count pages that are NOT already nested under the service-areas hub
-            if ( strpos( $page_url, $_plan_sa_hub_path ) !== 0 ) {
+            // Only count pages that are NOT already nested under the service-areas hub URL
+            // Also skip if the page URL contains service-area/service-areas anywhere in path
+            $already_nested = (
+                strpos( $page_url, $_plan_sa_hub_url ) === 0 ||
+                strpos( $page_url, '/service-area' ) !== false
+            );
+            if ( ! $already_nested ) {
                 $_plan_sa_spokes_count++;
             }
         }
