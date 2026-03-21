@@ -5306,27 +5306,34 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                             $btn.text('Scanning...');
                             $status.text('Generating subtopic map... this takes 30\u201360 seconds').show();
 
-                            $.post(ajaxurl, {
-                                action: 'siloq_run_depth_scan',
-                                nonce: depthNonce,
-                                silo_id: currentSiloId,
-                                post_id: postId
-                            }, function(scanRes) {
-                                $spinner.removeClass('is-active');
-                                $status.hide();
-                                if (scanRes.success) {
-                                    // Update last_scanned in local data
-                                    if (hub) { hub.last_scanned = new Date().toISOString(); }
-                                    openResults(postId);
-                                } else {
+                            $.ajax({
+                                url: ajaxurl,
+                                method: 'POST',
+                                timeout: 120000,
+                                data: {
+                                    action: 'siloq_run_depth_scan',
+                                    nonce: depthNonce,
+                                    silo_id: currentSiloId,
+                                    post_id: postId
+                                },
+                                success: function(scanRes) {
+                                    $spinner.removeClass('is-active');
+                                    $status.hide();
+                                    if (scanRes.success) {
+                                        if (hub) { hub.last_scanned = new Date().toISOString(); }
+                                        openResults(postId);
+                                    } else {
+                                        $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
+                                        alert('Scan failed: ' + (scanRes.data && scanRes.data.message ? scanRes.data.message : 'Unknown error'));
+                                    }
+                                },
+                                error: function(xhr) {
+                                    $spinner.removeClass('is-active');
+                                    $status.hide();
                                     $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
-                                    alert('Scan failed: ' + (scanRes.data && scanRes.data.message ? scanRes.data.message : 'Unknown error'));
+                                    var msg = xhr.status === 504 ? 'Generation is still running \u2014 wait 30 seconds and click Rescan to see results.' : 'Scan request failed.';
+                                    alert(msg);
                                 }
-                            }).fail(function() {
-                                $spinner.removeClass('is-active');
-                                $status.hide();
-                                $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
-                                alert('Scan request failed.');
                             });
                         }).fail(function() {
                             $btn.prop('disabled', false).text('Start Depth Analysis \u2192');
@@ -9435,24 +9442,36 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $api  = new Siloq_API_Client();
         $base = '/sites/' . $site_id . '/silos/' . $silo_id;
 
-        // Step 1: Generate subtopic map
+        // Step 1: Fire subtopic generation — API returns immediately (async background thread)
         $gen = $api->post( $base . '/generate-subtopic-map' );
         if ( empty( $gen['success'] ) ) {
-            wp_send_json_error( array( 'message' => $gen['message'] ?? 'Subtopic generation failed.' ) );
+            wp_send_json_error( array( 'message' => $gen['message'] ?? 'Failed to start subtopic generation.' ) );
         }
 
-        // Step 2: Refresh depth scores
-        $scores = $api->post( $base . '/depth-scores' );
-        if ( empty( $scores['success'] ) ) {
-            wp_send_json_error( array( 'message' => $scores['message'] ?? 'Score refresh failed.' ) );
+        // Step 2: Poll depth-scores — AI runs in background, check up to 8 times (10s apart)
+        // WordPress AJAX has up to 300s execution limit, well above the AI call time.
+        $scores_data = array();
+        for ( $attempt = 0; $attempt < 8; $attempt++ ) {
+            sleep( 10 );
+            $scores = $api->get( $base . '/depth-scores' );
+            if ( ! empty( $scores['success'] ) && ! empty( $scores['data'] ) ) {
+                $sd = $scores['data']['semantic_density_score'] ?? 0;
+                $tc = $scores['data']['topical_closure_score'] ?? 0;
+                if ( $sd > 0 || $tc > 0 ) {
+                    $scores_data = $scores['data'];
+                    break;
+                }
+            }
         }
 
-        // Update last scanned timestamp on the post
         if ( $post_id ) {
             update_post_meta( $post_id, '_siloq_depth_last_scanned', current_time( 'mysql' ) );
         }
 
-        wp_send_json_success( array( 'message' => 'Depth scan complete.' ) );
+        wp_send_json_success( array(
+            'message' => 'Depth scan complete.',
+            'scores'  => $scores_data,
+        ) );
     }
 
     public static function ajax_add_to_plan() {
