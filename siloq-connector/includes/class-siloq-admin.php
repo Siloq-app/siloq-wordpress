@@ -9321,6 +9321,12 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $api     = new Siloq_API_Client();
         $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
 
+        // Clear stale local-* placeholder IDs — these were never real API IDs
+        if ( ! empty( $silo_id ) && strpos( $silo_id, 'local-' ) === 0 ) {
+            delete_post_meta( $post_id, '_siloq_api_silo_id' );
+            $silo_id = '';
+        }
+
         if ( empty( $silo_id ) ) {
             $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
                 'name'         => get_the_title( $post_id ),
