@@ -5242,9 +5242,10 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                         $.post(ajaxurl, { action: 'siloq_get_gap_report', nonce: depthNonce, silo_id: siloId, post_id: postId }, function(res) {
                             if (res.success && res.data) {
                                 var d = res.data;
-                                var critical = (d.critical_gaps || []).filter(function(g) { return (g.priority || 0) >= 80; });
+                                // API already pre-filters by priority — trust the API, no client-side double-filter
+                                var critical = d.critical_gaps || [];
                                 var thin = d.thin_pages || [];
-                                var standard = (d.standard_gaps || []).filter(function(g) { var p = g.priority || 0; return p >= 50 && p < 80; });
+                                var standard = d.standard_gaps || [];
 
                                 $('#siloq-depth-critical-count').text(critical.length);
                                 $('#siloq-depth-critical-list').html(critical.length ? critical.map(renderCriticalGapItem).join('') : '<p style="color:#888;">None</p>');

@@ -417,7 +417,7 @@ class Siloq_Agent_Pages {
                     'Authorization' => 'Bearer ' . $api_key,
                     'Content-Type'  => 'application/json',
                 ],
-                'timeout' => 30,
+                'timeout' => 120,  // Topical audit calls AI — needs longer timeout
             ]
         );
 
