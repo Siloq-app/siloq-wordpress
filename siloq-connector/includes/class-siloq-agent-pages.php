@@ -36,7 +36,7 @@ class Siloq_Agent_Pages {
         $actions = [];
         if ($api_key && $site_id) {
             $response = wp_remote_get(
-                trailingslashit($api_url) . "api/v1/sites/{$site_id}/pending-actions/?status=pending",
+                trailingslashit($api_url) . "sites/{$site_id}/pending-actions/?status=pending",
                 [
                     'headers' => ['Authorization' => 'Bearer ' . $api_key],
                     'timeout' => 15,
@@ -197,7 +197,7 @@ class Siloq_Agent_Pages {
         $briefs = [];
         if ($api_key && $site_id) {
             $response = wp_remote_get(
-                trailingslashit($api_url) . "api/v1/sites/{$site_id}/pending-actions/?status=pending&action_type=create_content",
+                trailingslashit($api_url) . "sites/{$site_id}/pending-actions/?status=pending&action_type=create_content",
                 [
                     'headers' => ['Authorization' => 'Bearer ' . $api_key],
                     'timeout' => 15,
@@ -340,7 +340,7 @@ class Siloq_Agent_Pages {
         $api_key   = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(
-            trailingslashit($api_url) . "api/v1/sites/{$site_id}/approvals/{$action_id}/approve/",
+            trailingslashit($api_url) . "sites/{$site_id}/approvals/{$action_id}/approve/",
             [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $api_key,
@@ -376,7 +376,7 @@ class Siloq_Agent_Pages {
         $api_key   = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(
-            trailingslashit($api_url) . "api/v1/sites/{$site_id}/approvals/{$action_id}/dismiss/",
+            trailingslashit($api_url) . "sites/{$site_id}/approvals/{$action_id}/dismiss/",
             [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $api_key,
@@ -411,7 +411,7 @@ class Siloq_Agent_Pages {
         $api_key = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(
-            trailingslashit($api_url) . "api/v1/sites/{$site_id}/agent/topical-audit/",
+            trailingslashit($api_url) . "sites/{$site_id}/agent/topical-audit/",
             [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $api_key,
