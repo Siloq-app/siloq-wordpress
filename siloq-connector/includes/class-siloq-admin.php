@@ -4467,7 +4467,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                 $goals_data        = Siloq_Goals::get_goals();
                 $current_goal           = isset( $goals_data['primary_goal'] ) ? $goals_data['primary_goal'] : 'local_leads';
                 $current_geo_pages      = isset( $goals_data['geo_priority_pages'] ) ? (array) $goals_data['geo_priority_pages'] : array();
-                $current_target_keywords = json_decode( get_option( 'siloq_target_keywords', '[]' ), true );
+                $current_target_keywords = json_decode( get_option( 'siloq_target_keywords_' . get_option('siloq_site_id','0'), '[]' ), true );
                 if ( ! is_array( $current_target_keywords ) ) $current_target_keywords = array();
                 $goal_labels       = array(
                     'local_leads'    => __( 'Get more phone calls / local leads', 'siloq-connector' ),
@@ -5429,7 +5429,7 @@ if (empty($_goals_priority_cities_raw)) {
 $_goals_geo_pages_raw = get_option('siloq_geo_priority_pages', '[]');
 $_goals_geo_pages     = json_decode($_goals_geo_pages_raw, true);
 if (!is_array($_goals_geo_pages)) $_goals_geo_pages = array();
-$_goals_target_keywords_raw = get_option('siloq_target_keywords', '[]');
+$_goals_target_keywords_raw = get_option('siloq_target_keywords_' . get_option('siloq_site_id','0'), get_option('siloq_target_keywords', '[]'));
 $_goals_target_keywords     = json_decode($_goals_target_keywords_raw, true);
 if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 ?>
@@ -8912,7 +8912,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $target_keywords = array_slice( array_map( 'sanitize_text_field', $target_kw_raw ), 0, 7 );
 
         if ( ! empty( $target_keywords ) ) {
-            update_option( 'siloq_target_keywords', wp_json_encode( $target_keywords ) );
+            update_option( 'siloq_target_keywords_' . get_option('siloq_site_id','0'), wp_json_encode( $target_keywords ) );
         }
 
         $goals = array(
@@ -9022,13 +9022,15 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         if ( $primary_goal )       update_option( 'siloq_primary_goal',       $primary_goal );
         if ( ! empty( $priority_services ) ) update_option( 'siloq_priority_services', wp_json_encode( $priority_services ) );
         if ( ! empty( $priority_cities ) )   update_option( 'siloq_priority_cities',   wp_json_encode( $priority_cities ) );
-        if ( ! empty( $target_keywords ) )   update_option( 'siloq_target_keywords',   wp_json_encode( $target_keywords ) );
+        if ( ! empty( $target_keywords ) )   update_option( 'siloq_target_keywords_' . get_option('siloq_site_id','0'),   wp_json_encode( $target_keywords ) );
         if ( ! empty( $geo_pages ) )         update_option( 'siloq_geo_priority_pages', wp_json_encode( $geo_pages ) ); // backward compat
 
         // Auto-map keywords to pages
         $keyword_map = array();
         if ( ! empty( $target_keywords ) ) {
-            $keyword_map = self::map_keywords_to_pages( $target_keywords );
+            // Only run expensive keyword mapping if site has synced pages (avoid timeout on new installs)
+            $synced_count = (int) get_option( 'siloq_synced_page_count', 0 );
+            $keyword_map  = $synced_count > 0 ? self::map_keywords_to_pages( $target_keywords ) : array();
         }
 
         // Persist goals (backward compat siloq_site_goals option)
@@ -9268,6 +9270,38 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 array( 'key' => '_siloq_page_role', 'value' => 'apex_hub', 'compare' => '=' ),
             ),
         ) );
+
+        // No hubs explicitly set — auto-detect from site structure
+        if ( empty( $hubs ) ) {
+            // Strategy 1: top-level pages that have child pages
+            $all_pages = get_posts( array(
+                'post_type' => 'page', 'post_status' => 'publish',
+                'posts_per_page' => -1, 'post_parent' => 0,
+            ) );
+            foreach ( $all_pages as $pg ) {
+                $children = get_posts( array(
+                    'post_type' => 'page', 'post_status' => 'publish',
+                    'post_parent' => $pg->ID, 'posts_per_page' => 1, 'fields' => 'ids',
+                ) );
+                if ( ! empty( $children ) ) {
+                    update_post_meta( $pg->ID, '_siloq_page_role', 'hub' );
+                    $hubs[] = $pg;
+                }
+            }
+            // Strategy 2: WooCommerce product categories as hubs
+            if ( empty( $hubs ) && class_exists( 'WooCommerce' ) ) {
+                $cats = get_terms( array( 'taxonomy' => 'product_cat', 'hide_empty' => true, 'parent' => 0 ) );
+                foreach ( $cats as $cat ) {
+                    $cat_page_id = wc_get_page_id( 'shop' );
+                    $link = get_term_link( $cat );
+                    $wp_id = url_to_postid( $link ) ?: 0;
+                    if ( $wp_id ) {
+                        update_post_meta( $wp_id, '_siloq_page_role', 'hub' );
+                        $hubs[] = get_post( $wp_id );
+                    }
+                }
+            }
+        }
 
         $results = array();
         foreach ( $hubs as $hub ) {
