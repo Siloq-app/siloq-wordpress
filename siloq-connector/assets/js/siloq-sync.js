@@ -1,303 +1,257 @@
 /**
  * Siloq Sync Page JavaScript
- * Handles page synchronization functionality
+ * Handles page synchronization functionality with full pagination support.
  */
 
 (function($) {
     'use strict';
 
-    // Initialize sync functionality
     $(document).ready(function() {
-        initSyncPage();
+        loadSyncStatus();
+        loadPagesList();
+        bindSyncEvents();
     });
 
-    function initSyncPage() {
-        // Load sync status on page load
-        loadSyncStatus();
-        
-        // Load pages list
-        loadPagesList();
-        
-        // Bind event handlers
-        bindSyncEvents();
-    }
-
     function bindSyncEvents() {
-        // Sync all pages button
+
+        // ── Sync All Pages (paginated loop) ───────────────────────────────
         $('#siloq-sync-all').on('click', function() {
-            const $button = $(this);
-            if ($button.hasClass('loading')) {
-                return;
+            var $button = $(this);
+            if ($button.hasClass('loading')) return;
+
+            $button.addClass('loading').prop('disabled', true)
+                   .html('<span class="siloq-spinner"></span> Syncing...');
+
+            // Progress UI
+            if (!$('#siloq-sync-progress-wrap').length) {
+                $button.after(
+                    '<div id="siloq-sync-progress-wrap" style="margin-top:12px;">' +
+                    '<div style="background:#e5e7eb;border-radius:4px;height:8px;width:100%;">' +
+                    '<div id="siloq-sync-bar" style="background:#1a56db;height:8px;border-radius:4px;width:0%;transition:width 0.3s;"></div>' +
+                    '</div>' +
+                    '<p id="siloq-sync-progress-text" style="font-size:13px;color:#555;margin-top:6px;">Starting sync...</p>' +
+                    '</div>'
+                );
+            } else {
+                $('#siloq-sync-bar').css('width', '0%');
+                $('#siloq-sync-progress-text').text('Starting sync...');
+                $('#siloq-sync-progress-wrap').show();
             }
-            
-            $button.addClass('loading').prop('disabled', true);
-            $button.html('<span class="siloq-spinner"></span> Syncing...');
-            
-            $.ajax({
-                url: siloqAdmin.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'siloq_sync_all_pages',
-                    nonce: siloqAdmin.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        showNotification('success', response.data.message || 'All pages synced successfully');
-                        loadSyncStatus();
-                        loadPagesList();
-                    } else {
-                        showNotification('error', response.data.message || 'Sync failed');
+
+            runBatch(0, 0, 0);
+
+            function runBatch(offset, totalSynced, knownTotal) {
+                $.ajax({
+                    url: siloqAdmin.ajaxUrl,
+                    type: 'POST',
+                    timeout: 120000,
+                    data: {
+                        action: 'siloq_sync_all_pages',
+                        nonce:  siloqAdmin.nonce,
+                        offset: offset
+                    },
+                    success: function(response) {
+                        if (!response.success) {
+                            showNotification('error', (response.data && response.data.message) ? response.data.message : 'Sync failed');
+                            finishSync($button);
+                            return;
+                        }
+
+                        var d          = response.data;
+                        var nowSynced  = totalSynced + (d.synced_count || d.synced || 0);
+                        var total      = d.total || knownTotal || 1;
+                        var nextOffset = d.next_offset || (offset + 50);
+                        var pct        = Math.min(100, Math.round((nextOffset / total) * 100));
+
+                        $('#siloq-sync-bar').css('width', pct + '%');
+                        $('#siloq-sync-progress-text').text(
+                            'Synced ' + Math.min(nextOffset, total) + ' of ' + total + ' pages (' + pct + '%)...'
+                        );
+
+                        if (d.has_more) {
+                            // Pause 300 ms then fetch the next batch
+                            setTimeout(function() {
+                                runBatch(nextOffset, nowSynced, total);
+                            }, 300);
+                        } else {
+                            // All done
+                            $('#siloq-sync-bar').css('width', '100%');
+                            $('#siloq-sync-progress-text').text(
+                                'Sync complete — ' + nowSynced + ' pages synced.'
+                            );
+                            showNotification('success', 'All ' + nowSynced + ' pages synced successfully.');
+                            finishSync($button);
+                            loadSyncStatus();
+                            loadPagesList();
+                        }
+                    },
+                    error: function(xhr) {
+                        // On gateway timeout try the same offset once more; abort on other errors
+                        if (xhr.status === 504 && offset < 50000) {
+                            $('#siloq-sync-progress-text').text(
+                                'Batch timed out — retrying offset ' + offset + '...'
+                            );
+                            setTimeout(function() { runBatch(offset, totalSynced, knownTotal); }, 2000);
+                        } else {
+                            showNotification('error', 'Network error at offset ' + offset + ' (HTTP ' + xhr.status + ')');
+                            finishSync($button);
+                        }
                     }
-                },
-                error: function() {
-                    showNotification('error', 'Network error occurred');
-                },
-                complete: function() {
-                    $button.removeClass('loading').prop('disabled', false);
-                    $button.html('<span class="dashicons dashicons-update"></span> Sync All Pages');
-                }
-            });
+                });
+            }
+
+            function finishSync($btn) {
+                $btn.removeClass('loading').prop('disabled', false)
+                    .html('<span class="dashicons dashicons-update"></span> Sync All Pages');
+                setTimeout(function() {
+                    $('#siloq-sync-progress-wrap').fadeOut(function() { $(this).remove(); });
+                }, 5000);
+            }
         });
-        
-        // Sync outdated pages button
+
+        // ── Sync Outdated Pages ───────────────────────────────────────────
         $('#siloq-sync-outdated').on('click', function() {
-            const $button = $(this);
-            if ($button.hasClass('loading')) {
-                return;
-            }
-            
-            $button.addClass('loading').prop('disabled', true);
-            $button.html('<span class="siloq-spinner"></span> Syncing...');
-            
+            var $button = $(this);
+            if ($button.hasClass('loading')) return;
+
+            $button.addClass('loading').prop('disabled', true)
+                   .html('<span class="siloq-spinner"></span> Syncing...');
+
             $.ajax({
                 url: siloqAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'siloq_sync_outdated',
-                    nonce: siloqAdmin.nonce
-                },
+                timeout: 120000,
+                data: { action: 'siloq_sync_outdated', nonce: siloqAdmin.nonce },
                 success: function(response) {
                     if (response.success) {
-                        showNotification('success', response.data.message || 'Outdated pages synced successfully');
+                        showNotification('success', (response.data && response.data.message) ? response.data.message : 'Outdated pages synced successfully');
                         loadSyncStatus();
                         loadPagesList();
                     } else {
-                        showNotification('error', response.data.message || 'Sync failed');
+                        showNotification('error', (response.data && response.data.message) ? response.data.message : 'Sync failed');
                     }
                 },
-                error: function() {
-                    showNotification('error', 'Network error occurred');
-                },
+                error: function() { showNotification('error', 'Network error occurred'); },
                 complete: function() {
-                    $button.removeClass('loading').prop('disabled', false);
-                    $button.html('<span class="dashicons dashicons-clock"></span> Sync Outdated Pages');
+                    $button.removeClass('loading').prop('disabled', false)
+                           .html('<span class="dashicons dashicons-clock"></span> Sync Outdated Pages');
                 }
             });
         });
-        
-        // Individual page sync buttons (using event delegation)
+
+        // ── Individual page sync ─────────────────────────────────────────
         $(document).on('click', '.siloq-page-sync-button', function() {
-            const $button = $(this);
-            const postId = $button.data('post-id');
-            
-            if ($button.hasClass('loading')) {
-                return;
-            }
-            
-            $button.addClass('loading').prop('disabled', true);
-            $button.html('<span class="siloq-spinner"></span> Syncing...');
-            
+            var $button = $(this);
+            var postId  = $button.data('post-id');
+            if ($button.hasClass('loading')) return;
+
+            $button.addClass('loading').prop('disabled', true)
+                   .html('<span class="siloq-spinner"></span> Syncing...');
+
             $.ajax({
                 url: siloqAdmin.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'siloq_sync_page',
-                    post_id: postId,
-                    nonce: siloqAdmin.nonce
-                },
+                data: { action: 'siloq_sync_page', post_id: postId, nonce: siloqAdmin.nonce },
                 success: function(response) {
                     if (response.success) {
-                        showNotification('success', response.data.message || 'Page synced successfully');
+                        showNotification('success', (response.data && response.data.message) ? response.data.message : 'Page synced successfully');
                         loadSyncStatus();
                         loadPagesList();
                     } else {
-                        showNotification('error', response.data.message || 'Sync failed');
+                        showNotification('error', (response.data && response.data.message) ? response.data.message : 'Sync failed');
                     }
                 },
-                error: function() {
-                    showNotification('error', 'Network error occurred');
-                },
+                error: function() { showNotification('error', 'Network error occurred'); },
                 complete: function() {
-                    $button.removeClass('loading').prop('disabled', false);
-                    $button.html('Sync');
+                    $button.removeClass('loading').prop('disabled', false).html('Sync');
                 }
             });
         });
     }
 
     function loadSyncStatus() {
-        const $statusContainer = $('#siloq-sync-status');
-        $statusContainer.html('<p>Loading sync status...</p>');
-        
+        var $c = $('#siloq-sync-status');
+        $c.html('<p>Loading sync status...</p>');
         $.ajax({
-            url: siloqAdmin.ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'siloq_get_sync_status',
-                nonce: siloqAdmin.nonce
+            url: siloqAdmin.ajaxUrl, type: 'POST',
+            data: { action: 'siloq_get_sync_status', nonce: siloqAdmin.nonce },
+            success: function(r) {
+                if (r.success) renderSyncStatus(r.data);
+                else $c.html('<p>Error loading sync status</p>');
             },
-            success: function(response) {
-                if (response.success) {
-                    renderSyncStatus(response.data);
-                } else {
-                    $statusContainer.html('<p>Error loading sync status</p>');
-                }
-            },
-            error: function() {
-                $statusContainer.html('<p>Network error occurred</p>');
-            }
+            error: function() { $c.html('<p>Network error occurred</p>'); }
         });
     }
 
     function renderSyncStatus(data) {
-        const $statusContainer = $('#siloq-sync-status');
-        
-        let html = '<div class="siloq-sync-overview">';
-        html += '<div class="siloq-sync-stats">';
-        html += '<div class="siloq-sync-stat">';
-        html += '<span class="siloq-sync-stat-number">' + (data.total_pages || 0) + '</span>';
-        html += '<span class="siloq-sync-stat-label">Total Pages</span>';
-        html += '</div>';
-        html += '<div class="siloq-sync-stat">';
-        html += '<span class="siloq-sync-stat-number">' + (data.synced_pages || 0) + '</span>';
-        html += '<span class="siloq-sync-stat-label">Synced</span>';
-        html += '</div>';
-        html += '<div class="siloq-sync-stat">';
-        html += '<span class="siloq-sync-stat-number">' + (data.outdated_pages || 0) + '</span>';
-        html += '<span class="siloq-sync-stat-label">Outdated</span>';
-        html += '</div>';
-        html += '<div class="siloq-sync-stat">';
-        html += '<span class="siloq-sync-stat-number">' + (data.failed_pages || 0) + '</span>';
-        html += '<span class="siloq-sync-stat-label">Failed</span>';
-        html += '</div>';
-        html += '</div>';
-        html += '</div>';
-        
+        var $c = $('#siloq-sync-status');
+        var html = '<div class="siloq-sync-overview"><div class="siloq-sync-stats">';
+        html += stat(data.total_pages || 0, 'Total Pages');
+        html += stat(data.synced_pages || 0, 'Synced');
+        html += stat(data.outdated_pages || 0, 'Outdated');
+        html += stat(data.failed_pages || 0, 'Failed');
+        html += '</div></div>';
         if (data.last_sync) {
-            html += '<div class="siloq-last-sync">';
-            html += '<p><strong>Last Sync:</strong> ' + data.last_sync + '</p>';
-            html += '</div>';
+            html += '<div class="siloq-last-sync"><p><strong>Last Sync:</strong> ' + data.last_sync + '</p></div>';
         }
-        
-        $statusContainer.html(html);
+        $c.html(html);
+    }
+
+    function stat(n, label) {
+        return '<div class="siloq-sync-stat">' +
+               '<span class="siloq-sync-stat-number">' + n + '</span>' +
+               '<span class="siloq-sync-stat-label">' + label + '</span></div>';
     }
 
     function loadPagesList() {
-        const $pagesContainer = $('#siloq-pages-list');
-        $pagesContainer.html('<p>Loading pages...</p>');
-        
+        var $c = $('#siloq-pages-list');
+        $c.html('<p>Loading pages...</p>');
         $.ajax({
-            url: siloqAdmin.ajaxUrl,
-            type: 'POST',
-            data: {
-                action: 'siloq_get_sync_status',
-                nonce: siloqAdmin.nonce
+            url: siloqAdmin.ajaxUrl, type: 'POST',
+            data: { action: 'siloq_get_sync_status', nonce: siloqAdmin.nonce },
+            success: function(r) {
+                if (r.success && r.data.pages) renderPagesList(r.data.pages);
+                else $c.html('<p>No pages found</p>');
             },
-            success: function(response) {
-                if (response.success && response.data.pages) {
-                    renderPagesList(response.data.pages);
-                } else {
-                    $pagesContainer.html('<p>No pages found</p>');
-                }
-            },
-            error: function() {
-                $pagesContainer.html('<p>Error loading pages</p>');
-            }
+            error: function() { $c.html('<p>Error loading pages</p>'); }
         });
     }
 
     function renderPagesList(pages) {
-        const $pagesContainer = $('#siloq-pages-list');
-        
-        if (!pages || pages.length === 0) {
-            $pagesContainer.html('<p>No pages found</p>');
-            return;
-        }
-        
-        let html = '';
+        var $c = $('#siloq-pages-list');
+        if (!pages || pages.length === 0) { $c.html('<p>No pages found</p>'); return; }
+        var html = '';
         pages.forEach(function(page) {
-            const statusClass = getStatusClass(page.status);
-            const statusText = getStatusText(page.status);
-            
-            html += '<div class="siloq-page-item">';
-            html += '<div class="siloq-page-info">';
-            html += '<div class="siloq-page-title">' + page.title + '</div>';
-            html += '<div class="siloq-page-meta">Last modified: ' + page.modified + '</div>';
-            html += '</div>';
-            html += '<div class="siloq-page-status">';
-            html += '<span class="siloq-status ' + statusClass + '">' + statusText + '</span>';
-            html += '<button type="button" class="siloq-page-sync-button siloq-button siloq-button-secondary" data-post-id="' + page.id + '">Sync</button>';
-            html += '</div>';
-            html += '</div>';
+            var sc = statusClass(page.status), st = statusText(page.status);
+            html += '<div class="siloq-page-item">' +
+                    '<div class="siloq-page-info">' +
+                    '<div class="siloq-page-title">' + page.title + '</div>' +
+                    '<div class="siloq-page-meta">Last modified: ' + page.modified + '</div></div>' +
+                    '<div class="siloq-page-status">' +
+                    '<span class="siloq-status ' + sc + '">' + st + '</span>' +
+                    '<button type="button" class="siloq-page-sync-button siloq-button siloq-button-secondary" data-post-id="' + page.id + '">Sync</button>' +
+                    '</div></div>';
         });
-        
-        $pagesContainer.html(html);
+        $c.html(html);
     }
 
-    function getStatusClass(status) {
-        switch (status) {
-            case 'synced':
-                return 'siloq-status-connected';
-            case 'outdated':
-                return 'siloq-status-syncing';
-            case 'failed':
-                return 'siloq-status-disconnected';
-            default:
-                return 'siloq-status-pending';
-        }
+    function statusClass(s) {
+        return s === 'synced' ? 'siloq-status-connected' : s === 'outdated' ? 'siloq-status-syncing' : s === 'failed' ? 'siloq-status-disconnected' : 'siloq-status-pending';
     }
 
-    function getStatusText(status) {
-        switch (status) {
-            case 'synced':
-                return 'Synced';
-            case 'outdated':
-                return 'Outdated';
-            case 'failed':
-                return 'Failed';
-            case 'syncing':
-                return 'Syncing';
-            default:
-                return 'Pending';
-        }
+    function statusText(s) {
+        return s === 'synced' ? 'Synced' : s === 'outdated' ? 'Outdated' : s === 'failed' ? 'Failed' : s === 'syncing' ? 'Syncing' : 'Pending';
     }
 
     function showNotification(type, message) {
-        // Create notification element
-        const $notification = $('<div class="siloq-ai-notification siloq-ai-notification-' + type + '">' + message + '</div>');
-        
-        // Add to page
-        $('body').append($notification);
-        
-        // Show notification
-        setTimeout(function() {
-            $notification.fadeIn(200);
-        }, 100);
-        
-        // Auto hide after 5 seconds
-        setTimeout(function() {
-            $notification.fadeOut(200, function() {
-                $notification.remove();
-            });
-        }, 5000);
+        var $n = $('<div class="siloq-ai-notification siloq-ai-notification-' + type + '">' + message + '</div>');
+        $('body').append($n);
+        setTimeout(function() { $n.fadeIn(200); }, 100);
+        setTimeout(function() { $n.fadeOut(200, function() { $n.remove(); }); }, 5000);
     }
 
-    // Make sure to localize script data
     if (typeof siloqAdmin === 'undefined') {
-        window.siloqAdmin = {
-            ajaxUrl: ajaxurl,
-            nonce: ''
-        };
+        window.siloqAdmin = { ajaxUrl: ajaxurl, nonce: '' };
     }
 
 })(jQuery);

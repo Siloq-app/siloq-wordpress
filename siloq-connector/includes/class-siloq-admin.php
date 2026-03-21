@@ -9334,13 +9334,18 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             return;
         }
 
-        $post_id          = intval( $_POST['post_id'] ?? 0 );
+        // Support category-based hubs (post_id = "cat_123")
+        $post_id_raw = sanitize_text_field( $_POST['post_id'] ?? '' );
+        $is_cat = ( strpos( $post_id_raw, 'cat_' ) === 0 );
+        $term_id = $is_cat ? intval( str_replace( 'cat_', '', $post_id_raw ) ) : 0;
+        $post_id = $is_cat ? 0 : intval( $post_id_raw );
+
         $core_topic       = sanitize_text_field( $_POST['core_topic'] ?? '' );
         $adjacent_raw     = sanitize_text_field( $_POST['adjacent_topics'] ?? '' );
         $out_of_scope_raw = sanitize_text_field( $_POST['out_of_scope_topics'] ?? '' );
         $entity_type      = sanitize_text_field( $_POST['entity_type'] ?? 'local_business' );
 
-        if ( ! $post_id || ! $core_topic ) {
+        if ( ( ! $post_id && ! $term_id ) || ! $core_topic ) {
             wp_send_json_error( array( 'message' => 'Post ID and core topic required.' ) );
             return;
         }
@@ -9355,8 +9360,12 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             'entity_type'         => $entity_type,
         );
 
-        // Save locally
-        update_post_meta( $post_id, '_siloq_topic_boundary', $boundary );
+        // Save locally — use term meta for category hubs, post meta for page hubs
+        if ( $is_cat && $term_id ) {
+            update_term_meta( $term_id, '_siloq_topic_boundary', $boundary );
+        } else {
+            update_post_meta( $post_id, '_siloq_topic_boundary', $boundary );
+        }
 
         $site_id = get_option( 'siloq_site_id', '' );
         if ( empty( $site_id ) ) {
@@ -9366,23 +9375,35 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         // Get or create silo in API
         $api     = new Siloq_API_Client();
-        $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
+        // Get stored silo_id — from term meta for categories, post meta for pages
+        if ( $is_cat && $term_id ) {
+            $silo_id = get_term_meta( $term_id, '_siloq_api_silo_id', true );
+            $hub_title = get_term( $term_id )->name ?? 'Category Hub';
+            $hub_url   = get_term_link( $term_id );
+            $hub_url   = is_wp_error( $hub_url ) ? '' : $hub_url;
+        } else {
+            $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
+            $hub_title = get_the_title( $post_id );
+            $hub_url   = get_permalink( $post_id );
+        }
 
-        // Clear stale local-* placeholder IDs — these were never real API IDs
+        // Clear stale local-* placeholder IDs
         if ( ! empty( $silo_id ) && strpos( $silo_id, 'local-' ) === 0 ) {
-            delete_post_meta( $post_id, '_siloq_api_silo_id' );
+            if ( $is_cat ) delete_term_meta( $term_id, '_siloq_api_silo_id' );
+            else           delete_post_meta( $post_id, '_siloq_api_silo_id' );
             $silo_id = '';
         }
 
         if ( empty( $silo_id ) ) {
             $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
-                'name'         => get_the_title( $post_id ),
-                'hub_url'      => get_permalink( $post_id ),
-                'hub_page_url' => get_permalink( $post_id ),
+                'name'         => $hub_title,
+                'hub_url'      => $hub_url,
+                'hub_page_url' => $hub_url,
             ) );
             if ( ! empty( $create_res['success'] ) && ! empty( $create_res['data']['id'] ) ) {
                 $silo_id = $create_res['data']['id'];
-                update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+                if ( $is_cat ) update_term_meta( $term_id, '_siloq_api_silo_id', $silo_id );
+                else           update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
             } else {
                 $err_msg = isset( $create_res['message'] ) ? $create_res['message'] : 'Could not create silo in API.';
                 wp_send_json_error( array( 'message' => 'API error: ' . $err_msg . ' — Please ensure your site is connected and try again.' ) );
@@ -9403,11 +9424,21 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      */
     private static function resolve_silo_id() {
         $silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
-        if ( empty( $silo_id ) ) {
-            $post_id = intval( $_POST['post_id'] ?? 0 );
-            if ( $post_id ) {
-                $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
-            }
+        if ( ! empty( $silo_id ) ) {
+            return $silo_id;
+        }
+
+        $post_id_raw = sanitize_text_field( $_POST['post_id'] ?? '' );
+
+        // Handle WooCommerce category-based hubs (post_id = "cat_123")
+        if ( strpos( $post_id_raw, 'cat_' ) === 0 ) {
+            $term_id = intval( str_replace( 'cat_', '', $post_id_raw ) );
+            return get_term_meta( $term_id, '_siloq_api_silo_id', true );
+        }
+
+        $post_id = intval( $post_id_raw );
+        if ( $post_id ) {
+            $silo_id = get_post_meta( $post_id, '_siloq_api_silo_id', true );
         }
         return $silo_id;
     }

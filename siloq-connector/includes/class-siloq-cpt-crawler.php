@@ -149,7 +149,16 @@ function get_siloq_crawlable_post_types() {
     if ( ! empty( $saved_types ) && is_array( $saved_types ) ) {
         // Always include page + post regardless of saved selection
         $saved_types = array_unique( array_merge( $saved_types, array( 'page', 'post' ) ) );
+        // Always include WooCommerce product if WC is active — saved settings may predate WC activation
+        if ( class_exists( 'WooCommerce' ) && post_type_exists( 'product' ) ) {
+            $saved_types[] = 'product';
+        }
         $crawlable = array_values( array_intersect( $crawlable, $saved_types ) );
+    } elseif ( class_exists( 'WooCommerce' ) && post_type_exists( 'product' ) ) {
+        // No saved types yet — ensure product is included for WC sites
+        if ( ! in_array( 'product', $crawlable, true ) ) {
+            $crawlable[] = 'product';
+        }
     }
 
     // Hard-block: even if someone explicitly saved these in Advanced Settings,
