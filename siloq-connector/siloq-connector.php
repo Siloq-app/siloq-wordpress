@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.215
+ * Version: 1.5.216
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.215');
+define('SILOQ_VERSION', '1.5.216');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -1797,6 +1797,7 @@ class Siloq_Connector {
         }
         $title      = sanitize_text_field(isset($_POST['title']) ? $_POST['title'] : '');
         $draft_type = sanitize_text_field($_POST['draft_type'] ?? 'generic'); // service-areas | service | city | generic
+        $parent_id  = intval($_POST['parent_id'] ?? 0);
         if (empty($title)) {
             wp_send_json_error(array('message' => 'Title required'));
             return;
@@ -1824,12 +1825,17 @@ class Siloq_Connector {
         $auto_publish_types = array('service-areas');
         $post_status = in_array($draft_type, $auto_publish_types, true) ? 'publish' : 'draft';
 
-        $post_id = wp_insert_post(array(
+        $post_args = array(
             'post_title'   => $title,
             'post_content' => $content,
             'post_status'  => $post_status,
             'post_type'    => 'page',
-        ));
+        );
+        // Set parent page if provided (creates proper URL structure /parent/child/)
+        if ( $parent_id > 0 && get_post_status( $parent_id ) ) {
+            $post_args['post_parent'] = $parent_id;
+        }
+        $post_id = wp_insert_post($post_args);
         if (is_wp_error($post_id)) {
             wp_send_json_error(array('message' => $post_id->get_error_message()));
             return;

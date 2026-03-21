@@ -5109,36 +5109,39 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                     // ─── Gap item rendering ───
                     function renderCriticalGapItem(item) {
                         var bg = '#dc3545';
-                        var label = $('<span>').text(item.label || item.subtopic_label || 'Untitled').html();
+                        var label = $('<span>').text(item.label || item.subtopic_label || item.page_title || 'Untitled').html();
+                        var priority = parseInt(item.priority || item.priority_score || 0);
                         return '<div class="siloq-depth-gap-item">' +
                             '<span>' + label + '</span>' +
                             '<span style="display:flex;align-items:center;gap:8px;">' +
-                                '<span class="siloq-depth-priority" style="background:' + bg + ';">' + Math.round(item.priority || 0) + '</span>' +
-                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(label).html() + '" data-type="service">Create Page &rarr;</button>' +
+                                '<span class="siloq-depth-priority" style="background:' + bg + ';">' + priority + '</span>' +
+                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(item.label || item.subtopic_label || 'Untitled').html() + '" data-type="service" data-parent-id="' + (currentPostId || 0) + '">Create Page &rarr;</button>' +
                                 (item.id ? '<button class="button button-small siloq-depth-add-plan" data-id="' + item.id + '">Add to Plan</button>' : '') +
                             '</span>' +
                         '</div>';
                     }
 
                     function renderThinGapItem(item) {
-                        var label = $('<span>').text(item.page_title || item.label || 'Untitled').html();
+                        var label = $('<span>').text(item.page_title || item.label || item.subtopic_label || 'Untitled').html();
+                        var priority = parseInt(item.priority || item.priority_score || 0);
                         var editUrl = item.edit_url || (item.page_id ? '<?php echo esc_js( admin_url("post.php?action=edit&post=") ); ?>' + item.page_id : '');
                         return '<div class="siloq-depth-gap-item">' +
                             '<span>' + label + '</span>' +
                             '<span style="display:flex;align-items:center;gap:8px;">' +
-                                '<span class="siloq-depth-priority" style="background:#e6a700;">' + Math.round(item.priority || 0) + '</span>' +
+                                '<span class="siloq-depth-priority" style="background:#e6a700;">' + priority + '</span>' +
                                 (editUrl ? '<a href="' + editUrl + '" class="button button-small" target="_blank">Open Editor &rarr;</a>' : '') +
                             '</span>' +
                         '</div>';
                     }
 
                     function renderStandardGapItem(item) {
-                        var label = $('<span>').text(item.label || item.subtopic_label || 'Untitled').html();
+                        var label = $('<span>').text(item.label || item.subtopic_label || item.page_title || 'Untitled').html();
+                        var priority = parseInt(item.priority || item.priority_score || 0);
                         return '<div class="siloq-depth-gap-item">' +
                             '<span>' + label + '</span>' +
                             '<span style="display:flex;align-items:center;gap:8px;">' +
-                                '<span class="siloq-depth-priority" style="background:#6c757d;">' + Math.round(item.priority || 0) + '</span>' +
-                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(label).html() + '" data-type="service">Create Page &rarr;</button>' +
+                                '<span class="siloq-depth-priority" style="background:#6c757d;">' + priority + '</span>' +
+                                '<button class="button button-small siloq-create-page-btn" data-title="' + $('<span>').text(item.label || item.subtopic_label || 'Untitled').html() + '" data-type="service" data-parent-id="' + (currentPostId || 0) + '">Create Page &rarr;</button>' +
                                 (item.id ? '<button class="button button-small siloq-depth-add-plan" data-id="' + item.id + '">Add to Plan</button>' : '') +
                             '</span>' +
                         '</div>';
@@ -5685,6 +5688,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 function siloqDoCreatePage(btn) {
                     var title     = btn.getAttribute('data-title');
                     var draftType = btn.getAttribute('data-type') || 'generic';
+                    var parentId  = parseInt(btn.getAttribute('data-parent-id') || 0);
                     if (!title) { btn.textContent = 'No title'; return; }
                     btn.textContent = 'Creating...';
                     btn.disabled = true;
@@ -5692,7 +5696,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         action:     'siloq_create_draft_page',
                         nonce:      '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
                         title:      title,
-                        draft_type: draftType
+                        draft_type: draftType,
+                        parent_id:  parentId
                     }, function(r) {
                         if (r && r.success && r.data && r.data.edit_url) {
                             // Replace button with a success message + clickable Edit link
