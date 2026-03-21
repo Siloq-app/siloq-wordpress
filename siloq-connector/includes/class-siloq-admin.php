@@ -2015,7 +2015,9 @@ class Siloq_Admin {
 
         // Insight data
         $synced_post_types = function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post');
-        $synced_pages = get_posts(array('post_type' => $synced_post_types, 'post_type__not_in' => defined('SILOQ_EXCLUDED_POST_TYPES') ? SILOQ_EXCLUDED_POST_TYPES : [], 'meta_query' => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')), 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids'));
+        // Fast count only — avoid loading all IDs for large sites
+        $synced_pages_count_query = new WP_Query(array('post_type' => $synced_post_types, 'meta_query' => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')), 'post_status' => 'publish', 'posts_per_page' => 1, 'fields' => 'ids', 'no_found_rows' => false));
+        $synced_pages = array_fill(0, max(0, $synced_pages_count_query->found_posts), 0); // fake array for count() compat
         $hub_count = 0; $orphan_count = 0; $missing_count = 0;
         if ($has_plan) {
             $hub_count = isset($plan_data['hub_count']) ? intval($plan_data['hub_count']) : 0;
@@ -2070,10 +2072,17 @@ $profile_fields = self::get_entity_field_status();
 $missing_fields = array_filter($profile_fields, function($f) { return empty($f['filled']); });
 $missing_count_profile = count($missing_fields);
 
+// Large site guard: if > 400 synced items, skip the expensive synchronous PHP processing
+// that builds the architecture map, hub detection, orphan analysis etc.
+// These features rely on loading all pages and doing N² meta queries — fatal on 700+ item sites.
+// Dashboard will still render; the SEO/GEO Plan tab shows a "Generate Plan" CTA instead.
+$_total_synced_est = (int) get_option( 'siloq_synced_page_count', count( $synced_pages ) );
+define( 'SILOQ_LARGE_SITE_MODE', $_total_synced_est > 400 );
+
 // Build hub data: pages marked as hub in analysis, OR pages that have child pages
 // Cap at 200 for dashboard hub/architecture detection — large WC sites have 700+ products
 // which makes N² loops too slow for synchronous page render. Full data available via AJAX/API.
-$all_synced_pages = get_posts(array(
+$all_synced_pages = SILOQ_LARGE_SITE_MODE ? array() : get_posts(array(
     'post_type'          => array('page', 'post'), // pages/posts only for hub detection; products don't have hub structure
     'post_status'        => 'publish',
     'posts_per_page'     => 200,

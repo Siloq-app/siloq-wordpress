@@ -808,6 +808,10 @@ class Siloq_Connector {
                 $this->run_service_hub_detection();
                 // Regenerate agent files (llms.txt + authority-manifest.json) if previously generated
                 Siloq_Agent_Ready::on_sync_complete();
+                // Store total synced count for large-site performance guard
+                if ( ! empty( $result['next_offset'] ) ) {
+                    update_option( 'siloq_synced_page_count', (int) $result['next_offset'] );
+                }
             }
 
             // Always send success so JS can read has_more + next_offset
