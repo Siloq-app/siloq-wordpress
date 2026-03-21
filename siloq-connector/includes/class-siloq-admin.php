@@ -2078,6 +2078,71 @@ $all_synced_pages = get_posts(array(
     'posts_per_page'     => -1,
     'meta_query'         => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
 ));
+// Fetch silo map from API — more accurate than WP post_parent detection
+$api_silos = array();
+$api_silo_page_ids = array(); // WP post IDs already assigned to API silos
+$site_id_opt = get_option( 'siloq_site_id', '' );
+$api_key_opt = get_option( 'siloq_api_key', '' );
+$api_url_opt = get_option( 'siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app' );
+
+if ( ! empty( $site_id_opt ) && ! empty( $api_key_opt ) ) {
+    $silo_map_url = trailingslashit( $api_url_opt ) . 'api/v1/sites/' . $site_id_opt . '/silo-map/';
+    $resp = wp_remote_get( $silo_map_url, array(
+        'headers' => array( 'Authorization' => 'Bearer ' . $api_key_opt ),
+        'timeout' => 10,
+    ));
+    if ( ! is_wp_error( $resp ) && wp_remote_retrieve_response_code( $resp ) === 200 ) {
+        $body = json_decode( wp_remote_retrieve_body( $resp ), true );
+        if ( ! empty( $body['silos'] ) ) {
+            foreach ( $body['silos'] as $api_silo ) {
+                $hub_wp_id = 0;
+                $hub_url = isset( $api_silo['pillar_page']['url'] ) ? $api_silo['pillar_page']['url'] : '';
+                // Match hub URL to a WP post ID
+                if ( $hub_url ) {
+                    $hub_post = get_page_by_path( trim( parse_url( $hub_url, PHP_URL_PATH ), '/' ) );
+                    if ( $hub_post ) {
+                        $hub_wp_id = $hub_post->ID;
+                    } else {
+                        // fallback: url_to_postid
+                        $hub_wp_id = url_to_postid( $hub_url );
+                    }
+                }
+
+                // Build children array from supporting_pages
+                $children_posts = array();
+                foreach ( $api_silo['supporting_pages'] ?? array() as $sp ) {
+                    $sp_url = $sp['url'] ?? '';
+                    if ( ! $sp_url ) continue;
+                    $sp_id = url_to_postid( $sp_url );
+                    if ( $sp_id ) {
+                        $post_obj = get_post( $sp_id );
+                        if ( $post_obj ) {
+                            $children_posts[] = $post_obj;
+                            $api_silo_page_ids[] = $sp_id;
+                        }
+                    }
+                }
+
+                if ( $hub_wp_id || count( $children_posts ) > 0 ) {
+                    $api_silo_page_ids[] = $hub_wp_id;
+                    $api_silos[] = array(
+                        'id'       => $hub_wp_id ?: 0,
+                        'title'    => $api_silo['name'] ?? 'Silo',
+                        'url'      => $hub_url,
+                        'edit_url' => $hub_wp_id ? get_edit_post_link( $hub_wp_id, 'raw' ) : '',
+                        'elementor_url' => $hub_wp_id ? admin_url( 'post.php?post=' . $hub_wp_id . '&action=elementor' ) : '',
+                        'score'    => intval( $api_silo['coverage_score'] ?? 70 ),
+                        'children' => $children_posts,
+                        'missing'  => array(),
+                        'keyword'  => '',
+                        'parent_mismatch_ids' => array(),
+                    );
+                }
+            }
+        }
+    }
+}
+
 $hub_data = array();
 $non_hub_ids = array();
 
@@ -2183,6 +2248,11 @@ if (empty($hub_data)) {
             'keyword'      => isset($analysis['primary_keyword']) ? $analysis['primary_keyword'] : '',
         );
     }
+}
+
+// If API returned silos, use those instead of WP-detected hubs
+if ( ! empty( $api_silos ) ) {
+    $hub_data = $api_silos;
 }
 
 // ── Reposition check: location pages filed under services hub ──
