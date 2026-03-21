@@ -2185,11 +2185,9 @@ foreach ($all_synced_pages as $hp) {
         foreach ( $all_synced_pages as $candidate ) {
             if ( $candidate->ID === $hp->ID ) continue;
             $candidate_path = trim( parse_url( get_permalink( $candidate->ID ), PHP_URL_PATH ), '/' );
-            $hub_slug = basename( $hub_path );
             $candidate_segments = explode( '/', $candidate_path );
             if ( count( $candidate_segments ) >= 2 ) {
-                $parent_slug = $candidate_segments[ count($candidate_segments) - 2 ];
-                if ( $parent_slug === $hub_slug || strpos( $candidate_path, $hub_path . '/' ) === 0 ) {
+                if ( strpos( $candidate_path, $hub_path . '/' ) === 0 ) {
                     $already_child = false;
                     foreach ( $children as $c ) { if ( $c->ID === $candidate->ID ) { $already_child = true; break; } }
                     if ( ! $already_child ) {
@@ -3552,9 +3550,14 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
             'numberposts' => -1,
             'meta_query'  => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
         ) );
+        $_plan_sa_hub_path = trailingslashit( get_site_url() ) . get_page_uri( $_plan_sa_hub ) . '/';
         foreach ( $_plan_spokes as $_ps ) {
             $slug = get_page_uri( $_ps );
-            if ( strpos( $slug, 'service-area' ) === false ) $_plan_sa_spokes_count++;
+            $page_url = trailingslashit( get_permalink( $_ps->ID ) );
+            // Only count pages that are NOT already nested under the service-areas hub
+            if ( strpos( $page_url, $_plan_sa_hub_path ) !== 0 ) {
+                $_plan_sa_spokes_count++;
+            }
         }
     }
 }
@@ -3601,7 +3604,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
                 if (!r.success || !r.data.suggestions || !r.data.suggestions.length) {
                     $btn.prop('disabled', false).text('⚡ Apply All Redirects Now');
                     $status.css({'background':'#fee2e2','color':'#991b1b','border':'1px solid #fca5a5'})
-                           .text('No redirects needed — city pages may already be nested correctly.').show();
+                           .text('Error fetching redirect plan — please try again.').show();
                     return;
                 }
 
