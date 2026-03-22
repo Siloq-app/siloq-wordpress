@@ -3579,14 +3579,16 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
             'numberposts' => -1,
             'meta_query'  => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
         ) );
-        $_plan_sa_hub_url = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
+        // Normalize hub URL: strip protocol+www so comparison is domain-agnostic
+        $_raw_hub_url = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
+        $_plan_sa_hub_path = '/' . ltrim( parse_url( $_raw_hub_url, PHP_URL_PATH ), '/' );
         foreach ( $_plan_spokes as $_ps ) {
-            $page_url = trailingslashit( get_permalink( $_ps->ID ) );
-            // Only count pages that are NOT already nested under the service-areas hub URL
-            // Also skip if the page URL contains service-area/service-areas anywhere in path
+            $page_url  = trailingslashit( get_permalink( $_ps->ID ) );
+            $page_path = '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' );
+            // Only count pages that are NOT already nested under the service-areas hub path
             $already_nested = (
-                strpos( $page_url, $_plan_sa_hub_url ) === 0 ||
-                strpos( $page_url, '/service-area' ) !== false
+                strpos( $page_path, $_plan_sa_hub_path ) === 0 ||
+                strpos( $page_path, '/service-area' ) !== false
             );
             if ( ! $already_nested ) {
                 $_plan_sa_spokes_count++;
@@ -9204,7 +9206,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 'content-type'      => 'application/json',
             ),
             'body' => wp_json_encode( array(
-                'model'      => 'claude-3-5-haiku-20241022',
+                'model'      => 'claude-haiku-4-5',
                 'max_tokens' => 4000,
                 'messages'   => array( array( 'role' => 'user', 'content' => $prompt ) ),
             ) ),
