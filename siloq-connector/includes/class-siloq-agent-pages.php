@@ -262,13 +262,45 @@ class Siloq_Agent_Pages {
                     <div class="siloq-brief-body">
                         <p><?php echo esc_html($desc); ?></p>
                     </div>
-                    <div class="siloq-brief-footer">
+                    <div class="siloq-brief-footer" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                        <div>
                         <?php if ($impact && !$os_module): ?>
-                            <span class="siloq-brief-impact"><?php echo esc_html($impact); ?></span>
+                            <span class="siloq-brief-impact" style="font-size:12px;color:#059669;"><?php echo esc_html(mb_substr($impact, 0, 120)); ?></span>
                         <?php endif; ?>
-                        <button class="button siloq-dismiss-btn"
-                                data-action-id="<?php echo $id; ?>"
-                                data-site-id="<?php echo esc_attr($site_id); ?>">Dismiss</button>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-shrink:0;">
+                        <?php
+                            $action_type = $brief['action_type'] ?? 'create_content';
+                            if ( $action_type === 'create_content' ) :
+                                // Extract suggested title from description
+                                $create_title = '';
+                                if ( preg_match( '/Create page:\s*(.+?)(?:\s+targeting|\s*$)/i', $desc, $tm ) ) {
+                                    $create_title = trim( $tm[1] );
+                                } elseif ( preg_match( '/Create (.+?) page/i', $desc, $tm ) ) {
+                                    $create_title = trim( $tm[1] );
+                                }
+                                $create_title = $create_title ?: $title;
+                        ?>
+                            <button class="button button-primary siloq-create-page-btn"
+                                    data-title="<?php echo esc_attr( $create_title ); ?>"
+                                    data-type="service">Create Page &rarr;</button>
+                        <?php elseif ( $action_type === 'review_content' ) : ?>
+                            <a href="<?php echo esc_url( admin_url('admin.php?page=siloq&tab=pages') ); ?>"
+                               class="button">Review Pages</a>
+                        <?php elseif ( $action_type === 'restructure_silo' ) : ?>
+                            <a href="<?php echo esc_url( admin_url('admin.php?page=siloq&tab=silos') ); ?>"
+                               class="button">View Architecture</a>
+                        <?php elseif ( $action_type === 'add_internal_link' ) : ?>
+                            <a href="<?php echo esc_url( admin_url('admin.php?page=siloq&tab=links') ); ?>"
+                               class="button">View Internal Links</a>
+                        <?php elseif ( $action_type === 'add_canonical' ) : ?>
+                            <a href="<?php echo esc_url( admin_url('admin.php?page=siloq&tab=pages') ); ?>"
+                               class="button">Fix Canonical</a>
+                        <?php endif; ?>
+                            <button class="button siloq-dismiss-btn"
+                                    data-action-id="<?php echo $id; ?>"
+                                    data-site-id="<?php echo esc_attr($site_id); ?>">Dismiss</button>
+                        </div>
                     </div>
                 </div>
                 <?php endforeach; ?>
