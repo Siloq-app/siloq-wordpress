@@ -239,10 +239,23 @@ class Siloq_Agent_Pages {
                     $impact  = $brief['impact'] ?? '';
                     $id      = intval($brief['id'] ?? 0);
                 ?>
-                <div class="siloq-brief-card">
-                    <div class="siloq-brief-header">
-                        <h3><?php echo esc_html($title); ?></h3>
-                        <?php if ($keyword): ?>
+                <?php
+                    // Parse OS module and severity from description (Blueprint actions prefix with [Blueprint — OS])
+                    $os_module  = '';
+                    $severity   = strtolower( $impact ?: '' );
+                    if ( preg_match( '/\[Blueprint — ([^\]]+)\]/', $desc, $m ) ) {
+                        $os_module = $m[1];
+                        $desc = trim( preg_replace( '/\[Blueprint — [^\]]+\]\s*/', '', $desc ) );
+                        $title = $title ?: $desc;
+                    }
+                    $sev_color = $severity === 'critical' ? '#dc2626' : ( $severity === 'high' ? '#d97706' : '#6b7280' );
+                ?>
+                <div class="siloq-brief-card" style="border-left: 3px solid <?php echo esc_attr($sev_color); ?>;">
+                    <div class="siloq-brief-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                        <h3 style="margin:0;"><?php echo esc_html($title ?: $desc); ?></h3>
+                        <?php if ($os_module): ?>
+                            <span style="background:<?php echo esc_attr($sev_color); ?>;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0;"><?php echo esc_html(strtoupper($severity)); ?> · <?php echo esc_html($os_module); ?></span>
+                        <?php elseif ($keyword): ?>
                             <span class="siloq-brief-keyword"><?php echo esc_html($keyword); ?></span>
                         <?php endif; ?>
                     </div>
@@ -250,7 +263,7 @@ class Siloq_Agent_Pages {
                         <p><?php echo esc_html($desc); ?></p>
                     </div>
                     <div class="siloq-brief-footer">
-                        <?php if ($impact): ?>
+                        <?php if ($impact && !$os_module): ?>
                             <span class="siloq-brief-impact"><?php echo esc_html($impact); ?></span>
                         <?php endif; ?>
                         <button class="button siloq-dismiss-btn"
