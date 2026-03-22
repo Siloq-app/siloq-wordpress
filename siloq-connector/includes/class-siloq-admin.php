@@ -5143,10 +5143,11 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                         var priority = parseInt(item.priority || item.priority_score || 0);
                         var editUrl = item.edit_url || (item.page_id ? '<?php echo esc_js( admin_url("post.php?action=edit&post=") ); ?>' + item.page_id : '');
                         return '<div class="siloq-depth-gap-item">' +
-                            '<span>' + label + '</span>' +
+                            '<span>' + label + '<br><small style="color:#888;font-size:11px;">Thin content — exists but needs more depth</small></span>' +
                             '<span style="display:flex;align-items:center;gap:8px;">' +
                                 '<span class="siloq-depth-priority" style="background:#e6a700;">' + priority + '</span>' +
                                 (editUrl ? '<a href="' + editUrl + '" class="button button-small" target="_blank">Open Editor &rarr;</a>' : '') +
+                                (item.id ? '<button class="button button-small siloq-depth-add-plan" data-id="' + item.id + '">Add to Plan</button>' : '') +
                             '</span>' +
                         '</div>';
                     }
