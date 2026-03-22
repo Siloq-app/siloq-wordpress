@@ -9574,19 +9574,25 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
 
         if ( empty( $silo_id ) ) {
-            $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
-                'name'         => $hub_title,
-                'hub_url'      => $hub_url,
-                'hub_page_url' => $hub_url,
-            ) );
-            if ( ! empty( $create_res['success'] ) && ! empty( $create_res['data']['id'] ) ) {
-                $silo_id = $create_res['data']['id'];
-                if ( $is_cat ) update_term_meta( $term_id, '_siloq_api_silo_id', $silo_id );
-                else           update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+            // For WC category hubs, the API doesn't have a POST /silos/ create endpoint.
+            // Save locally with a placeholder and skip API creation — silo will be linked on next sync.
+            if ( $is_cat ) {
+                $silo_id = 'local-cat-' . $term_id;
+                update_term_meta( $term_id, '_siloq_api_silo_id', $silo_id );
             } else {
-                $err_msg = isset( $create_res['message'] ) ? $create_res['message'] : 'Could not create silo in API.';
-                wp_send_json_error( array( 'message' => 'API error: ' . $err_msg . ' — Please ensure your site is connected and try again.' ) );
-                return;
+                $create_res = $api->post( '/sites/' . $site_id . '/silos/', array(
+                    'name'         => $hub_title,
+                    'hub_url'      => $hub_url,
+                    'hub_page_url' => $hub_url,
+                ) );
+                if ( ! empty( $create_res['success'] ) && ! empty( $create_res['data']['id'] ) ) {
+                    $silo_id = $create_res['data']['id'];
+                    update_post_meta( $post_id, '_siloq_api_silo_id', $silo_id );
+                } else {
+                    $err_msg = isset( $create_res['message'] ) ? $create_res['message'] : 'Could not create silo in API.';
+                    wp_send_json_error( array( 'message' => 'API error: ' . $err_msg . ' — Please ensure your site is connected and try again.' ) );
+                    return;
+                }
             }
         }
 
