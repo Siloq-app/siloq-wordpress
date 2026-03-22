@@ -3573,7 +3573,20 @@ $_plan_sa_spokes_count = 0;
 if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ), true ) ) {
     $_plan_sa_hub = get_page_by_path('service-areas') ?: get_page_by_path('service-area');
     if ( $_plan_sa_hub ) {
-        $_plan_spokes = get_posts( array(
+        // Spoke detection: pages with explicit role OR pages whose URL already is under /services/ but not /service-areas/
+        // If zero pages have _siloq_page_role=spoke in DB, skip entirely — no banner needed
+        $_spoke_exists = get_posts( array(
+            'post_type'      => array( 'page', 'post' ),
+            'post_status'    => 'publish',
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+            'meta_query'     => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
+        ) );
+        if ( empty( $_spoke_exists ) ) {
+            // No spoke meta anywhere on site — banner is definitely wrong, suppress entirely
+            $_plan_sa_hub = null;
+        }
+        $_plan_spokes = empty( $_plan_sa_hub ) ? array() : get_posts( array(
             'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status' => 'publish',
             'numberposts' => -1,
