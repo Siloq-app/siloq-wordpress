@@ -9419,6 +9419,41 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             return;
         }
 
+        $results = array();
+
+        // ── Strategy A: WooCommerce product categories (ecommerce sites) ──────
+        // WC categories are taxonomy terms — never in wp_posts, never get _siloq_page_role.
+        // Always check for WC first, regardless of whether page-based hubs exist.
+        if ( class_exists( 'WooCommerce' ) ) {
+            $wc_cats = get_terms( array(
+                'taxonomy'   => 'product_cat',
+                'hide_empty' => true,
+                'parent'     => 0,
+                'exclude'    => array( get_option( 'default_product_cat', 0 ) ),
+                'orderby'    => 'name',
+            ) );
+            if ( ! is_wp_error( $wc_cats ) && ! empty( $wc_cats ) ) {
+                foreach ( $wc_cats as $cat ) {
+                    $cat_link    = get_term_link( $cat );
+                    $child_terms = get_terms( array( 'taxonomy' => 'product_cat', 'parent' => $cat->term_id, 'hide_empty' => false, 'fields' => 'ids' ) );
+                    $child_count = is_wp_error( $child_terms ) ? 0 : count( $child_terms );
+                    $results[] = array(
+                        'post_id'      => 'cat_' . $cat->term_id,
+                        'title'        => $cat->name,
+                        'url'          => is_wp_error( $cat_link ) ? '' : $cat_link,
+                        'spoke_count'  => (int) $cat->count + $child_count,
+                        'api_silo_id'  => get_term_meta( $cat->term_id, '_siloq_api_silo_id', true ) ?: null,
+                        'last_scanned' => get_term_meta( $cat->term_id, '_siloq_depth_last_scanned', true ) ?: null,
+                        'boundary'     => get_term_meta( $cat->term_id, '_siloq_topic_boundary', true ) ?: null,
+                        'wc_term_id'   => $cat->term_id,
+                    );
+                }
+                wp_send_json_success( $results );
+                return;
+            }
+        }
+
+        // ── Strategy B: Pages with explicit hub role ──────────────────────────
         $hubs = get_posts( array(
             'post_type'      => 'page',
             'post_status'    => 'publish',
@@ -9430,9 +9465,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             ),
         ) );
 
-        // No hubs explicitly set — auto-detect from site structure
+        // ── Strategy C: Auto-detect from page structure ───────────────────────
         if ( empty( $hubs ) ) {
-            // Strategy 1: top-level pages that have child pages
             $all_pages = get_posts( array(
                 'post_type' => 'page', 'post_status' => 'publish',
                 'posts_per_page' => -1, 'post_parent' => 0,
@@ -9447,22 +9481,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     $hubs[] = $pg;
                 }
             }
-            // Strategy 2: WooCommerce product categories as hubs
-            if ( empty( $hubs ) && class_exists( 'WooCommerce' ) ) {
-                $cats = get_terms( array( 'taxonomy' => 'product_cat', 'hide_empty' => true, 'parent' => 0 ) );
-                foreach ( $cats as $cat ) {
-                    $cat_page_id = wc_get_page_id( 'shop' );
-                    $link = get_term_link( $cat );
-                    $wp_id = url_to_postid( $link ) ?: 0;
-                    if ( $wp_id ) {
-                        update_post_meta( $wp_id, '_siloq_page_role', 'hub' );
-                        $hubs[] = get_post( $wp_id );
-                    }
-                }
-            }
         }
 
-        $results = array();
         foreach ( $hubs as $hub ) {
             $spokes       = get_posts( array( 'post_parent' => $hub->ID, 'post_type' => 'page', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids' ) );
             $api_silo_id  = get_post_meta( $hub->ID, '_siloq_api_silo_id', true );
