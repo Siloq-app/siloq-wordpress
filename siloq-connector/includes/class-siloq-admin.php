@@ -2162,6 +2162,47 @@ if ( ! empty( $site_id_opt ) && ! empty( $api_key_opt ) ) {
 $hub_data = array();
 $non_hub_ids = array();
 
+// ── WooCommerce category hubs (ecommerce sites) ──────────────────────────────
+// WC product categories are taxonomy terms, not wp_posts — they never appear in
+// $all_synced_pages. Detect them separately and inject as hub_data entries.
+$_plan_biz_type_arch = get_option( 'siloq_business_type', 'general' );
+if ( class_exists( 'WooCommerce' ) && in_array( $_plan_biz_type_arch, array( 'ecommerce', 'general' ), true ) ) {
+    $wc_top_cats = get_terms( array(
+        'taxonomy'   => 'product_cat',
+        'hide_empty' => true,
+        'parent'     => 0,
+        'exclude'    => array( get_option( 'default_product_cat', 0 ) ), // skip Uncategorized
+    ) );
+    if ( ! is_wp_error( $wc_top_cats ) && ! empty( $wc_top_cats ) ) {
+        foreach ( $wc_top_cats as $_wc_cat ) {
+            $cat_link    = get_term_link( $_wc_cat );
+            $child_terms = get_terms( array( 'taxonomy' => 'product_cat', 'parent' => $_wc_cat->term_id, 'hide_empty' => false ) );
+            $child_count = is_wp_error( $child_terms ) ? 0 : count( $child_terms );
+            // Also count products in this category
+            $prod_count  = (int) $_wc_cat->count;
+            if ( $child_count > 0 || $prod_count > 0 ) {
+                $hub_data[] = array(
+                    'id'                  => 'cat_' . $_wc_cat->term_id,
+                    'title'               => $_wc_cat->name,
+                    'url'                 => $cat_link,
+                    'edit_url'            => admin_url( 'term.php?taxonomy=product_cat&tag_ID=' . $_wc_cat->term_id ),
+                    'elementor_url'       => '',
+                    'score'               => 0,
+                    'children'            => array(), // products listed separately
+                    'missing'             => array(),
+                    'keyword'             => strtolower( $_wc_cat->name ),
+                    'parent_mismatch_ids' => array(),
+                    'wc_cat'              => true,
+                    'wc_term_id'          => $_wc_cat->term_id,
+                    'wc_child_cats'       => $child_count,
+                    'wc_product_count'    => $prod_count,
+                );
+            }
+        }
+    }
+}
+// ── /WooCommerce category hubs ────────────────────────────────────────────────
+
 // Filter: exclude internal post type names and JetEngine/CPT slugs from hub detection
 $internal_name_patterns = array('koops','grid','template','listing','loop','jet-','acf-','pods-','dynamic-','_post_type');
 $non_page_slugs_filter  = array('attachment','revision','nav_menu_item','custom_css','customize_changeset');
@@ -3168,15 +3209,25 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
           <?php if ($sc > 0): ?>
           <div class="siloq-hub-score <?php echo $sc_cls; ?>">Score <?php echo $sc; ?></div>
           <?php endif; ?>
+          <?php if ( ! empty( $h['elementor_url'] ) ): ?>
           <a href="<?php echo esc_url($h['elementor_url']); ?>" class="siloq-hub-edit-btn" onclick="event.stopPropagation()">Edit Page</a>
+          <?php elseif ( ! empty( $h['edit_url'] ) ): ?>
+          <a href="<?php echo esc_url($h['edit_url']); ?>" class="siloq-hub-edit-btn" onclick="event.stopPropagation()">Edit</a>
+          <?php endif; ?>
           <div class="siloq-hub-chev open">&#9660;</div>
         </div>
       </div>
       <div class="siloq-hub-progress">
         <div class="siloq-hub-prog-row">
+          <?php if ( ! empty( $h['wc_cat'] ) ): ?>
+          <div class="siloq-hub-prog-lbl">Products / Subcategories</div>
+          <div class="siloq-hub-prog-bar"><div class="siloq-hub-prog-fill" style="width:100%;"></div></div>
+          <div class="siloq-hub-prog-count green"><?php echo intval($h['wc_product_count']); ?> products<?php echo $h['wc_child_cats'] > 0 ? ', ' . intval($h['wc_child_cats']) . ' subcategories' : ''; ?></div>
+          <?php else: ?>
           <div class="siloq-hub-prog-lbl">Supporting pages</div>
           <div class="siloq-hub-prog-bar"><div class="siloq-hub-prog-fill" style="width:<?php echo $pct; ?>%;<?php echo $pct < 50 ? 'background:linear-gradient(90deg,#d97706,#f59e0b)' : ''; ?>"></div></div>
           <div class="siloq-hub-prog-count <?php echo $prog_cls; ?>"><?php echo $live_pages; ?> of <?php echo max(1,$total_pages); ?> live<?php echo $pct >= 100 ? ' &#10003;' : ''; ?></div>
+          <?php endif; ?>
         </div>
       </div>
       <div class="siloq-hub-spokes-wrap" style="max-height:400px">
