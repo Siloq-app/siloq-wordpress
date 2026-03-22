@@ -3673,11 +3673,16 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
         $_services_hub_id = (int) get_option( 'siloq_services_hub_id', 0 );
         foreach ( $_plan_spokes as $_ps ) {
             // Skip service spokes (children of /services/ hub) — they are correctly placed, not city pages
+            // Check both the stored option AND direct post_parent match AND URL path
             if ( $_services_hub_id && (int) $_ps->post_parent === $_services_hub_id ) {
                 continue;
             }
             $page_url  = trailingslashit( get_permalink( $_ps->ID ) );
             $page_path = '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' );
+            // Skip any page whose URL is under /services/ (but not /service-areas/)
+            if ( preg_match( '#^/services?/#', $page_path ) && strpos( $page_path, '/service-area' ) === false ) {
+                continue;
+            }
             // Only count pages that are NOT already nested under the service-areas hub path
             $already_nested = (
                 strpos( $page_path, $_plan_sa_hub_path ) === 0 ||
