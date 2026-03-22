@@ -3667,30 +3667,35 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
             'numberposts' => -1,
             'meta_query'  => array( array( 'key' => '_siloq_page_role', 'value' => 'spoke', 'compare' => '=' ) ),
         ) );
-        // Normalize hub URL: strip protocol+www so comparison is domain-agnostic
-        $_raw_hub_url = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
-        $_plan_sa_hub_path = '/' . ltrim( parse_url( $_raw_hub_url, PHP_URL_PATH ), '/' );
-        $_services_hub_id = (int) get_option( 'siloq_services_hub_id', 0 );
+        // Normalize SA hub URL to path only (domain-agnostic)
+        $_raw_hub_url      = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
+        $_plan_sa_hub_path = trailingslashit( '/' . ltrim( parse_url( $_raw_hub_url, PHP_URL_PATH ), '/' ) );
+
+        // Collect all non-SA hub post IDs so we can exclude their children
+        $_non_sa_hub_ids = array();
+        foreach ( get_posts( array(
+            'post_type'      => array( 'page', 'post' ),
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_query'     => array( array( 'key' => '_siloq_page_role', 'value' => 'hub', 'compare' => '=' ) ),
+        ) ) as $_hub_id ) {
+            $_non_sa_hub_ids[] = (int) $_hub_id;
+        }
+
         foreach ( $_plan_spokes as $_ps ) {
-            // Skip service spokes (children of /services/ hub) — they are correctly placed, not city pages
-            // Check both the stored option AND direct post_parent match AND URL path
-            if ( $_services_hub_id && (int) $_ps->post_parent === $_services_hub_id ) {
-                continue;
-            }
             $page_url  = trailingslashit( get_permalink( $_ps->ID ) );
-            $page_path = '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' );
-            // Skip any page whose URL is under /services/ (but not /service-areas/)
-            if ( preg_match( '#^/services?/#', $page_path ) && strpos( $page_path, '/service-area' ) === false ) {
+            $page_path = trailingslashit( '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' ) );
+
+            // Already under service-areas — no restructure needed
+            if ( strpos( $page_path, $_plan_sa_hub_path ) === 0 ) {
                 continue;
             }
-            // Only count pages that are NOT already nested under the service-areas hub path
-            $already_nested = (
-                strpos( $page_path, $_plan_sa_hub_path ) === 0 ||
-                strpos( $page_path, '/service-area' ) !== false
-            );
-            if ( ! $already_nested ) {
-                $_plan_sa_spokes_count++;
+            // Child of a non-SA hub (e.g. /services/) — correctly placed, skip
+            if ( $_ps->post_parent > 0 && in_array( (int) $_ps->post_parent, $_non_sa_hub_ids, true ) ) {
+                continue;
             }
+            $_plan_sa_spokes_count++;
         }
     }
 }
