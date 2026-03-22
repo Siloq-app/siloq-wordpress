@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.231
+ * Version: 1.5.232
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.231');
+define('SILOQ_VERSION', '1.5.232');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -1393,13 +1393,18 @@ class Siloq_Connector {
             // Pages without Widget Intelligence analysis still show in the plan
             // with basic data from sync — page_type defaults to 'supporting'
 
-            $title     = get_the_title($post_id);
+            $title     = html_entity_decode( get_the_title( $post_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
             $page_type = isset($analysis['page_type_classification']) ? $analysis['page_type_classification'] : 'supporting';
             $score     = isset($analysis['score']) ? intval($analysis['score']) : 0;
+            $post_type = get_post_type( $post_id );
+            $is_product = ( $post_type === 'product' );
 
             // Real content issue checks — even for unanalyzed pages
             $edit_url = get_edit_post_link($post_id, 'raw');
-            $elementor_url = admin_url('post.php?post=' . $post_id . '&action=elementor');
+            // Use standard WP editor URL for products (not Elementor) — products rarely use Elementor
+            $stored_builder = get_post_meta( $post_id, '_siloq_page_builder', true );
+            $uses_elementor = ( $stored_builder === 'elementor' || ( empty( $stored_builder ) && ! $is_product ) );
+            $elementor_url  = $uses_elementor ? admin_url( 'post.php?post=' . $post_id . '&action=elementor' ) : $edit_url;
             $page_url = get_permalink($post_id);
 
             // Fix 1: Use AIOSEO priority chain for title
@@ -1489,14 +1494,15 @@ class Siloq_Connector {
                     'elementor_url'    => $elementor_url,
                 );
             }
-            if ($word_count < 300 && $word_count > 0) {
+            // Skip thin content check for WC products — short descriptions are by design
+            if ( ! $is_product && $word_count < 300 && $word_count > 0 ) {
                 $issues['important'][] = array(
                     'title'            => $title,
                     'issue'            => 'Thin content — only ' . $word_count . ' words. Aim for 500+ to rank well.',
                     'fix_category'     => 'content',
                     'fix_type'         => 'content',
                     'post_id'          => $post_id,
-                    'edit_url'         => $elementor_url, // Thin content DOES need Elementor
+                    'edit_url'         => $elementor_url,
                     'elementor_url'    => $elementor_url,
                     'instructions'     => 'Open this page in your editor, add more detail about this service or location.',
                 );
@@ -1521,8 +1527,8 @@ class Siloq_Connector {
                 $arch_type = $page_type;
             }
 
-            // No inbound links check (after arch_type is determined)
-            if (!isset($inbound_links[$post_id]) && $arch_type !== 'hub' && $arch_type !== 'apex_hub') {
+            // No inbound links check — skip WC products (crawled via shop/category pages by WC)
+            if ( ! $is_product && ! isset( $inbound_links[$post_id] ) && $arch_type !== 'hub' && $arch_type !== 'apex_hub' ) {
                 $issues['critical'][] = array(
                     'title'        => $title,
                     'issue'        => 'No internal links pointing to this page — Google may not be crawling it',
@@ -1612,7 +1618,8 @@ class Siloq_Connector {
                     'elementor_url' => $elementor_url,
                 );
             }
-            if ($word_count > 0 && $word_count < 300) {
+            // Skip thin content actions for WC products — product descriptions are intentionally short
+            if ( ! $is_product && $word_count > 0 && $word_count < 300 ) {
                 $actions[] = array(
                     'headline'      => 'Expand content on "' . $title . '"',
                     'detail'        => 'Only ' . $word_count . ' words. Pages with 500+ words rank significantly better for local searches.',
@@ -1622,7 +1629,7 @@ class Siloq_Connector {
                     'post_id'       => $post_id,
                     'edit_url'      => $elementor_url,
                     'elementor_url' => $elementor_url,
-                    'instructions'  => 'Open this page in Elementor and add more detail — describe this service, mention nearby areas, add an FAQ section.',
+                    'instructions'  => 'Open this page in your editor and add more detail — describe this service, mention nearby areas, add an FAQ section.',
                 );
             }
 

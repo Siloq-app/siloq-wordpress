@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Siloq_Admin_Metabox {
 
     /** Post types that get the Schema meta box. */
-    const SUPPORTED_POST_TYPES = [ 'page', 'post' ];
+    const SUPPORTED_POST_TYPES = [ 'page', 'post', 'product' ];
 
     // ── Bootstrap ────────────────────────────────────────────────────────────
 
