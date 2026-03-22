@@ -3670,7 +3670,12 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
         // Normalize hub URL: strip protocol+www so comparison is domain-agnostic
         $_raw_hub_url = trailingslashit( get_permalink( $_plan_sa_hub->ID ) );
         $_plan_sa_hub_path = '/' . ltrim( parse_url( $_raw_hub_url, PHP_URL_PATH ), '/' );
+        $_services_hub_id = (int) get_option( 'siloq_services_hub_id', 0 );
         foreach ( $_plan_spokes as $_ps ) {
+            // Skip service spokes (children of /services/ hub) — they are correctly placed, not city pages
+            if ( $_services_hub_id && (int) $_ps->post_parent === $_services_hub_id ) {
+                continue;
+            }
             $page_url  = trailingslashit( get_permalink( $_ps->ID ) );
             $page_path = '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' );
             // Only count pages that are NOT already nested under the service-areas hub path
