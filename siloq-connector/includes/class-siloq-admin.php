@@ -2693,6 +2693,81 @@ if ($has_plan && isset($plan_data['issues'])) {
   </div>
 </div>
 
+<!-- Entity Readiness / Blueprint Score Card -->
+<?php
+$_site_id_opt = get_option('siloq_site_id','');
+$_api_key_opt = get_option('siloq_api_key','');
+$_bp_data     = array();
+if ( $_site_id_opt && $_api_key_opt ) {
+    $api_url_opt = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
+    $_bp_resp    = wp_remote_get(
+        trailingslashit($api_url_opt) . 'sites/' . $_site_id_opt . '/blueprint/',
+        array('headers' => array('Authorization' => 'Bearer ' . $_api_key_opt), 'timeout' => 8)
+    );
+    if (!is_wp_error($_bp_resp) && wp_remote_retrieve_response_code($_bp_resp) === 200) {
+        $_bp_data = json_decode(wp_remote_retrieve_body($_bp_resp), true) ?: array();
+    }
+}
+$_er_score = isset($_bp_data['entity_readiness_score']) ? intval($_bp_data['entity_readiness_score']) : null;
+$_os_scores = $_bp_data['os_scores'] ?? array();
+$_bp_actions = $_bp_data['blueprint_actions'] ?? array();
+$_critical_count = count(array_filter($_bp_actions, fn($a) => ($a['severity']??'') === 'CRITICAL'));
+?>
+<?php if ( $_er_score !== null ): ?>
+<div class="siloq-card" style="margin-bottom:16px;padding:20px;border-left:4px solid <?php echo $_er_score >= 70 ? '#0d9488' : ($_er_score >= 50 ? '#d97706' : '#dc2626'); ?>">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div>
+            <div style="font-size:14px;font-weight:700;">&#127919; Entity Readiness Score</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">How clearly Google classifies this entity</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-size:32px;font-weight:700;color:<?php echo $_er_score >= 70 ? '#0d9488' : ($_er_score >= 50 ? '#d97706' : '#dc2626'); ?>"><?php echo $_er_score; ?><span style="font-size:14px;color:#9ca3af;">/100</span></div>
+        </div>
+    </div>
+    <?php if (!empty($_os_scores)): ?>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px;">
+        <?php
+        $os_labels = array(
+            'entity_os'=>'EntityOS','diagnostic_os'=>'DiagnosticOS','drift_os'=>'DriftOS',
+            'page_os'=>'PageOS','credential_os'=>'CredentialOS','rewrite_os'=>'RewriteOS','vision_os'=>'VisionOS'
+        );
+        foreach ($os_labels as $key => $label):
+            if (!isset($_os_scores[$key])) continue;
+            $s = intval($_os_scores[$key]);
+            $c = $s >= 70 ? '#0d9488' : ($s >= 50 ? '#d97706' : '#dc2626');
+        ?>
+        <div style="text-align:center;padding:8px;border-radius:6px;border:1px solid #e5e7eb;">
+            <div style="font-size:18px;font-weight:700;color:<?php echo $c; ?>"><?php echo $s; ?></div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px;"><?php echo $label; ?></div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php if ($_critical_count > 0): ?>
+    <div style="font-size:12px;color:#dc2626;font-weight:600;margin-bottom:8px;">&#9888; <?php echo $_critical_count; ?> CRITICAL gap<?php echo $_critical_count !== 1 ? 's' : ''; ?> blocking classifier confidence</div>
+    <?php endif; ?>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="<?php echo esc_url(admin_url('admin.php?page=siloq-content-plan')); ?>" class="siloq-btn siloq-btn--primary siloq-btn--sm">View Recommendations &rarr;</a>
+        <button type="button" class="siloq-btn siloq-btn--outline siloq-btn--sm" id="siloq-run-blueprint-btn">Refresh Analysis</button>
+    </div>
+</div>
+<script>
+(function($){
+    $('#siloq-run-blueprint-btn').on('click', function(){
+        var $btn = $(this).prop('disabled',true).text('Running...');
+        $.post(ajaxurl, {
+            action: 'siloq_run_blueprint_analysis',
+            nonce: '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>'
+        }, function(r){
+            $btn.prop('disabled',false).text('Refresh Analysis');
+            if(r.success) location.reload();
+            else alert('Analysis failed: ' + (r.data && r.data.message ? r.data.message : 'Unknown error'));
+        }).fail(function(){ $btn.prop('disabled',false).text('Refresh Analysis'); });
+    });
+})(jQuery);
+</script>
+<?php endif; ?>
+
 <!-- Image Audit -->
 <?php
 $img_audit_raw = get_option('siloq_image_audit_results', '');
@@ -9497,6 +9572,26 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         wp_send_json_error( array( 'message' => $res['message'] ?? 'Failed to load gap report.' ) );
     }
 
+
+    public static function ajax_run_blueprint_analysis() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+            return;
+        }
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'Site not connected.' ) );
+            return;
+        }
+        $api = new Siloq_API_Client();
+        $res = $api->post( '/sites/' . $site_id . '/blueprint/' );
+        if ( ! empty( $res['success'] ) ) {
+            wp_send_json_success( $res['data'] );
+            return;
+        }
+        wp_send_json_error( array( 'message' => isset( $res['message'] ) ? $res['message'] : 'Blueprint analysis failed.' ) );
+    }
     public static function ajax_get_gsc_summary() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
         if ( ! current_user_can( 'edit_posts' ) ) {
