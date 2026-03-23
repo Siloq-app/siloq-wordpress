@@ -42,7 +42,7 @@ class Siloq_Admin_Metabox {
         foreach ( self::SUPPORTED_POST_TYPES as $post_type ) {
             add_meta_box(
                 'siloq-schema-intelligence',
-                '⚡ Siloq Schema Intelligence',
+                'Siloq Schema Intelligence',
                 [ __CLASS__, 'render_meta_box' ],
                 $post_type,
                 'side',

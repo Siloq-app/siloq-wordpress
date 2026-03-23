@@ -124,7 +124,7 @@ class Siloq_Elementor_Panel {
              tabindex="0"
              aria-controls="siloq-schema-el-panel"
              aria-expanded="false">
-            <span aria-hidden="true">⚡</span>
+            <img src="<?php echo esc_url( SILOQ_PLUGIN_URL . 'assets/images/siloq-logo-icon.webp' ); ?>" alt="Siloq" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" aria-hidden="true">
             <span class="siloq-schema-el-trigger-label">Schema</span>
         </div>
 

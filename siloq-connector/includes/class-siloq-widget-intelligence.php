@@ -99,7 +99,7 @@ class Siloq_Widget_Intelligence {
         $element->start_controls_section(
             'siloq_intelligence',
             [
-                'label' => '⚡ Siloq Intelligence',
+                'label' => 'Siloq Intelligence',
                 'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
             ]
         );
