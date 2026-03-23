@@ -31,81 +31,98 @@ class Siloq_Scanner_Shortcode {
 
         ob_start();
         ?>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* ── Siloq Diagnostic Scanner — Dark Theme ───────────────────── */
-.diag-wrap{--bg:#0d0f1a;--surface:#151829;--surface2:#1c2038;--border:#2a2e4a;--text:#e2e4f0;--text-muted:#8b8fa8;--accent:#6c5ce7;--accent-glow:rgba(108,92,231,.25);--good:#5ab87a;--mid:#e6b422;--bad:#e05252;--cta-bg:linear-gradient(135deg,#6c5ce7,#a855f7);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);max-width:740px;margin:0 auto;padding:48px 24px;min-height:100vh;box-sizing:border-box}
+/* ── Siloq Diagnostic Scanner v2 — Black/Gold Theme ─────────── */
+.diag-wrap{--bg:#0a0a0a;--surface:#111111;--surface2:#1a1a1a;--border:#2a2a2a;--text:#f0f0f0;--text-muted:#888888;--accent:#c9a84c;--accent-dim:#a07830;--accent-glow:rgba(201,168,76,.2);--good:#e05252;--mid:#888888;--bad:#e05252;--cta-bg:#c9a84c;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);width:100%;max-width:100%;margin:0;padding:60px 5% 80px;box-sizing:border-box}
 .diag-wrap *,.diag-wrap *::before,.diag-wrap *::after{box-sizing:border-box}
 
+/* Layout — left col headline, right col form */
+.diag-inner{display:flex;gap:80px;align-items:flex-start;max-width:1100px;margin:0 auto}
+@media(max-width:900px){.diag-inner{flex-direction:column;gap:40px}}
+.diag-left{flex:1.1;min-width:0}
+.diag-right{flex:1;min-width:0}
+
 /* Symbol header */
-.diag-symbol{text-align:center;margin-bottom:32px}
-.diag-symbol .pulse{display:inline-flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:0 0 24px var(--accent-glow);animation:diagPulse 2.4s ease-in-out infinite}
-@keyframes diagPulse{0%,100%{box-shadow:0 0 24px var(--accent-glow)}50%{box-shadow:0 0 40px var(--accent-glow),0 0 60px rgba(108,92,231,.12)}}
-.diag-symbol .pulse svg{width:32px;height:32px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.diag-symbol{margin-bottom:28px}
+.diag-symbol .pulse{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--surface);border:2px solid var(--accent);box-shadow:0 0 24px var(--accent-glow)}
+.diag-symbol .pulse img{width:36px;height:36px;object-fit:contain}
 
 /* Headline */
-.headline-block{text-align:center;margin-bottom:36px}
-.headline-block h1{font-size:28px;font-weight:800;line-height:1.25;margin:0 0 14px;background:linear-gradient(135deg,#fff 60%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.headline-block .sub{font-size:15px;color:var(--text-muted);line-height:1.55;max-width:520px;margin:0 auto}
+.headline-block{margin-bottom:28px}
+.headline-block h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(52px,7vw,88px);font-weight:400;line-height:1.0;letter-spacing:1px;margin:0 0 8px;color:#fff;text-transform:uppercase}
+.headline-block h1 .gold{color:var(--accent)}
+.headline-block h1 .dim{color:#555}
+.headline-block .sub-hed{font-family:'Bebas Neue',sans-serif;font-size:clamp(24px,3.5vw,38px);font-weight:400;color:var(--accent);letter-spacing:1px;margin:0 0 20px;text-transform:uppercase}
+.headline-block .sub{font-size:15px;color:var(--text-muted);line-height:1.6;max-width:480px}
+.headline-block .sub strong{color:var(--text);font-weight:600}
 
 /* Signal teasers */
-.signals-row{display:flex;gap:12px;margin-bottom:32px}
-.signals-row .sig{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 14px;text-align:center}
-.signals-row .sig-val{font-size:22px;font-weight:700;margin-bottom:4px}
-.signals-row .sig-lbl{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
-.sig-val.good{color:var(--good)}.sig-val.bad{color:var(--bad)}.sig-val.mid{color:var(--mid)}
+.signals-row{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:20px 24px;margin-top:32px}
+.signals-row .sig-row-inner{display:flex;gap:0}
+.signals-row .sig{flex:1;padding:8px 16px;border-right:1px solid var(--border)}
+.signals-row .sig:first-child{padding-left:0}
+.signals-row .sig:last-child{border-right:none}
+.signals-row .sig-val{font-size:28px;font-weight:800;margin-bottom:4px;color:#e05252}
+.signals-row .sig-val.mid{color:#888}
+.signals-row .sig-val.free{color:var(--accent)}
+.signals-row .sig-lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;line-height:1.35}
 
 /* Form card */
-.form-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px;margin-bottom:24px}
-.form-card label{display:block;font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.form-card input{width:100%;padding:14px 16px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;outline:none;transition:border .2s}
-.form-card input::placeholder{color:#555a78}
-.form-card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.form-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:28px 24px}
+.form-card .form-eyebrow{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:2px;border-left:2px solid var(--accent);padding-left:10px;margin-bottom:20px}
+.form-card label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.form-card input{width:100%;padding:13px 14px;background:#000;border:1px solid var(--border);border-radius:2px;color:var(--text);font-size:15px;outline:none;transition:border .2s}
+.form-card input::placeholder{color:#444}
+.form-card input:focus{border-color:var(--accent)}
 .form-row{display:flex;gap:12px;margin-top:14px}
 @media(max-width:600px){.form-row{flex-direction:column}}
 .form-row .form-col{flex:1}
-.form-card .run-btn{display:block;width:100%;padding:16px;margin-top:18px;background:var(--cta-bg);color:#fff;font-size:16px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px var(--accent-glow)}
-.form-card .run-btn:hover{transform:translateY(-1px);box-shadow:0 6px 28px var(--accent-glow)}
-.form-card .run-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
-.entity-note{font-size:13px;color:var(--text-muted);margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--accent)}
+.form-card .run-btn{display:block;width:100%;padding:16px;margin-top:18px;background:var(--accent);color:#000;font-family:'Bebas Neue',sans-serif;font-size:22px;font-weight:400;letter-spacing:1.5px;border:none;border-radius:2px;cursor:pointer;transition:background .15s,transform .15s}
+.form-card .run-btn:hover{background:#e0b84c;transform:translateY(-1px)}
+.form-card .run-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.entity-note{font-size:12px;color:var(--text-muted);margin-top:12px;padding:10px 14px;background:#111;border-radius:2px;border-left:2px solid var(--accent)}
 
 /* Loading overlay */
 .diag-loading{text-align:center;padding:48px 0}
-.diag-loading .progress-track{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;max-width:400px;margin:0 auto 24px}
-.diag-loading .progress-fill{height:100%;width:0;background:var(--cta-bg);border-radius:2px;transition:width .5s}
+.diag-loading .progress-track{height:3px;background:var(--surface2);border-radius:2px;overflow:hidden;max-width:400px;margin:0 auto 24px}
+.diag-loading .progress-fill{height:100%;width:0;background:var(--accent);border-radius:2px;transition:width .5s}
 .diag-loading .load-msg{font-size:15px;color:var(--text-muted);min-height:22px}
-.diag-loading .load-sub{font-size:13px;color:#555a78;margin-top:10px}
+.diag-loading .load-sub{font-size:13px;color:#444;margin-top:10px}
 
 /* Results area */
 .results-area{display:none}
 
 /* Score hero */
-.score-hero{text-align:center;padding:32px 0 28px}
-.score-ring{display:inline-flex;align-items:center;justify-content:center;width:140px;height:140px;border-radius:50%;border:5px solid;font-size:48px;font-weight:800;position:relative}
-.score-ring.good{border-color:var(--good);color:var(--good);box-shadow:0 0 30px rgba(90,184,122,.2)}
-.score-ring.mid{border-color:var(--mid);color:var(--mid);box-shadow:0 0 30px rgba(230,180,34,.2)}
-.score-ring.bad{border-color:var(--bad);color:var(--bad);box-shadow:0 0 30px rgba(224,82,82,.2)}
-.score-of{font-size:16px;font-weight:400;opacity:.5}
-.score-grade{font-size:18px;font-weight:600;margin-top:12px;color:var(--text)}
+.score-hero{padding:32px 0 28px;max-width:1100px;margin:0 auto}
+.score-ring{display:inline-flex;align-items:center;justify-content:center;width:140px;height:140px;border-radius:50%;border:4px solid;font-family:'Bebas Neue',sans-serif;font-size:52px;font-weight:400;position:relative}
+.score-ring.good{border-color:#5ab87a;color:#5ab87a;box-shadow:0 0 30px rgba(90,184,122,.2)}
+.score-ring.mid{border-color:var(--accent);color:var(--accent);box-shadow:0 0 30px var(--accent-glow)}
+.score-ring.bad{border-color:#e05252;color:#e05252;box-shadow:0 0 30px rgba(224,82,82,.2)}
+.score-of{font-size:18px;font-weight:400;opacity:.5}
+.score-grade{font-family:'Bebas Neue',sans-serif;font-size:22px;font-weight:400;margin-top:12px;color:var(--text);letter-spacing:1px}
 .score-pages{font-size:14px;color:var(--text-muted);margin-top:4px}
 
 /* Pillar row */
-.pillars-row{display:flex;gap:10px;margin-bottom:32px;overflow-x:auto;padding-bottom:4px}
-.pillar-card{flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 12px;text-align:center;transition:border-color .2s}
+.pillars-row{display:flex;gap:10px;margin-bottom:32px;overflow-x:auto;padding-bottom:4px;max-width:1100px;margin-left:auto;margin-right:auto}
+.pillar-card{flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:16px 12px;text-align:center;transition:border-color .2s}
 .pillar-card:hover{border-color:var(--accent)}
-.pillar-icon{font-size:24px;margin-bottom:6px}
-.pillar-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;color:var(--text-muted);line-height:1.3;margin-bottom:10px;min-height:28px;white-space:pre-line}
-.pillar-score{font-size:20px;font-weight:700;margin-bottom:4px}
+.pillar-icon{font-size:22px;margin-bottom:6px}
+.pillar-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);line-height:1.3;margin-bottom:10px;min-height:28px;white-space:pre-line}
+.pillar-score{font-family:'Bebas Neue',sans-serif;font-size:24px;font-weight:400;margin-bottom:4px}
 .pillar-max{font-size:11px;color:var(--text-muted)}
-.pillar-bar{height:3px;background:var(--surface2);border-radius:2px;margin-top:8px;overflow:hidden}
-.pillar-bar-fill{height:100%;border-radius:2px;transition:width .6s}
+.pillar-bar{height:2px;background:var(--surface2);border-radius:1px;margin-top:8px;overflow:hidden}
+.pillar-bar-fill{height:100%;border-radius:1px;transition:width .6s}
 .pillar-issues{margin-top:10px;text-align:left}
-.pillar-issues li{font-size:12px;color:var(--text-muted);padding:2px 0;list-style:none;position:relative;padding-left:12px}
-.pillar-issues li::before{content:"\2022";position:absolute;left:0;color:#555a78}
-.pillar-badge{display:inline-block;font-size:11px;background:rgba(90,184,122,.12);color:var(--good);padding:3px 8px;border-radius:4px;margin-top:6px}
+.pillar-issues li{font-size:11px;color:var(--text-muted);padding:2px 0;list-style:none;position:relative;padding-left:12px}
+.pillar-issues li::before{content:"\2022";position:absolute;left:0;color:#444}
+.pillar-badge{display:inline-block;font-size:10px;background:rgba(201,168,76,.12);color:var(--accent);padding:3px 8px;border-radius:2px;margin-top:6px}
 
 /* Entity section */
-.entity-section{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:28px}
-.entity-section h3{font-size:18px;font-weight:700;margin:0 0 16px;display:flex;align-items:center;gap:8px}
+.entity-section{background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:24px;margin-bottom:28px;max-width:1100px;margin-left:auto;margin-right:auto}
+.entity-section h3{font-family:'Bebas Neue',sans-serif;font-size:22px;font-weight:400;letter-spacing:1px;margin:0 0 16px;display:flex;align-items:center;gap:8px}
 .entity-loading{text-align:center;padding:20px 0}
 .entity-loading .entity-spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:espin .8s linear infinite;margin-bottom:10px}
 @keyframes espin{to{transform:rotate(360deg)}}
@@ -131,76 +148,86 @@ class Siloq_Scanner_Shortcode {
 .critical-block .cb-sev{font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:6px}
 
 /* CTA block */
-.cta-block{text-align:center;padding:28px 0;margin-bottom:24px}
-.cta-block .cta-main{display:inline-block;padding:16px 40px;background:var(--cta-bg);color:#fff;font-size:17px;font-weight:700;border:none;border-radius:10px;cursor:pointer;text-decoration:none;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px var(--accent-glow)}
-.cta-block .cta-main:hover{transform:translateY(-1px);box-shadow:0 6px 28px var(--accent-glow)}
-.cta-block .cta-sub{font-size:14px;color:var(--text-muted);margin-top:10px}
+.cta-block{text-align:center;padding:28px 0;margin-bottom:24px;max-width:1100px;margin-left:auto;margin-right:auto}
+.cta-block .cta-main{display:inline-block;padding:18px 48px;background:var(--accent);color:#000;font-family:'Bebas Neue',sans-serif;font-size:24px;font-weight:400;letter-spacing:1.5px;border:none;border-radius:2px;cursor:pointer;text-decoration:none;transition:background .15s,transform .15s}
+.cta-block .cta-main:hover{background:#e0b84c;transform:translateY(-1px);color:#000}
+.cta-block .cta-sub{font-size:14px;color:var(--text-muted);margin-top:12px}
 .cta-block .cta-link{font-size:14px;color:var(--accent);text-decoration:underline;margin-top:8px;display:inline-block}
 
 /* Send section */
-.send-section{border-top:1px solid var(--border);padding-top:24px;margin-top:8px}
-.send-section .send-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.send-section{border-top:1px solid var(--border);padding-top:24px;margin-top:8px;max-width:1100px;margin-left:auto;margin-right:auto}
+.send-section .send-title{font-family:'Bebas Neue',sans-serif;font-size:20px;font-weight:400;letter-spacing:1px;color:var(--text);margin-bottom:6px}
 .send-section .send-desc{font-size:14px;color:var(--text-muted);margin:0 0 16px}
-.send-section input{width:100%;padding:12px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;margin-bottom:10px}
-.send-section input::placeholder{color:#555a78}
+.send-section input{width:100%;padding:12px 14px;background:#000;border:1px solid var(--border);border-radius:2px;color:var(--text);font-size:14px;outline:none;margin-bottom:10px}
+.send-section input::placeholder{color:#444}
 .send-section input:focus{border-color:var(--accent)}
-.send-section .send-btn{width:100%;padding:14px;background:#059669;color:#fff;font-size:15px;font-weight:600;border:none;border-radius:8px;cursor:pointer;transition:background .2s}
-.send-section .send-btn:hover{background:#047857}
-.send-section .send-btn:disabled{opacity:.55;cursor:not-allowed}
+.send-section .send-btn{width:100%;padding:14px;background:var(--accent);color:#000;font-family:'Bebas Neue',sans-serif;font-size:20px;font-weight:400;letter-spacing:1px;border:none;border-radius:2px;cursor:pointer;transition:background .2s}
+.send-section .send-btn:hover{background:#e0b84c}
+.send-section .send-btn:disabled{opacity:.5;cursor:not-allowed}
 .send-section .send-status{font-size:14px;text-align:center;min-height:20px;margin-top:8px}
 
 /* Error */
-.diag-error{text-align:center;color:var(--bad);padding:20px;font-size:15px}
+.diag-error{text-align:center;color:#e05252;padding:20px;font-size:15px}
 </style>
 
 <div class="diag-wrap" id="siloq-scanner">
-    <!-- Header symbol -->
-    <div class="diag-symbol">
-        <div class="pulse">
-            <img src="<?php echo esc_url( SILOQ_PLUGIN_URL . 'assets/images/siloq-logo-icon.webp' ); ?>" alt="Siloq" style="width:40px;height:40px;object-fit:contain;">
-        </div>
-    </div>
 
-    <!-- Headline -->
-    <div class="headline-block">
-        <h1>AI assistants are answering questions about your business right now.</h1>
-        <p class="sub">Are they getting it right? Our diagnostic checks what ChatGPT, Gemini, and Google AI Overviews actually know about you &mdash; and where you&rsquo;re invisible.</p>
-    </div>
-
-    <!-- Signal teasers -->
-    <div class="signals-row">
-        <div class="sig"><div class="sig-val bad">73%</div><div class="sig-lbl">Businesses invisible to AI</div></div>
-        <div class="sig"><div class="sig-val mid">2.4x</div><div class="sig-lbl">More traffic with entity clarity</div></div>
-        <div class="sig"><div class="sig-val good">Free</div><div class="sig-lbl">Full diagnostic</div></div>
-    </div>
-
-    <!-- STEP 1 — Form -->
+    <!-- STEP 1 — Form + Headline (two-column) -->
     <div id="ss-step-form">
-        <div class="form-card">
-            <label>Website URL</label>
-            <input type="url" id="ss-url" placeholder="https://yourwebsite.com" required>
-            <div class="form-row">
-                <div class="form-col">
-                    <label style="margin-top:14px">Your name</label>
-                    <input type="text" id="ss-name" placeholder="First name (optional)">
+        <div class="diag-inner">
+            <!-- Left: headline -->
+            <div class="diag-left">
+                <div class="diag-symbol">
+                    <div class="pulse">
+                        <img src="<?php echo esc_url( SILOQ_PLUGIN_URL . 'assets/images/siloq-logo-icon.webp' ); ?>" alt="Siloq" style="width:36px;height:36px;object-fit:contain;">
+                    </div>
                 </div>
-                <div class="form-col">
-                    <label style="margin-top:14px">Email</label>
-                    <input type="email" id="ss-email" placeholder="you@company.com (optional)">
+
+                <div class="headline-block">
+                    <h1>AI ASSISTANTS ARE<br><span class="gold">ANSWERING QUESTIONS</span><br><span class="dim">ABOUT YOUR BUSINESS</span><br>RIGHT NOW.</h1>
+                    <div class="sub-hed">ARE THEY FINDING YOU?</div>
+                    <p class="sub">Run a diagnostic on your site&rsquo;s search architecture and find out <strong>exactly what&rsquo;s suppressing your rankings</strong> &mdash; in Google, Google Maps, and the AI tools your customers already use.</p>
+                </div>
+
+                <div class="signals-row">
+                    <div class="sig-row-inner">
+                        <div class="sig"><div class="sig-val">73%</div><div class="sig-lbl">of local businesses have<br>a critical schema error</div></div>
+                        <div class="sig"><div class="sig-val mid">4 of 5</div><div class="sig-lbl">service pages fail<br>Google&rsquo;s content classifier</div></div>
+                        <div class="sig"><div class="sig-val free">#0</div><div class="sig-lbl">AI search visibility<br>for most local sites</div></div>
+                    </div>
                 </div>
             </div>
-            <div class="form-row">
-                <div class="form-col">
-                    <label style="margin-top:14px">Business name</label>
-                    <input type="text" id="ss-biz" placeholder="e.g. Precision Marketing (optional)">
-                </div>
-                <div class="form-col">
-                    <label style="margin-top:14px">City / Region</label>
-                    <input type="text" id="ss-location" placeholder="e.g. Denver, CO (optional)">
+
+            <!-- Right: form -->
+            <div class="diag-right">
+                <div class="form-card">
+                    <div class="form-eyebrow">Run Your Diagnostic</div>
+                    <label>Your Website</label>
+                    <input type="url" id="ss-url" placeholder="https://www.yoursite.com" required>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label style="margin-top:14px">Your name</label>
+                            <input type="text" id="ss-name" placeholder="First name">
+                        </div>
+                        <div class="form-col">
+                            <label style="margin-top:14px">Where to send your report</label>
+                            <input type="email" id="ss-email" placeholder="your@email.com">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label style="margin-top:14px">Business name</label>
+                            <input type="text" id="ss-biz" placeholder="e.g. Precision Marketing">
+                        </div>
+                        <div class="form-col">
+                            <label style="margin-top:14px">City, State</label>
+                            <input type="text" id="ss-location" placeholder="e.g. Kansas City, MO">
+                        </div>
+                    </div>
+                    <button class="run-btn" id="ss-submit">RUN MY FREE DIAGNOSTIC &rarr;</button>
+                    <div class="entity-note">&#x1F4CD; Adding your business name unlocks <strong>Entity Analysis</strong> &mdash; see how Google classifies your brand and where authority gaps exist.</div>
                 </div>
             </div>
-            <button class="run-btn" id="ss-submit">Run Diagnostic &rarr;</button>
-            <div class="entity-note">&#x1F50D; Adding your business name unlocks <strong>Entity Analysis</strong> &mdash; see how Google&rsquo;s Knowledge Graph classifies your brand and where authority gaps exist.</div>
         </div>
     </div>
 
@@ -209,7 +236,7 @@ class Siloq_Scanner_Shortcode {
         <div class="diag-loading">
             <div class="progress-track"><div class="progress-fill" id="ss-bar"></div></div>
             <div class="load-msg" id="ss-status"></div>
-            <div class="load-sub">Full diagnostic &bull; Usually takes 20-40 seconds</div>
+            <div class="load-sub">Full diagnostic &bull; Usually takes 20&ndash;40 seconds</div>
         </div>
     </div>
 
