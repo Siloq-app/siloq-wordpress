@@ -36,7 +36,8 @@ class Siloq_Scanner_Shortcode {
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ── Siloq Diagnostic Scanner v2 — Black/Gold Theme ─────────── */
-.diag-wrap{--bg:#0a0a0a;--surface:#111111;--surface2:#1a1a1a;--border:#2a2a2a;--text:#f0f0f0;--text-muted:#888888;--accent:#c9a84c;--accent-dim:#a07830;--accent-glow:rgba(201,168,76,.2);--good:#e05252;--mid:#888888;--bad:#e05252;--cta-bg:#c9a84c;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);width:100%;max-width:100%;margin:0;padding:60px 5% 80px;box-sizing:border-box}
+.diag-wrap{--bg:#0a0a0a;--surface:#111111;--surface2:#1a1a1a;--border:#2a2a2a;--text:#f0f0f0;--text-muted:#888888;--accent:#c9a84c;--accent-dim:#a07830;--accent-glow:rgba(201,168,76,.2);--good:#e05252;--mid:#888888;--bad:#e05252;--cta-bg:#c9a84c;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);position:relative;max-width:none;margin-top:0;margin-bottom:0;padding:32px 5% 40px;box-sizing:border-box}
+.entry-title, .page-title, h1.page-title, .wp-block-post-title { display: none !important; }
 .diag-wrap *,.diag-wrap *::before,.diag-wrap *::after{box-sizing:border-box}
 
 /* Layout — left col headline, right col form */
@@ -52,7 +53,7 @@ class Siloq_Scanner_Shortcode {
 
 /* Headline */
 .headline-block{margin-bottom:28px}
-.headline-block h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(52px,7vw,88px);font-weight:400;line-height:1.0;letter-spacing:1px;margin:0 0 8px;color:#fff;text-transform:uppercase}
+.headline-block h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(28px,3.5vw,52px);font-weight:400;line-height:1.0;letter-spacing:1px;margin:0 0 8px;color:#fff;text-transform:uppercase}
 .headline-block h1 .gold{color:var(--accent)}
 .headline-block h1 .dim{color:#555}
 .headline-block .sub-hed{font-family:'Bebas Neue',sans-serif;font-size:clamp(24px,3.5vw,38px);font-weight:400;color:var(--accent);letter-spacing:1px;margin:0 0 20px;text-transform:uppercase}
@@ -60,12 +61,12 @@ class Siloq_Scanner_Shortcode {
 .headline-block .sub strong{color:var(--text);font-weight:600}
 
 /* Signal teasers */
-.signals-row{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:20px 24px;margin-top:32px}
+.signals-row{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:20px 24px;margin-top:20px}
 .signals-row .sig-row-inner{display:flex;gap:0}
 .signals-row .sig{flex:1;padding:8px 16px;border-right:1px solid var(--border)}
 .signals-row .sig:first-child{padding-left:0}
 .signals-row .sig:last-child{border-right:none}
-.signals-row .sig-val{font-size:28px;font-weight:800;margin-bottom:4px;color:#e05252}
+.signals-row .sig-val{font-size:20px;font-weight:800;margin-bottom:4px;color:#e05252}
 .signals-row .sig-val.mid{color:#888}
 .signals-row .sig-val.free{color:var(--accent)}
 .signals-row .sig-lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;line-height:1.35}
@@ -184,9 +185,9 @@ class Siloq_Scanner_Shortcode {
                 </div>
 
                 <div class="headline-block">
-                    <h1>AI ASSISTANTS ARE<br><span class="gold">ANSWERING QUESTIONS</span><br><span class="dim">ABOUT YOUR BUSINESS</span><br>RIGHT NOW.</h1>
-                    <div class="sub-hed">ARE THEY FINDING YOU?</div>
-                    <p class="sub">Run a diagnostic on your site&rsquo;s search architecture and find out <strong>exactly what&rsquo;s suppressing your rankings</strong> &mdash; in Google, Google Maps, and the AI tools your customers already use.</p>
+                    <h1>AI IS ANSWERING QUESTIONS<br>ABOUT YOUR BUSINESS.</h1>
+                    <div class="sub-hed">ARE THEY GETTING IT RIGHT?</div>
+                    <p class="sub">Run a free diagnostic and see what ChatGPT, Gemini, and Google AI Overviews know about you &mdash; and what is blocking your rankings.</p>
                 </div>
 
                 <div class="signals-row">
