@@ -157,7 +157,7 @@ class Siloq_Scanner_Shortcode {
     <!-- Header symbol -->
     <div class="diag-symbol">
         <div class="pulse">
-            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <img src="<?php echo esc_url( SILOQ_PLUGIN_URL . 'assets/images/siloq-logo-icon.webp' ); ?>" alt="Siloq" style="width:40px;height:40px;object-fit:contain;">
         </div>
     </div>
 
