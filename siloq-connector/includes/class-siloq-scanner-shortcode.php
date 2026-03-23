@@ -405,9 +405,9 @@ class Siloq_Scanner_Shortcode {
         /* CTA */
         html += '<div class="cta-block">';
         if(autoCount && totalIssues) html += '<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:14px;">Siloq can automatically fix ' + autoCount + ' of your ' + totalIssues + ' issues.</div>';
-        html += '<a class="cta-main" href="https://app.siloq.ai/register" target="_blank" rel="noopener">Start Your Free Trial &rarr;</a>';
-        html += '<div class="cta-sub" id="cta-sub">See exactly what Siloq would fix — no credit card required.</div>';
-        html += '<br><a class="cta-link" href="#" target="_blank" rel="noopener">Want a full audit? Book a demo &rarr;</a>';
+        html += '<a class="cta-main" href="https://calendly.com/kyle-getprecisionmarketing/website-audit-review" target="_blank" rel="noopener">Book a Free Strategy Call &rarr;</a>';
+        html += '<div class="cta-sub" id="cta-sub">Get a personalized walkthrough of your results and a clear plan to fix them. No commitment, no hard sell.</div>';
+        html += '<br><a class="cta-link" href="https://app.siloq.ai/register" target="_blank" rel="noopener">Or start your free trial and fix it yourself &rarr;</a>';
         html += '</div>';
 
         /* Send report section */
@@ -794,10 +794,12 @@ class Siloq_Scanner_Shortcode {
         $body .= $issues_text;
         $body .= "\n{$auto_line}\n\n";
         $body .= "Most businesses in your category are leaving significant ranking opportunities on the table — especially with how AI search engines like ChatGPT and Google AI Overviews now decide who to surface.\n\n";
-        $body .= "If you'd like to see exactly what Siloq would fix on {$biz_label}, you can start a free trial here:\n";
+        $body .= "If you'd like to go through the results together, I'm happy to jump on a quick call. You can grab 30 minutes here:\n";
+        $body .= "https://calendly.com/kyle-getprecisionmarketing/website-audit-review\n\n";
+        $body .= "Or if you'd rather dig in yourself, you can start a free Siloq trial and see exactly what it would fix:\n";
         $body .= "https://app.siloq.ai/register\n\n";
-        $body .= "Happy to answer any questions.\n\n";
-        $body .= "— Kyle Fuchs\nPrecision Marketing\n";
+        $body .= "Either way, happy to help.\n\n";
+        $body .= "— Kyle Fuchs\nPrecision Marketing\n(913) 555-0100\n";
 
         $headers = array(
             'Content-Type: text/plain; charset=UTF-8',
