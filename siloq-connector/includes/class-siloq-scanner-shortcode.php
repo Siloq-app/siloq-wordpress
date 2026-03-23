@@ -233,13 +233,15 @@ class Siloq_Scanner_Shortcode {
     var pillarOrder = ['ai_visibility','cannibalization','meta_titles','content_structure','technical'];
 
     function renderResults(data){
-        var d = data.dimensions || data;
-        var total = data.total_score || 0;
-        var grade = data.grade || '';
-        var pages = data.pages_crawled || 0;
-        var benchmark = data.benchmark || '';
-        var autoCount = data.auto_fixable_count || 0;
-        var contentCount = data.requires_content_count || 0;
+        // API wraps results in data.results — flatten for backwards compat with stub format
+        var r = (data.results && typeof data.results === 'object') ? data.results : data;
+        var d = r.dimensions || r;
+        var total = r.total_score || data.total_score || data.score || 0;
+        var grade = r.grade || data.grade || '';
+        var pages = r.pages_crawled || data.pages_crawled || data.pages_analyzed || 0;
+        var benchmark = r.benchmark || data.benchmark || '';
+        var autoCount = r.auto_fixable_count || data.auto_fixable_count || 0;
+        var contentCount = r.requires_content_count || data.requires_content_count || 0;
         var totalIssues = autoCount + contentCount;
 
         var col = scoreColor(total, 100);
