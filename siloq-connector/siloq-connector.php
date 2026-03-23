@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.233
+ * Version: 1.5.234
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.233');
+define('SILOQ_VERSION', '1.5.234');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -293,8 +293,10 @@ class Siloq_Connector {
 
         // [siloq_scanner] shortcode + AJAX (front-end scanner for scan.siloq.ai)
         add_action( 'init', array( 'Siloq_Scanner_Shortcode', 'init' ) );
-        add_action( 'wp_ajax_siloq_run_scan',        array( 'Siloq_Scanner_Shortcode', 'ajax_run_scan' ) );
-        add_action( 'wp_ajax_nopriv_siloq_run_scan', array( 'Siloq_Scanner_Shortcode', 'ajax_run_scan' ) );
+        add_action( 'wp_ajax_siloq_run_scan',              array( 'Siloq_Scanner_Shortcode', 'ajax_run_scan' ) );
+        add_action( 'wp_ajax_nopriv_siloq_run_scan',       array( 'Siloq_Scanner_Shortcode', 'ajax_run_scan' ) );
+        add_action( 'wp_ajax_siloq_send_scan_report',      array( 'Siloq_Scanner_Shortcode', 'ajax_send_scan_report' ) );
+        add_action( 'wp_ajax_nopriv_siloq_send_scan_report', array( 'Siloq_Scanner_Shortcode', 'ajax_send_scan_report' ) );
 
         // NOTE: Builder-specific panel classes (Elementor, Gutenberg, Divi, etc.)
         // are initialised in load_dependencies() via Siloq_Builder_Detector::detect()

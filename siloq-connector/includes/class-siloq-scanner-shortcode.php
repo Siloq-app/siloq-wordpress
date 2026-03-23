@@ -190,6 +190,8 @@ class Siloq_Scanner_Shortcode {
 
         var xhr = new XMLHttpRequest();
         xhr.open('POST', ajaxUrl, true);
+        lastScannedUrl = url;
+
         xhr.onload = function(){
             clearInterval(ticker);
             barEl.style.width = '100%';
@@ -287,9 +289,93 @@ class Siloq_Scanner_Shortcode {
         html += '<a class="ss-secondary" href="#" target="_blank" rel="noopener">Want a full audit? Book a demo &rarr;</a>';
         html += '</div>';
 
+        // Send-to-prospect section
+        var scannedDomain = '';
+        try { scannedDomain = new URL(lastScannedUrl).hostname.replace(/^www\./,''); } catch(e){}
+        html += '<div id="ss-send-wrap" style="margin-top:28px;border-top:1px solid #e5e7eb;padding-top:24px;">'
+            + '<div style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:6px;">📤 Send this report to the business owner</div>'
+            + '<p style="font-size:14px;color:#666;margin:0 0 16px;">Personalize the email with their name and business — it\'ll show their exact score and top issues.</p>'
+            + '<div style="display:flex;flex-direction:column;gap:10px;">'
+            + '<input type="text" id="ss-prospect-name" placeholder="First name (e.g. John)" style="width:100%;padding:12px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;">'
+            + '<input type="text" id="ss-biz-name" placeholder="Business name (e.g. EMS Cleanup)" value="' + esc(scannedDomain) + '" style="width:100%;padding:12px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;">'
+            + '<input type="email" id="ss-prospect-email" placeholder="Their email address" style="width:100%;padding:12px 14px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;">'
+            + '<button id="ss-send-btn" style="width:100%;padding:14px;background:#059669;color:#fff;font-size:15px;font-weight:600;border:none;border-radius:8px;cursor:pointer;">Send Report Email →</button>'
+            + '<div id="ss-send-status" style="font-size:14px;text-align:center;min-height:20px;"></div>'
+            + '</div></div>';
+
         resEl.innerHTML = html;
         show(resEl);
+
+        // Store scan data for the send handler
+        lastScanData = {
+            url: lastScannedUrl,
+            total_score: total,
+            grade: grade,
+            pages: pages,
+            benchmark: benchmark,
+            auto_count: autoCount,
+            total_issues: totalIssues,
+            top_issues: r.top_issues || [],
+            cta: r.cta || ''
+        };
+
+        document.getElementById('ss-send-btn').addEventListener('click', function() {
+            var name  = document.getElementById('ss-prospect-name').value.trim();
+            var biz   = document.getElementById('ss-biz-name').value.trim();
+            var email = document.getElementById('ss-prospect-email').value.trim();
+            var statusEl2 = document.getElementById('ss-send-status');
+            if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                statusEl2.style.color = '#dc2626';
+                statusEl2.textContent = 'Please enter a valid email address.';
+                return;
+            }
+            this.disabled = true;
+            this.textContent = 'Sending…';
+            statusEl2.textContent = '';
+
+            var fd2 = new FormData();
+            fd2.append('action', 'siloq_send_scan_report');
+            fd2.append('_wpnonce', nonce);
+            fd2.append('prospect_name', name);
+            fd2.append('biz_name', biz);
+            fd2.append('prospect_email', email);
+            fd2.append('scan_data', JSON.stringify(lastScanData));
+
+            var xhr2 = new XMLHttpRequest();
+            xhr2.open('POST', ajaxUrl, true);
+            xhr2.onload = function() {
+                try {
+                    var resp2 = JSON.parse(xhr2.responseText);
+                    if(resp2.success) {
+                        document.getElementById('ss-send-btn').textContent = '✓ Report sent!';
+                        document.getElementById('ss-send-btn').style.background = '#6b7280';
+                        statusEl2.style.color = '#059669';
+                        statusEl2.textContent = 'Email sent to ' + email + '. Follow up in 2-3 days.';
+                    } else {
+                        document.getElementById('ss-send-btn').disabled = false;
+                        document.getElementById('ss-send-btn').textContent = 'Send Report Email →';
+                        statusEl2.style.color = '#dc2626';
+                        statusEl2.textContent = (resp2.data && resp2.data.message) ? resp2.data.message : 'Send failed. Please try again.';
+                    }
+                } catch(e) {
+                    document.getElementById('ss-send-btn').disabled = false;
+                    document.getElementById('ss-send-btn').textContent = 'Send Report Email →';
+                    statusEl2.style.color = '#dc2626';
+                    statusEl2.textContent = 'Unexpected error. Please try again.';
+                }
+            };
+            xhr2.onerror = function() {
+                document.getElementById('ss-send-btn').disabled = false;
+                document.getElementById('ss-send-btn').textContent = 'Send Report Email →';
+                statusEl2.style.color = '#dc2626';
+                statusEl2.textContent = 'Network error. Please try again.';
+            };
+            xhr2.send(fd2);
+        });
     }
+
+    var lastScannedUrl = '';
+    var lastScanData = {};
 
     function esc(s){
         var d = document.createElement('div');
@@ -412,5 +498,96 @@ class Siloq_Scanner_Shortcode {
             'requires_content_count' => 2,
             'cta'                    => 'Siloq can automatically fix 5 of your 7 issues. Start your free trial.',
         );
+    }
+
+    /**
+     * AJAX handler — send scan report email to a prospect.
+     */
+    public static function ajax_send_scan_report() {
+        check_ajax_referer( 'siloq_scanner_nonce', '_wpnonce' );
+
+        $prospect_name  = sanitize_text_field( wp_unslash( $_POST['prospect_name'] ?? '' ) );
+        $biz_name       = sanitize_text_field( wp_unslash( $_POST['biz_name'] ?? '' ) );
+        $prospect_email = sanitize_email( wp_unslash( $_POST['prospect_email'] ?? '' ) );
+        $scan_data_raw  = wp_unslash( $_POST['scan_data'] ?? '{}' );
+        $scan           = json_decode( $scan_data_raw, true );
+
+        if ( empty( $prospect_email ) || ! is_email( $prospect_email ) ) {
+            wp_send_json_error( array( 'message' => 'Invalid email address.' ) );
+            return;
+        }
+        if ( empty( $scan ) || ! is_array( $scan ) ) {
+            wp_send_json_error( array( 'message' => 'Missing scan data.' ) );
+            return;
+        }
+
+        $score       = intval( $scan['total_score'] ?? 0 );
+        $grade       = sanitize_text_field( $scan['grade'] ?? 'Needs Attention' );
+        $pages       = intval( $scan['pages'] ?? 0 );
+        $url         = esc_url( $scan['url'] ?? '' );
+        $benchmark   = sanitize_text_field( $scan['benchmark'] ?? '' );
+        $auto_count  = intval( $scan['auto_count'] ?? 0 );
+        $total_issues= intval( $scan['total_issues'] ?? 0 );
+        $top_issues  = array_slice( (array) ( $scan['top_issues'] ?? [] ), 0, 4 );
+
+        $first_name  = $prospect_name ?: 'there';
+        $biz_label   = $biz_name ?: ( $url ? parse_url( $url, PHP_URL_HOST ) : 'your business' );
+        $score_emoji = $score >= 80 ? '🟢' : ( $score >= 60 ? '🟡' : '🔴' );
+
+        // Build issue list
+        $issues_text = '';
+        foreach ( $top_issues as $i => $issue ) {
+            $issues_text .= ( $i + 1 ) . '. ' . $issue . "\n";
+        }
+        if ( empty( $issues_text ) ) {
+            $issues_text = "• Missing or incomplete structured data\n• Meta title issues\n• AI visibility gaps\n";
+        }
+
+        $auto_line = $auto_count > 0 && $total_issues > 0
+            ? "Siloq can automatically fix {$auto_count} of your {$total_issues} issues — no developer needed."
+            : "Siloq can diagnose and fix these issues automatically.";
+
+        $subject = "We scanned {$biz_label} — here's what we found";
+
+        $body  = "Hi {$first_name},\n\n";
+        $body .= "I ran a quick SEO and AI-visibility scan on {$url} and wanted to share the results.\n\n";
+        $body .= "{$score_emoji} Your score: {$score}/100 — {$grade}\n";
+        if ( $benchmark ) {
+            $body .= "{$benchmark}\n";
+        }
+        $body .= "\n";
+        $body .= "Here's what we found:\n\n";
+        $body .= $issues_text;
+        $body .= "\n{$auto_line}\n\n";
+        $body .= "Most businesses in your category are leaving significant ranking opportunities on the table — especially with how AI search engines like ChatGPT and Google AI Overviews now decide who to surface.\n\n";
+        $body .= "If you'd like to see exactly what Siloq would fix on {$biz_label}, you can start a free trial here:\n";
+        $body .= "https://app.siloq.ai/register\n\n";
+        $body .= "Happy to answer any questions.\n\n";
+        $body .= "— Kyle Fuchs\nPrecision Marketing\n";
+
+        $headers = array(
+            'Content-Type: text/plain; charset=UTF-8',
+            'From: Kyle Fuchs <support@siloq.ai>',
+            'Reply-To: support@siloq.ai',
+        );
+
+        $sent = wp_mail( $prospect_email, $subject, $body, $headers );
+
+        if ( $sent ) {
+            // Log to options for basic tracking (last 50 sends)
+            $log = get_option( 'siloq_scan_sends_log', array() );
+            array_unshift( $log, array(
+                'email'    => $prospect_email,
+                'biz'      => $biz_label,
+                'url'      => $url,
+                'score'    => $score,
+                'sent_at'  => current_time( 'mysql' ),
+            ) );
+            update_option( 'siloq_scan_sends_log', array_slice( $log, 0, 50 ), false );
+
+            wp_send_json_success( array( 'message' => 'Report sent.' ) );
+        } else {
+            wp_send_json_error( array( 'message' => 'Email failed to send. Check your server mail settings.' ) );
+        }
     }
 }
