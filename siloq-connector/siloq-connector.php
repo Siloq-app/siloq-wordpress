@@ -169,6 +169,14 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-schema-architect.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-redirect-manager.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-auto-redirect.php';
+		// SEO plugin sitemap integrations
+		foreach ( array( 'aioseo', 'yoast', 'rankmath' ) as $_siloq_seo_plugin ) {
+			$f = SILOQ_PLUGIN_DIR . 'includes/class-siloq-' . $_siloq_seo_plugin . '-integration.php';
+			if ( file_exists( $f ) ) {
+				require_once $f;
+			}
+		}
+		unset( $_siloq_seo_plugin, $f );
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-import.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-webhook-handler.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-executor.php';
@@ -280,6 +288,9 @@ class Siloq_Connector {
 
         // Auto-redirect on slug change (post_updated hook).
         Siloq_Auto_Redirect::init();
+		Siloq_AIOSEO_Integration::init();
+		Siloq_Yoast_Integration::init();
+		Siloq_RankMath_Integration::init();
 
         // Initialize Schema Intelligence (AJAX handlers + wp_head output).
         Siloq_Schema_Intelligence::init();
