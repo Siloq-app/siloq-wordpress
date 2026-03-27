@@ -227,6 +227,10 @@ class Siloq_Redirect_Manager {
         // Store last error for callers to surface in debug output
         self::$last_error = $result === false ? $wpdb->last_error : '';
 
+        if ( $result !== false ) {
+            do_action( 'siloq_redirect_added', $source_url, $target_url );
+        }
+
         return $result !== false;
     }
     
@@ -238,7 +242,7 @@ class Siloq_Redirect_Manager {
         
         $table_name = $wpdb->prefix . self::TABLE_NAME;
         
-        return $wpdb->update(
+        $result = $wpdb->update(
             $table_name,
             array(
                 'target_url' => $this->normalize_url($target_url),
@@ -249,6 +253,12 @@ class Siloq_Redirect_Manager {
             array('%s', '%d', '%s'),
             array('%d')
         ) !== false;
+
+        if ( $result ) {
+            do_action( 'siloq_redirect_updated', $id );
+        }
+
+        return $result;
     }
     
     /**
@@ -259,11 +269,17 @@ class Siloq_Redirect_Manager {
         
         $table_name = $wpdb->prefix . self::TABLE_NAME;
         
-        return $wpdb->delete(
+        $result = $wpdb->delete(
             $table_name,
             array('id' => $id),
             array('%d')
         ) !== false;
+
+        if ( $result ) {
+            do_action( 'siloq_redirect_deleted', $id );
+        }
+
+        return $result;
     }
     
     /**
@@ -282,13 +298,19 @@ class Siloq_Redirect_Manager {
         if ($redirect) {
             $new_status = $redirect->enabled ? 0 : 1;
             
-            return $wpdb->update(
+            $result = $wpdb->update(
                 $table_name,
                 array('enabled' => $new_status),
                 array('id' => $id),
                 array('%d'),
                 array('%d')
             ) !== false;
+
+            if ( $result ) {
+                do_action( 'siloq_redirect_toggled', $id, $new_status );
+            }
+
+            return $result;
         }
         
         return false;
