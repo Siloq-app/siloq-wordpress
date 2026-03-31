@@ -1906,7 +1906,8 @@ class Siloq_Admin {
                 'success');
         }
         $site_id = get_option('siloq_site_id', '');
-        if (!$manual_override_just_set && (empty($site_id) || $old_api_key !== $api_key)) {
+        // NEVER auto-detect if a manual site_id is already stored — only auto-detect when truly empty
+        if (!$manual_override_just_set && empty($site_id)) {
             $this_site_url = trailingslashit(home_url());
             $this_site_host = strtolower(preg_replace('/^www\./', '', parse_url($this_site_url, PHP_URL_HOST) ?? ''));
 
