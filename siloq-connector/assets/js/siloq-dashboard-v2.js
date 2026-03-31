@@ -856,7 +856,7 @@
       $(this).text($list.hasClass('is-open') ? 'Hide Issues' : 'View Issues');
     });
 
-    // Schema button on page cards (Pages tab)
+    // Schema button on page cards (Pages tab) — generate + auto-apply
     $(document).on('click', '.siloq-page-schema-btn', function () {
       var $btn = $(this);
       var postId = $btn.data('post-id');
@@ -869,23 +869,42 @@
         nonce: cfg.nonce
       }, function (res) {
         if (res.success) {
-          $btn.text('✅ Schema').prop('disabled', false);
-          var warn = res.data && res.data.profile_warnings && res.data.profile_warnings.length
-            ? '⚠️ ' + res.data.profile_warnings[0]
-            : '✅ Schema generated — apply it in the editor or Schema tab.';
-          $feedback.text(warn)
-            .css({'background': warn.indexOf('⚠️') === 0 ? '#fef3c7' : '#f0fdf4',
-                  'color': warn.indexOf('⚠️') === 0 ? '#92400e' : '#166534',
-                  'border': '1px solid ' + (warn.indexOf('⚠️') === 0 ? '#fcd34d' : '#86efac')})
-            .show();
+          // Auto-apply the generated schema
+          $btn.text('Applying...');
+          $.post(cfg.ajaxUrl, {
+            action: 'siloq_apply_schema',
+            post_id: postId,
+            nonce: cfg.nonce
+          }, function (applyRes) {
+            if (applyRes.success) {
+              $btn.text('✅ Schema').prop('disabled', false);
+              $feedback.text('✅ Schema generated and applied.')
+                .css({'background': '#f0fdf4', 'color': '#166534', 'border': '1px solid #86efac'})
+                .show();
+            } else {
+              // Generated but apply failed — show warning
+              $btn.text('✅ Schema').prop('disabled', false);
+              var warn = (applyRes.data && applyRes.data.message) ? applyRes.data.message : 'Generated but auto-apply failed. Apply from Schema tab.';
+              $feedback.text('⚠️ ' + warn)
+                .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
+                .show();
+            }
+            setTimeout(function () { $feedback.hide(); }, 6000);
+          }).fail(function () {
+            $btn.text('✅ Schema').prop('disabled', false);
+            $feedback.text('⚠️ Schema generated but auto-apply failed. Apply from Schema tab.')
+              .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
+              .show();
+            setTimeout(function () { $feedback.hide(); }, 6000);
+          });
         } else {
           var msg = (res.data && res.data.message) ? res.data.message : 'Schema generation failed.';
           $btn.text('⚡ Schema').prop('disabled', false);
           $feedback.text('⚠️ ' + msg)
             .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
             .show();
+          setTimeout(function () { $feedback.hide(); }, 6000);
         }
-        setTimeout(function () { $feedback.hide(); }, 6000);
       }).fail(function (xhr) {
         $btn.text('⚡ Schema').prop('disabled', false);
         $feedback.text('⚠️ Server error (HTTP ' + xhr.status + '). Check WP error log.')
@@ -1452,9 +1471,21 @@
     var redirectsLoaded = false;
     var allRedirects = []; // cached for filtering/search
 
-    // Lazy-load when tab is clicked
+    // Expose for inline PHP scripts that reference loadSiloqRedirects
+    window.loadSiloqRedirects = function () {
+      redirectsLoaded = false;
+      loadRedirects();
+    };
+
+    // Lazy-load when tab is clicked + auto-preview city redirects
     $(document).on('click', '.siloq-tab-btn[aria-controls="siloq-tab-redirects"]', function () {
       if (!redirectsLoaded) loadRedirects();
+      // Auto-trigger city redirect preview if the restructure preview button exists
+      var $previewBtn = $('#siloq-preview-restructure-btn');
+      if ($previewBtn.length && !$previewBtn.data('auto-loaded')) {
+        $previewBtn.data('auto-loaded', true);
+        $previewBtn.trigger('click');
+      }
     });
 
     // Refresh button
