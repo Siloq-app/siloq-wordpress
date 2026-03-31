@@ -1848,6 +1848,8 @@ class Siloq_Admin {
         $errors = array();
         if (empty($api_key)) {
             $errors[] = __('API Key is required. Get one from your Siloq dashboard.', 'siloq-connector');
+        } elseif (strpos($api_key, 'sk_siloq_') !== 0) {
+            $errors[] = __('Invalid API key format. Your key should start with sk_siloq_ — please generate a fresh key from your Siloq dashboard.', 'siloq-connector');
         }
         
         if (!empty($errors)) {
