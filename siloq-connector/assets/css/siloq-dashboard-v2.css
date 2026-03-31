@@ -77,6 +77,15 @@
   border-bottom-color: var(--siloq-primary);
 }
 
+.siloq-tab-subtitle {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: #9ca3af;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
 .siloq-tab-panel {
   display: none;
 }

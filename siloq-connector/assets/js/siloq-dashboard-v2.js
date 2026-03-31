@@ -202,22 +202,35 @@
       var $btn = $(this);
       if ($btn.data('loading')) return;
 
+      var spinnerHtml = '<span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span> ';
+
       $btn.data('loading', true)
         .prop('disabled', true)
-        .html('<span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span> Analyzing your site...');
+        .html(spinnerHtml + 'Analyzing your pages... (1/3)');
 
       // Show generating state in Plan tab sections
-      $('#siloq-actions-content').html('<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">\uD83E\uDDE0 Claude is analyzing your site architecture...</div>');
+      $('#siloq-actions-content').html('<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">\uD83E\uDDE0 Analyzing your site architecture...</div>');
       $('#siloq-architecture-content').html('<div style="padding:16px;text-align:center;color:#6b7280;font-size:13px;">Mapping hubs, spokes, and orphans...</div>');
+
+      // Simulate step progression while server processes sequentially
+      var stepTimer1 = setTimeout(function() {
+        if ($btn.data('loading')) $btn.html(spinnerHtml + 'Building your SEO plan... (2/3)');
+      }, 5000);
+      var stepTimer2 = setTimeout(function() {
+        if ($btn.data('loading')) $btn.html(spinnerHtml + 'Scoring entity readiness... (3/3)');
+      }, 12000);
 
       $.post(cfg.ajaxUrl, {
         action: 'siloq_generate_intelligence',
         nonce: cfg.nonce
       }, function (resp) {
+        clearTimeout(stepTimer1);
+        clearTimeout(stepTimer2);
         $btn.data('loading', false).prop('disabled', false);
 
         if (!resp.success) {
-          $btn.html('\u26A0 Error \u2014 Retry');
+          var stepInfo = resp.data && resp.data.step ? ' (failed at step ' + resp.data.step + ')' : '';
+          $btn.html('\u26A0 Error' + stepInfo + ' \u2014 Retry');
           $('#siloq-actions-content').html(
             '<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">' +
             (resp.data && resp.data.message ? resp.data.message : 'Intelligence generation failed. Try again.') +
@@ -226,9 +239,14 @@
           return;
         }
 
-        $btn.html('\u2713 Plan Generated \u2014 Refresh to see updates');
+        $btn.html('\u2713 Done! Refreshing...');
         renderIntelligenceResult(resp.data);
+        setTimeout(function() {
+          $btn.html('\u2713 Plan Generated \u2014 Refresh to see updates');
+        }, 2000);
       }).fail(function () {
+        clearTimeout(stepTimer1);
+        clearTimeout(stepTimer2);
         $btn.data('loading', false).prop('disabled', false).html('\u26A0 Error \u2014 Retry');
         $('#siloq-actions-content').html('<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">Request failed. Check your connection and try again.</div>');
       });
