@@ -67,6 +67,6 @@ class Siloq_Goals {
             }
         }
 
-        return $api_client->make_request( '/sites/' . intval( $site_id ) . '/goals/', 'POST', $goals );
+        return $api_client->post( '/sites/' . intval( $site_id ) . '/goals/', $goals );
     }
 }
