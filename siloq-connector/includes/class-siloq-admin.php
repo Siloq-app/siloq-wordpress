@@ -6207,7 +6207,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             <?php self::render_setup_progress_bar(); ?>
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
                     <?php _e('Page Sync', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('Content Synchronization — Sync your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
@@ -6261,7 +6261,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         <div class="wrap siloq-sync-status-container">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
                     <?php _e('Sync Status', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('Content Synchronization Monitor — Track and manage your WordPress content sync with Siloq platform.', 'siloq-connector'); ?></p>
@@ -6424,7 +6424,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         <div class="wrap siloq-content-import-container">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
                     <?php _e('Content Import', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('AI Content Integration — Import and manage AI-generated content from Siloq platform.', 'siloq-connector'); ?></p>
