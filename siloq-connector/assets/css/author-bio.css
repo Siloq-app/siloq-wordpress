@@ -1,0 +1,138 @@
+.siloq-author-bio {
+    border-top: 2px solid #e5e7eb;
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    font-family: inherit;
+}
+
+.siloq-author-bio-inner {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+}
+
+.siloq-author-avatar {
+    flex-shrink: 0;
+}
+
+.siloq-author-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.siloq-author-initials {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #6b7280;
+}
+
+.siloq-author-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.siloq-author-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+}
+
+.siloq-author-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.siloq-author-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+    font-weight: 600;
+}
+
+.siloq-author-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.siloq-author-name-link {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+    text-decoration: none;
+}
+
+.siloq-author-name-link:hover {
+    text-decoration: underline;
+}
+
+.siloq-author-title {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.siloq-author-linkedin {
+    color: #9ca3af;
+    transition: color 0.2s;
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+.siloq-author-linkedin:hover {
+    color: #0077b5;
+}
+
+.siloq-author-credentials {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.6rem;
+}
+
+.siloq-author-credential {
+    font-size: 0.7rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem;
+    color: #1d4ed8;
+    font-weight: 500;
+}
+
+.siloq-author-bio-text {
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: #374151;
+    margin: 0;
+}
+
+@media (max-width: 480px) {
+    .siloq-author-bio-inner {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .siloq-author-header {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .siloq-author-identity {
+        align-items: center;
+    }
+    .siloq-author-credentials {
+        justify-content: center;
+    }
+}
