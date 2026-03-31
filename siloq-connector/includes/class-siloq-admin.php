@@ -299,6 +299,7 @@ class Siloq_Admin {
         
         ?>
         <div class="wrap siloq-admin-wrap">
+            <?php self::render_setup_progress_bar(); ?>
             <div class="siloq-header">
                 <h1>
                     <?php _e('Siloq Settings', 'siloq-connector'); ?>
@@ -2044,18 +2045,20 @@ class Siloq_Admin {
 
         ?>
         <div class="siloq-dash-wrap">
+            <?php self::render_setup_progress_bar(); ?>
             <h1 style="margin-bottom:4px;">Siloq</h1>
 
             <!-- Tab Navigation -->
             <ul class="siloq-tab-nav" role="tablist">
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="true" aria-controls="siloq-tab-dashboard">Dashboard</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-plan">SEO/GEO Plan</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-depth-engine">Depth Engine</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Schema</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects</button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-goals">Goals</button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-plan">SEO Plan<span class="siloq-tab-subtitle">Your prioritized action list</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-depth-engine">Content Depth<span class="siloq-tab-subtitle">Find topic gaps</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages<span class="siloq-tab-subtitle">Manage page roles &amp; optimization</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Structured Data<span class="siloq-tab-subtitle">Help Google understand your pages</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC<span class="siloq-tab-subtitle">Google Search Console data</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects<span class="siloq-tab-subtitle">301 redirect management</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-goals">Goals<span class="siloq-tab-subtitle">Track what matters to your business</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-content">Content<span class="siloq-tab-subtitle">Authors &amp; blog pipeline</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
             </ul>
 
@@ -3640,12 +3643,15 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 
             <!-- ═══════ SEO/GEO PLAN TAB ═══════ -->
             <div id="siloq-tab-plan" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+                    Your SEO action list, ranked by impact. Fix the top items first — each one is a real ranking opportunity.
+                </p>
                 <div class="siloq-plan-section">
 
                     <!-- Tab header -->
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
                         <div>
-                            <h2 style="font-size:18px;font-weight:700;margin:0 0 4px;">SEO/GEO Plan</h2>
+                            <h2 style="font-size:18px;font-weight:700;margin:0 0 4px;">SEO Plan</h2>
                             <p style="color:#6b7280;font-size:13px;margin:0;">Your site's current SEO health and exactly what to do about it.</p>
                         </div>
                         <button class="siloq-btn siloq-btn--primary siloq-generate-plan-btn">
@@ -4054,6 +4060,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
 
             <!-- ═══════ PAGES TAB ═══════ -->
             <div id="siloq-tab-pages" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+                    Your site pages, classified by role. Hub pages are your main service pages. Spoke pages support them. Make sure the right pages are marked correctly.
+                </p>
                 <!-- Header row -->
                 <div class="siloq-pages-header">
                     <div class="siloq-pages-header__left">
@@ -4106,6 +4115,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
 
             <!-- ═══════ SCHEMA TAB ═══════ -->
             <div id="siloq-tab-schema" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+                    Structured data tells Google exactly what your business is and what each page is about. This directly affects how you appear in search results.
+                </p>
                 <?php
                 global $wpdb;
                 $siloq_synced_meta_count = intval( $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_siloq_synced'" ) );
@@ -5050,6 +5062,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
 
             <!-- ═══════ DEPTH ENGINE TAB ═══════ -->
             <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+                    Find the content gaps in your service topics. The more gaps you fill, the more authoritative Google sees your site.
+                </p>
 <?php
 $_depth_primary_services = json_decode( get_option('siloq_primary_services', '[]'), true );
 if ( ! is_array( $_depth_primary_services ) ) $_depth_primary_services = array();
@@ -5773,6 +5788,156 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 </script>
             </div><!-- /goals tab -->
 
+            <!-- ═══════ CONTENT TAB ═══════ -->
+            <div id="siloq-tab-content" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+                <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
+                    Manage your content authors and blog pipeline. Authors build E-E-A-T signals; the blog pipeline generates SEO-optimized content.
+                </p>
+
+                <!-- Section A: Authors -->
+                <div class="siloq-card" style="margin-bottom:16px;">
+                    <div class="siloq-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <h3 class="siloq-card-title">Authors</h3>
+                        <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Siloq Dashboard &rarr;</a>
+                    </div>
+                    <div id="siloq-content-authors" style="padding:12px 0;">
+                        <div style="text-align:center;color:#9ca3af;font-size:13px;padding:20px;">Loading authors...</div>
+                    </div>
+                </div>
+
+                <!-- Section B: Blog Content Pipeline -->
+                <div class="siloq-card">
+                    <div class="siloq-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <h3 class="siloq-card-title">Blog Content Pipeline</h3>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" id="siloq-generate-content-plan" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;">Generate Content Plan</button>
+                            <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=content" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Dashboard &rarr;</a>
+                        </div>
+                    </div>
+                    <div id="siloq-content-jobs" style="padding:12px 0;">
+                        <div style="text-align:center;color:#9ca3af;font-size:13px;padding:20px;">Loading content pipeline...</div>
+                    </div>
+                </div>
+
+                <script>
+                (function($) {
+                    var cfg = window.siloqDash || {};
+                    if (!cfg.ajaxUrl) cfg.ajaxUrl = (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+                    if (!cfg.nonce && typeof wpData !== 'undefined') { cfg.ajaxUrl = wpData.ajax_url; cfg.nonce = wpData.nonce; }
+
+                    function loadAuthors() {
+                        $.post(cfg.ajaxUrl, { action: 'siloq_get_authors', nonce: cfg.nonce }, function(resp) {
+                            var $wrap = $('#siloq-content-authors');
+                            if (!resp.success || !resp.data) {
+                                $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">Could not load authors. ' + (resp.data && resp.data.message ? resp.data.message : '') + '</div>');
+                                return;
+                            }
+                            var authors = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.authors || []);
+                            if (!authors.length) {
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No authors found. <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" style="color:#4f46e5;">Add authors in Siloq Dashboard</a></div>');
+                                return;
+                            }
+                            var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+                            authors.forEach(function(a) {
+                                var name = a.name || a.full_name || 'Unknown';
+                                var title = a.job_title || a.title || '';
+                                var creds = a.credentials || a.credentials_badges || [];
+                                var linkedin = a.linkedin_url || a.linkedin || '';
+                                html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f9fafb;border-radius:6px;">';
+                                html += '<div style="font-weight:600;font-size:13px;color:#111827;min-width:120px;">' + $('<span>').text(name).html() + '</div>';
+                                if (title) html += '<div style="font-size:12px;color:#6b7280;">' + $('<span>').text(title).html() + '</div>';
+                                if (Array.isArray(creds) && creds.length) {
+                                    creds.forEach(function(c) {
+                                        html += '<span style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:500;">' + $('<span>').text(c).html() + '</span>';
+                                    });
+                                }
+                                html += '<div style="margin-left:auto;font-size:11px;">' + (linkedin ? '<span style="color:#16a34a;" title="LinkedIn connected">&#x2714; LinkedIn</span>' : '<span style="color:#dc2626;" title="No LinkedIn">&#x2718; LinkedIn</span>') + '</div>';
+                                html += '</div>';
+                            });
+                            html += '</div>';
+                            $wrap.html(html);
+                        });
+                    }
+
+                    function loadContentJobs() {
+                        $.post(cfg.ajaxUrl, { action: 'siloq_get_content_jobs', nonce: cfg.nonce }, function(resp) {
+                            var $wrap = $('#siloq-content-jobs');
+                            if (!resp.success || !resp.data) {
+                                $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">Could not load content jobs. ' + (resp.data && resp.data.message ? resp.data.message : '') + '</div>');
+                                return;
+                            }
+                            var jobs = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.jobs || []);
+                            var actionable = jobs.filter(function(j) {
+                                return j.status === 'pending_approval' || j.status === 'draft';
+                            });
+                            if (!actionable.length) {
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No pending content. Click "Generate Content Plan" to create blog topics based on your SEO gaps.</div>');
+                                return;
+                            }
+                            var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+                            actionable.forEach(function(j) {
+                                var tierColors = { 1: '#16a34a', 2: '#ca8a04', 3: '#6b7280' };
+                                var tier = j.tier || j.content_tier || 1;
+                                html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f9fafb;border-radius:6px;flex-wrap:wrap;">';
+                                html += '<span style="background:' + (tierColors[tier] || '#6b7280') + ';color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;">Tier ' + tier + '</span>';
+                                html += '<div style="font-weight:600;font-size:13px;color:#111827;flex:1;min-width:150px;">' + $('<span>').text(j.title || j.topic || 'Untitled').html() + '</div>';
+                                if (j.primary_keyword || j.keyword) html += '<div style="font-size:11px;color:#6b7280;">' + $('<span>').text(j.primary_keyword || j.keyword).html() + '</div>';
+                                html += '<button type="button" class="siloq-btn siloq-btn--primary siloq-btn--sm siloq-approve-job" data-job-id="' + (j.id || j.job_id) + '" style="font-size:11px;">Approve &amp; Write</button>';
+                                html += '</div>';
+                            });
+                            html += '</div>';
+                            $wrap.html(html);
+                        });
+                    }
+
+                    // Approve & Write handler
+                    $(document).on('click', '.siloq-approve-job', function() {
+                        var $btn = $(this);
+                        var jobId = $btn.data('job-id');
+                        if ($btn.data('loading')) return;
+                        $btn.data('loading', true).prop('disabled', true).text('Writing...');
+                        $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
+                            $btn.data('loading', false).prop('disabled', false);
+                            if (resp.success) {
+                                $btn.text('✓ Sent').css('background', '#16a34a');
+                                setTimeout(function() { loadContentJobs(); }, 2000);
+                            } else {
+                                $btn.text('Error').css('background', '#dc2626');
+                            }
+                        }).fail(function() {
+                            $btn.data('loading', false).prop('disabled', false).text('Error');
+                        });
+                    });
+
+                    // Generate Content Plan handler
+                    $('#siloq-generate-content-plan').on('click', function() {
+                        var $btn = $(this);
+                        if ($btn.data('loading')) return;
+                        $btn.data('loading', true).prop('disabled', true).html('<span class="siloq-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:4px;"></span> Generating...');
+                        $.post(cfg.ajaxUrl, { action: 'siloq_generate_content_plan', nonce: cfg.nonce }, function(resp) {
+                            $btn.data('loading', false).prop('disabled', false);
+                            if (resp.success) {
+                                $btn.text('✓ Plan Generated');
+                                loadContentJobs();
+                            } else {
+                                $btn.text('Error — Retry').css('background', '#dc2626');
+                                alert(resp.data && resp.data.message ? resp.data.message : 'Content plan generation failed.');
+                            }
+                        }).fail(function() {
+                            $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                        });
+                    });
+
+                    // Load when Content tab is shown
+                    var contentLoaded = false;
+                    $(document).on('click', '[aria-controls="siloq-tab-content"]', function() {
+                        if (!contentLoaded) { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+                    });
+                    if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+                })(jQuery);
+                </script>
+            </div><!-- /content tab -->
+
             <script>
                 // Pass roadmap progress to JS
                 window.siloqRoadmapProgress = <?php echo wp_json_encode($roadmap_progress); ?>;
@@ -6039,6 +6204,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         
         ?>
         <div class="wrap siloq-admin-wrap">
+            <?php self::render_setup_progress_bar(); ?>
             <div class="siloq-header">
                 <h1>
                     <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
@@ -8959,6 +9125,37 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      *
      * @since 1.5.164
      */
+    /**
+     * Make an API request with retry on 429/503.
+     */
+    private static function intelligence_request_with_retry( $url, $headers, $method = 'GET', $body = null ) {
+        $args = array(
+            'timeout' => 90,
+            'headers' => $headers,
+            'method'  => $method,
+        );
+        if ( $body !== null ) {
+            $args['body'] = wp_json_encode( $body );
+            $args['headers']['Content-Type'] = 'application/json';
+        }
+
+        $response = wp_remote_request( $url, $args );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $status = wp_remote_retrieve_response_code( $response );
+
+        // Retry once on 429/503 after 3 seconds
+        if ( in_array( $status, array( 429, 503 ), true ) ) {
+            sleep( 3 );
+            $response = wp_remote_request( $url, $args );
+        }
+
+        return $response;
+    }
+
     public static function ajax_generate_intelligence() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
         if ( ! current_user_can( 'manage_options' ) ) {
@@ -8973,18 +9170,18 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => 'Siloq is not connected. Please add your API key and site ID in Settings.' ) );
         }
 
-        $endpoint = $api_url . '/sites/' . $site_id . '/intelligence/';
+        $headers = array(
+            'Authorization' => 'Bearer ' . $api_key,
+            'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+        );
 
-        $response = wp_remote_get( $endpoint, array(
-            'timeout' => 60,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
-            ),
-        ) );
+        $base = trailingslashit( $api_url ) . 'sites/' . $site_id;
+
+        // Step 1: Intelligence analysis
+        $response = self::intelligence_request_with_retry( $base . '/intelligence/', $headers );
 
         if ( is_wp_error( $response ) ) {
-            wp_send_json_error( array( 'message' => 'API request failed: ' . $response->get_error_message() ) );
+            wp_send_json_error( array( 'message' => 'API request failed: ' . $response->get_error_message(), 'step' => 1 ) );
         }
 
         $status = wp_remote_retrieve_response_code( $response );
@@ -8993,16 +9190,41 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         if ( $status < 200 || $status >= 300 ) {
             $err = isset( $data['detail'] ) ? $data['detail'] : ( isset( $data['message'] ) ? $data['message'] : "HTTP {$status}" );
-            wp_send_json_error( array( 'message' => 'Intelligence API error: ' . $err ) );
+            wp_send_json_error( array( 'message' => 'Intelligence API error: ' . $err, 'step' => 1 ) );
         }
 
-        // Persist plan data locally so the dashboard can reload it
+        // 1-second delay between major AI calls
+        sleep( 1 );
+
+        // Step 2: Entity grounding (non-fatal — merge if available)
+        $entity_data = null;
+        $entity_resp = self::intelligence_request_with_retry( $base . '/entity-grounding/', $headers );
+        if ( ! is_wp_error( $entity_resp ) && wp_remote_retrieve_response_code( $entity_resp ) >= 200 && wp_remote_retrieve_response_code( $entity_resp ) < 300 ) {
+            $entity_data = json_decode( wp_remote_retrieve_body( $entity_resp ), true );
+        }
+
+        sleep( 1 );
+
+        // Step 3: Blueprint analysis (non-fatal — merge if available)
+        $blueprint_data = null;
+        $blueprint_resp = self::intelligence_request_with_retry( $base . '/blueprint/', $headers );
+        if ( ! is_wp_error( $blueprint_resp ) && wp_remote_retrieve_response_code( $blueprint_resp ) >= 200 && wp_remote_retrieve_response_code( $blueprint_resp ) < 300 ) {
+            $blueprint_data = json_decode( wp_remote_retrieve_body( $blueprint_resp ), true );
+        }
+
+        // Merge supplementary data into main response
         if ( is_array( $data ) ) {
+            if ( is_array( $entity_data ) ) {
+                $data['entity_grounding'] = $entity_data;
+            }
+            if ( is_array( $blueprint_data ) ) {
+                $data['blueprint'] = $blueprint_data;
+            }
+
             $data['generated_at'] = current_time( 'mysql' );
+            update_option( 'siloq_last_intelligence_run', current_time( 'mysql' ) );
 
             // If the API returned empty hub/spoke arrays, populate from WP-local
-            // post meta so the Site Architecture section always shows real data
-            // (API may not have classification data if sync hasn't processed roles yet)
             $intel = isset( $data['intelligence'] ) && is_array( $data['intelligence'] ) ? $data['intelligence'] : array();
             if ( empty( $intel['hub_pages'] ) || empty( $intel['spoke_pages'] ) ) {
                 $local_hub_pages   = array();
@@ -9876,5 +10098,227 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
 
         wp_send_json_success( array( 'message' => $added . ' added to plan.', 'added' => $added, 'failed' => $failed ) );
+    }
+
+    // =========================================================================
+    // Setup Progress Bar
+    // =========================================================================
+
+    public static function get_setup_steps() {
+        $site_id = get_option('siloq_site_id', '');
+        $api_key = get_option('siloq_api_key', '');
+        $pages_synced = intval(get_option('siloq_pages_synced', 0));
+        if ( $pages_synced === 0 ) {
+            // Fallback: check synced meta count
+            global $wpdb;
+            $pages_synced = intval( $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_siloq_synced'" ) );
+        }
+        $services = json_decode(get_option('siloq_primary_services', '[]'), true);
+        $gsc = get_option('siloq_gsc_connected', '') === 'yes' || !empty(get_option('siloq_gsc_property', ''));
+        $goals = get_option('siloq_site_goals', '');
+        $analysis_run = get_option('siloq_last_intelligence_run', '');
+        if ( empty( $analysis_run ) ) {
+            // Fallback: check if plan data exists
+            $analysis_run = get_transient('siloq_plan_data') ? 'yes' : '';
+        }
+
+        return array(
+            array(
+                'id' => 'connect',
+                'label' => 'Connect to Siloq',
+                'done' => !empty($api_key) && !empty($site_id),
+                'action_label' => 'Add API Key',
+                'action_url' => admin_url('admin.php?page=siloq-settings'),
+                'description' => 'Link your WordPress site to your Siloq account',
+            ),
+            array(
+                'id' => 'sync',
+                'label' => 'Sync your pages',
+                'done' => $pages_synced > 0,
+                'action_label' => 'Sync Now',
+                'action_url' => admin_url('admin.php?page=siloq-sync'),
+                'description' => 'Let Siloq read your site structure',
+            ),
+            array(
+                'id' => 'services',
+                'label' => 'Add your services',
+                'done' => !empty($services),
+                'action_label' => 'Add Services',
+                'action_url' => admin_url('admin.php?page=siloq-settings&tab=business'),
+                'description' => 'Tell Siloq what your business does (~3 minutes)',
+            ),
+            array(
+                'id' => 'gsc',
+                'label' => 'Connect Google Search Console',
+                'done' => $gsc,
+                'action_label' => 'Connect GSC',
+                'action_url' => admin_url('admin.php?page=siloq-settings&tab=gsc'),
+                'description' => 'See real search data for your pages',
+            ),
+            array(
+                'id' => 'analysis',
+                'label' => 'Run your first SEO analysis',
+                'done' => !empty($analysis_run),
+                'action_label' => 'Run Analysis',
+                'action_url' => admin_url('admin.php?page=siloq-dashboard#siloq-tab-intelligence'),
+                'description' => 'Get your prioritized action list (1 click)',
+            ),
+        );
+    }
+
+    public static function render_setup_progress_bar() {
+        $steps = self::get_setup_steps();
+        $done = count(array_filter($steps, fn($s) => $s['done']));
+        $total = count($steps);
+
+        if ($done >= $total) return; // All done — hide bar
+
+        $pct = round(($done / $total) * 100);
+        $next = null;
+        foreach ($steps as $step) {
+            if (!$step['done']) { $next = $step; break; }
+        }
+        ?>
+        <div class="siloq-setup-progress" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                <div style="font-size:13px;font-weight:700;color:#111827;">
+                    ⚡ Setup Progress — <?php echo $done; ?>/<?php echo $total; ?> steps complete
+                </div>
+                <?php if ($next): ?>
+                <a href="<?php echo esc_url($next['action_url']); ?>" class="siloq-btn siloq-btn--primary siloq-btn--sm">
+                    Next: <?php echo esc_html($next['action_label']); ?> →
+                </a>
+                <?php endif; ?>
+            </div>
+            <div style="background:#f3f4f6;border-radius:999px;height:6px;overflow:hidden;margin-bottom:10px;">
+                <div style="background:#4f46e5;height:6px;width:<?php echo $pct; ?>%;border-radius:999px;transition:width 0.3s;"></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <?php foreach ($steps as $i => $step): ?>
+                <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:<?php echo $step['done'] ? '#16a34a' : '#6b7280'; ?>;">
+                    <span style="font-size:12px;"><?php echo $step['done'] ? '✅' : '⬜'; ?></span>
+                    <?php if (!$step['done']): ?>
+                    <a href="<?php echo esc_url($step['action_url']); ?>" style="color:#4f46e5;text-decoration:none;" title="<?php echo esc_attr($step['description']); ?>">
+                        <?php echo esc_html($step['label']); ?>
+                    </a>
+                    <?php else: ?>
+                    <span><?php echo esc_html($step['label']); ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    // =========================================================================
+    // AJAX: Content tab — Authors
+    // =========================================================================
+
+    public static function ajax_get_authors() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'No site connected.' ) );
+        }
+
+        $api = new Siloq_API_Client();
+        $result = $api->get( '/sites/' . $site_id . '/authors/' );
+
+        if ( isset( $result['success'] ) && $result['success'] === false ) {
+            wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : 'Failed to fetch authors.' ) );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    // =========================================================================
+    // AJAX: Content tab — Content Jobs
+    // =========================================================================
+
+    public static function ajax_get_content_jobs() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'No site connected.' ) );
+        }
+
+        $api = new Siloq_API_Client();
+        $result = $api->get( '/sites/' . $site_id . '/content/jobs/' );
+
+        if ( isset( $result['success'] ) && $result['success'] === false ) {
+            wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : 'Failed to fetch content jobs.' ) );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    // =========================================================================
+    // AJAX: Content tab — Approve & Write a content job
+    // =========================================================================
+
+    public static function ajax_approve_content_job() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        $job_id  = isset( $_POST['job_id'] ) ? intval( $_POST['job_id'] ) : 0;
+        if ( empty( $site_id ) || empty( $job_id ) ) {
+            wp_send_json_error( array( 'message' => 'Missing site or job ID.' ) );
+        }
+
+        $api = new Siloq_API_Client();
+        $result = $api->post( '/sites/' . $site_id . '/content/jobs/' . $job_id . '/write/' );
+
+        if ( isset( $result['success'] ) && $result['success'] === false ) {
+            wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : 'Failed to approve job.' ) );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    // =========================================================================
+    // AJAX: Content tab — Generate Content Plan
+    // =========================================================================
+
+    public static function ajax_generate_content_plan() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'No site connected.' ) );
+        }
+
+        $api = new Siloq_API_Client();
+
+        // Step 1: Keyword discovery
+        $discovery = $api->post( '/sites/' . $site_id . '/content/keyword-discovery/' );
+        if ( isset( $discovery['success'] ) && $discovery['success'] === false ) {
+            wp_send_json_error( array( 'message' => 'Keyword discovery failed: ' . ( $discovery['message'] ?? 'Unknown error' ) ) );
+        }
+
+        // Brief pause between AI calls
+        sleep(1);
+
+        // Step 2: Generate topics
+        $topics = $api->post( '/sites/' . $site_id . '/content/generate-topics/', array( 'blog_count' => 10 ) );
+        if ( isset( $topics['success'] ) && $topics['success'] === false ) {
+            wp_send_json_error( array( 'message' => 'Topic generation failed: ' . ( $topics['message'] ?? 'Unknown error' ) ) );
+        }
+
+        wp_send_json_success( array( 'message' => 'Content plan generated.', 'discovery' => $discovery, 'topics' => $topics ) );
     }
 }
