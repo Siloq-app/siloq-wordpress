@@ -5318,13 +5318,13 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                                 $grid.empty();
                                 $.each(res.data, function(i, hub) {
                                     var hasResults = !!hub.last_scanned;
-                                    var html = '<div class="siloq-depth-hub-card">' +
+                                    var html = '<div class="siloq-depth-hub-card"' + (hub.api_silo_id ? ' data-silo-id="' + hub.api_silo_id + '"' : '') + '>' +
                                         '<h4 style="margin:0 0 6px;">' + $('<span>').text(hub.title).html() + '</h4>' +
                                         '<p style="color:#888;font-size:12px;margin:0 0 10px;word-break:break-all;">' + $('<span>').text(hub.url).html() + '</p>' +
                                         '<span class="siloq-badge" style="margin-bottom:12px;display:inline-block;">' + hub.spoke_count + ' spoke pages</span>' +
                                         '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-                                            '<button class="button button-primary siloq-depth-setup-btn" data-post-id="' + hub.post_id + '">Setup &amp; Scan &rarr;</button>' +
-                                            (hasResults ? '<button class="button siloq-depth-view-btn" data-post-id="' + hub.post_id + '">View Results</button>' : '') +
+                                            '<button class="button button-primary siloq-depth-setup-btn" data-post-id="' + hub.post_id + '"' + (hub.api_silo_id ? ' data-silo-id="' + hub.api_silo_id + '"' : '') + '>Setup &amp; Scan &rarr;</button>' +
+                                            (hasResults ? '<button class="button siloq-depth-view-btn" data-post-id="' + hub.post_id + '"' + (hub.api_silo_id ? ' data-silo-id="' + hub.api_silo_id + '"' : '') + '>View Results</button>' : '') +
                                         '</div>' +
                                     '</div>';
                                     $grid.append(html);
@@ -5427,10 +5427,18 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
 
                     // ─── Event handlers ───
 
-                    // Setup & Scan button
-                    $(document).on('click', '.siloq-depth-setup-btn', function() { openSetup($(this).data('post-id')); });
+                    // Setup & Scan button — prefer data-silo-id for API-sourced silos
+                    $(document).on('click', '.siloq-depth-setup-btn', function() {
+                        var siloId = $(this).data('silo-id');
+                        if (siloId) currentSiloId = siloId;
+                        openSetup($(this).data('post-id'));
+                    });
                     // View Results button
-                    $(document).on('click', '.siloq-depth-view-btn', function() { openResults($(this).data('post-id')); });
+                    $(document).on('click', '.siloq-depth-view-btn', function() {
+                        var siloId = $(this).data('silo-id');
+                        if (siloId) currentSiloId = siloId;
+                        openResults($(this).data('post-id'));
+                    });
                     // Back buttons
                     $('#siloq-depth-back-setup, #siloq-depth-back-results').on('click', function() { showState('list'); loadSilos(); });
 
@@ -5452,6 +5460,7 @@ $_depth_biz_type = get_option( 'siloq_business_type', 'local_business' );
                             action: 'siloq_save_topic_boundary',
                             nonce: depthNonce,
                             post_id: postId,
+                            silo_id: currentSiloId || '',
                             core_topic: coreTopic,
                             adjacent_topics: $('#siloq-depth-adjacent-hidden').val(),
                             out_of_scope_topics: $('#siloq-depth-exclude-hidden').val(),
@@ -9486,6 +9495,49 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             }
         }
 
+        // ── Strategy D: Fetch silos from API if no local hubs found ─────────
+        if ( empty( $hubs ) ) {
+            $api      = new Siloq_API_Client();
+            $site_id  = get_option( 'siloq_site_id', '' );
+            if ( ! empty( $site_id ) ) {
+                $api_resp = $api->get( '/sites/' . $site_id . '/silos/' );
+
+                if ( ! empty( $api_resp['success'] ) && ! empty( $api_resp['silos'] ) ) {
+                    foreach ( $api_resp['silos'] as $silo ) {
+                        $hub_url  = $silo['hub_page_url'] ?? '';
+                        $post_id  = 0;
+                        if ( $hub_url ) {
+                            $found = get_posts( array(
+                                'post_type'      => 'page',
+                                'post_status'    => 'publish',
+                                'posts_per_page' => 1,
+                                'meta_query'     => array( array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ) ),
+                                'meta_key'       => '_siloq_page_url',
+                                'meta_value'     => $hub_url,
+                            ) );
+                            if ( ! empty( $found ) ) {
+                                $post_id = $found[0]->ID;
+                                update_post_meta( $post_id, '_siloq_page_role', 'hub' );
+                                update_post_meta( $post_id, '_siloq_api_silo_id', $silo['id'] );
+                            }
+                        }
+
+                        $results[] = array(
+                            'post_id'      => $post_id ?: 0,
+                            'title'        => $silo['name'],
+                            'url'          => $hub_url,
+                            'spoke_count'  => $silo['spoke_count'] ?? 0,
+                            'api_silo_id'  => $silo['id'],
+                            'last_scanned' => null,
+                            'boundary'     => null,
+                        );
+                    }
+                    wp_send_json_success( $results );
+                    return;
+                }
+            }
+        }
+
         foreach ( $hubs as $hub ) {
             $spokes       = get_posts( array( 'post_parent' => $hub->ID, 'post_type' => 'page', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids' ) );
             $api_silo_id  = get_post_meta( $hub->ID, '_siloq_api_silo_id', true );
@@ -9522,13 +9574,21 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $term_id = $is_cat ? intval( str_replace( 'cat_', '', $post_id_raw ) ) : 0;
         $post_id = $is_cat ? 0 : intval( $post_id_raw );
 
+        // Support silo_id passed directly from JS (API-sourced silos without WP post)
+        $direct_silo_id = sanitize_text_field( $_POST['silo_id'] ?? '' );
+
         $core_topic       = sanitize_text_field( $_POST['core_topic'] ?? '' );
         $adjacent_raw     = sanitize_text_field( $_POST['adjacent_topics'] ?? '' );
         $out_of_scope_raw = sanitize_text_field( $_POST['out_of_scope_topics'] ?? '' );
         $entity_type      = sanitize_text_field( $_POST['entity_type'] ?? 'local_business' );
 
-        if ( ( ! $post_id && ! $term_id ) || ! $core_topic ) {
-            wp_send_json_error( array( 'message' => 'Post ID and core topic required.' ) );
+        if ( ! $core_topic ) {
+            wp_send_json_error( array( 'message' => 'Core topic is required.' ) );
+            return;
+        }
+
+        if ( ! $post_id && ! $term_id && empty( $direct_silo_id ) ) {
+            wp_send_json_error( array( 'message' => 'Post ID or silo ID required. Please re-open the depth scan from the hub page.' ) );
             return;
         }
 
@@ -9557,8 +9617,12 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         // Get or create silo in API
         $api     = new Siloq_API_Client();
-        // Get stored silo_id — from term meta for categories, post meta for pages
-        if ( $is_cat && $term_id ) {
+        // Get stored silo_id — from direct param, term meta for categories, post meta for pages
+        if ( ! empty( $direct_silo_id ) ) {
+            $silo_id   = $direct_silo_id;
+            $hub_title = $core_topic;
+            $hub_url   = '';
+        } elseif ( $is_cat && $term_id ) {
             $silo_id = get_term_meta( $term_id, '_siloq_api_silo_id', true );
             $hub_title = get_term( $term_id )->name ?? 'Category Hub';
             $hub_url   = get_term_link( $term_id );
@@ -9600,8 +9664,19 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
 
         // Save topic boundary to API (if we have a real UUID silo ID)
+        if ( empty( $silo_id ) ) {
+            wp_send_json_error( array( 'message' => 'No silo ID found. Please re-open the depth scan from the hub page.' ) );
+            return;
+        }
+
         if ( strpos( $silo_id, 'local-' ) !== 0 ) {
-            $api->post( '/sites/' . $site_id . '/silos/' . $silo_id . '/topic-boundary', $boundary );
+            $res = $api->post( '/sites/' . $site_id . '/silos/' . $silo_id . '/topic-boundary', $boundary );
+            if ( ! empty( $res['error'] ) || empty( $res['success'] ) ) {
+                error_log( '[Siloq] Topic boundary save failed. Site=' . $site_id . ' Silo=' . $silo_id . ' Response: ' . wp_json_encode( $res ) );
+                $msg = isset( $res['message'] ) ? $res['message'] : ( isset( $res['error'] ) ? wp_json_encode( $res['error'] ) : 'Save request failed.' );
+                wp_send_json_error( array( 'message' => $msg, 'debug' => $res ) );
+                return;
+            }
         }
 
         wp_send_json_success( array( 'silo_id' => $silo_id, 'boundary' => $boundary ) );
