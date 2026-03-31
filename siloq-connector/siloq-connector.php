@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.271
+ * Version: 1.5.272
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -3196,11 +3196,10 @@ Before outputting, verify: city name heading count ÷ total heading count ≤ 30
         $api_key = get_option('siloq_api_key', '');
         $site_id = get_option('siloq_site_id', '');
 
-        // Save to API
-        wp_remote_request(
-            trailingslashit($api_url) . 'sites/' . $site_id . '/',
+        // Save to API via the dedicated GSC connect endpoint
+        wp_remote_post(
+            trailingslashit($api_url) . 'sites/' . $site_id . '/gsc/connect/',
             array(
-                'method'  => 'PATCH',
                 'headers' => array('Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'),
                 'body'    => wp_json_encode(array('gsc_site_url' => $property)),
                 'timeout' => 15,
