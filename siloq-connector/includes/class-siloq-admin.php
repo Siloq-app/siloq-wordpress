@@ -2052,13 +2052,12 @@ class Siloq_Admin {
             <ul class="siloq-tab-nav" role="tablist">
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="true" aria-controls="siloq-tab-dashboard">Dashboard</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-plan">SEO Plan<span class="siloq-tab-subtitle">Your prioritized action list</span></button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-depth-engine">Content Depth<span class="siloq-tab-subtitle">Find topic gaps</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages<span class="siloq-tab-subtitle">Manage page roles &amp; optimization</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-content">Content<span class="siloq-tab-subtitle">Authors &amp; blog pipeline</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Structured Data<span class="siloq-tab-subtitle">Help Google understand your pages</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC<span class="siloq-tab-subtitle">Google Search Console data</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects<span class="siloq-tab-subtitle">301 redirect management</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-goals">Goals<span class="siloq-tab-subtitle">Track what matters to your business</span></button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-content">Content<span class="siloq-tab-subtitle">Authors &amp; blog pipeline</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
             </ul>
 
@@ -5061,7 +5060,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
             </div><!-- /redirects tab -->
 
             <!-- ═══════ DEPTH ENGINE TAB ═══════ -->
-            <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+            <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true" style="display:none!important;">
                 <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
                     Find the content gaps in your service topics. The more gaps you fill, the more authoritative Google sees your site.
                 </p>
@@ -5798,7 +5797,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 <div class="siloq-card" style="margin-bottom:16px;">
                     <div class="siloq-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                         <h3 class="siloq-card-title">Authors</h3>
-                        <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Siloq Dashboard &rarr;</a>
+                        <button type="button" id="siloq-add-author-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;">+ Add Author</button>
                     </div>
                     <div id="siloq-content-authors" style="padding:12px 0;">
                         <div style="text-align:center;color:#9ca3af;font-size:13px;padding:20px;">Loading authors...</div>
@@ -5811,7 +5810,6 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         <h3 class="siloq-card-title">Blog Content Pipeline</h3>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" id="siloq-generate-content-plan" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;">Generate Content Plan</button>
-                            <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=content" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Dashboard &rarr;</a>
                         </div>
                     </div>
                     <div id="siloq-content-jobs" style="padding:12px 0;">
@@ -5823,6 +5821,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 (function($) {
                     var cfg = window.siloqDash || {};
                     if (!cfg.ajaxUrl) cfg.ajaxUrl = (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+                    if (!cfg.nonce) cfg.nonce = (typeof siloq_ajax_nonce !== 'undefined' ? siloq_ajax_nonce : '');
                     if (!cfg.nonce && typeof wpData !== 'undefined') { cfg.ajaxUrl = wpData.ajax_url; cfg.nonce = wpData.nonce; }
 
                     function loadAuthors() {
@@ -5834,7 +5833,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             }
                             var authors = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.authors || []);
                             if (!authors.length) {
-                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No authors found. <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" style="color:#D39938;">Add authors in Siloq Dashboard</a></div>');
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;"><p style="margin:0 0 10px;">No authors yet. Add your first author to build E-E-A-T signals.</p><a href="' + (cfg.adminUrl || ajaxurl.replace('admin-ajax.php','admin.php')) + '?page=siloq-dashboard#siloq-tab-settings" class="siloq-btn siloq-btn--primary siloq-btn--sm">Add Author in Settings \u2192</a></div>');
                                 return;
                             }
                             var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
@@ -6037,6 +6036,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         if (!contentLoaded) { contentLoaded = true; loadAuthors(); loadContentJobs(); }
                     });
                     if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+
+                    // Add Author button handler
+                    $(document).on('click', '#siloq-add-author-btn', function() {
+                        alert('Author management coming soon — use the Siloq Settings tab.');
+                    });
                 })(jQuery);
                 </script>
             </div><!-- /content tab -->
