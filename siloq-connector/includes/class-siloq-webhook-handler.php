@@ -89,7 +89,11 @@ class Siloq_Webhook_Handler {
             case 'page.create_draft':
             case 'content.create_draft':
                 return self::handle_create_draft($data);
-                
+
+            // Handle content.update — update post content (used by internal link auto-fix)
+            case 'content.update':
+                return self::handle_content_update($data);
+
             default:
                 return new WP_REST_Response(array(
                     'success' => false,
@@ -455,6 +459,38 @@ class Siloq_Webhook_Handler {
             'message' => 'Draft created successfully',
             'post_id' => $post_id,
             'post_url' => $post_url
+        ));
+    }
+
+    /**
+     * Handle content.update event — update post content (used by internal link auto-fix)
+     */
+    private static function handle_content_update($data) {
+        $post_id = isset($data['post_id']) ? intval($data['post_id']) : 0;
+        $content = isset($data['content']) ? wp_kses_post($data['content']) : '';
+
+        if (!$post_id || !$content) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Missing post_id or content in data',
+            ), 400);
+        }
+
+        $result = wp_update_post(array(
+            'ID'           => $post_id,
+            'post_content' => $content,
+        ), true);
+
+        if (is_wp_error($result)) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Failed to update content: ' . $result->get_error_message(),
+            ), 500);
+        }
+
+        return new WP_REST_Response(array(
+            'success' => true,
+            'post_id' => $post_id,
         ));
     }
 }

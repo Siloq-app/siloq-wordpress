@@ -4054,6 +4054,23 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         </div>
                     </div>
 
+                    <!-- Section 7: Internal Link Structure -->
+                    <div class="siloq-card" id="siloq-link-audit-card" style="margin-top:16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0;">Internal Link Structure</h3>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" id="siloq-audit-links-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Run Link Audit</button>
+                                <button type="button" id="siloq-fix-all-links-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;display:none;">Fix All Critical Links</button>
+                            </div>
+                        </div>
+                        <div id="siloq-link-audit-results" style="padding:12px 0;">
+                            <div style="color:#6b7280;font-size:13px;text-align:center;padding:20px;">
+                                Run a link audit to find orphan pages, missing hub&harr;spoke links, and blogs with no service links.
+                            </div>
+                        </div>
+                        <div id="siloq-link-audit-progress" style="display:none;padding:8px 0;"></div>
+                    </div>
+
                 </div>
             </div><!-- /plan tab -->
 
