@@ -961,26 +961,31 @@
       });
     });
 
-    // Analyze This Page button — triggers API analysis
+    // Analyze This Page button — triggers API analysis via REST API
     $(document).on('click', '.siloq-analyze-page-btn', function () {
       var $btn = $(this);
       var postId = $btn.data('post-id');
       $btn.text('Analyzing...').prop('disabled', true);
 
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_analyze_single_page',
-        nonce: cfg.nonce,
-        post_id: postId
-      }, function (resp) {
-        if (resp && resp.success) {
+      $.ajax({
+        url: cfg.restUrl.replace(/\/$/, '') + '/analyze-page',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': cfg.restNonce, 'Content-Type': 'application/json' },
+        data: JSON.stringify({ post_id: postId }),
+        success: function (resp) {
           $btn.text('Analyzed').prop('disabled', false);
           if (typeof loadPages === 'function') loadPages();
-        } else {
-          var msg = (resp && resp.data && resp.data.message) ? resp.data.message : 'Analysis failed';
-          $btn.text(msg.substring(0, 24)).prop('disabled', false);
+        },
+        error: function (xhr) {
+          $btn.text('Analyze This Page').prop('disabled', false);
+          var $errMsg = $btn.closest('.siloq-page-card, .siloq-card, div').find('.siloq-analyze-error');
+          if (!$errMsg.length) {
+            $btn.after('<span class="siloq-analyze-error" style="font-size:11px;color:#dc2626;display:block;margin-top:4px;"></span>');
+            $errMsg = $btn.next('.siloq-analyze-error');
+          }
+          $errMsg.text(xhr.status === 403 ? 'Blocked by security plugin — whitelist admin-ajax.php or /wp-json/' : 'Analysis failed. Try again.');
+          setTimeout(function() { $errMsg.text(''); }, 8000);
         }
-      }).fail(function () {
-        $btn.text('Error — retry').prop('disabled', false);
       });
     });
 
@@ -1755,5 +1760,55 @@
     });
 
   } // end initRedirectsTab
+
+  // ── Adaptive Polling for Background Jobs ──────────────────────────────────
+  window.siloqPollJob = function(jobId, onProgress, onComplete, onError) {
+    var apiBase = cfg.apiBase || '';
+    var apiToken = cfg.apiToken || '';
+    var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
+    var restNonce = cfg.restNonce || '';
+    var startTime = Date.now();
+    var pollCount = 0;
+
+    function getPollInterval() {
+      var elapsedMs = Date.now() - startTime;
+      if (elapsedMs < 120000) return 5000;        // 0-2 min: every 5s
+      if (elapsedMs < 300000) return 15000;       // 2-5 min: every 15s
+      return 30000;                                 // 5+ min: every 30s
+    }
+
+    function doPoll() {
+      var elapsed = Date.now() - startTime;
+      if (elapsed > 900000) { // 15 minute timeout
+        if (onError) onError('Job is taking longer than expected. Check Content \u2192 Pipeline for status.');
+        return;
+      }
+
+      // Try REST API first, fall back to direct API
+      var pollFn = restUrl
+        ? $.ajax({ url: restUrl + '/jobs/' + jobId + '/status', headers: { 'X-WP-Nonce': restNonce } })
+        : $.ajax({ url: apiBase + '/jobs/' + jobId + '/', headers: { 'Authorization': 'Bearer ' + apiToken } });
+
+      pollFn.then(function(job) {
+        // Unwrap if needed
+        if (job.data) job = job.data;
+        if (onProgress) onProgress(job);
+        if (job.status === 'complete') {
+          if (onComplete) onComplete(job);
+        } else if (job.status === 'failed') {
+          if (onError) onError(job.error || 'Job failed');
+        } else {
+          setTimeout(doPoll, getPollInterval());
+        }
+      }).catch(function() {
+        // Network blip — keep trying
+        setTimeout(doPoll, getPollInterval());
+      });
+
+      pollCount++;
+    }
+
+    setTimeout(doPoll, 2000); // first poll after 2s
+  };
 
 })(jQuery);
