@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.277
+ * Version: 1.5.278
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -1293,6 +1293,30 @@ class Siloq_Connector {
                 $log_entry['api_error']     = is_wp_error( $response ) ? $response->get_error_message() : '';
             } else {
                 $log_entry['api_sync'] = 'ok';
+            }
+
+            // Also PATCH /sites/{id}/profile/ so primary_services is available to the classifier
+            if ( ! empty( $primary_services ) || ! empty( $business_type ) ) {
+                $profile_payload = array_filter( [
+                    'primary_services' => $primary_services ?: null,
+                    'service_areas'    => $service_areas ?: null,
+                    'business_type'    => $business_type ?: null,
+                ], fn( $v ) => $v !== null && $v !== [] && $v !== '' );
+
+                wp_remote_request(
+                    trailingslashit( $api_base ) . "sites/$site_id/profile/",
+                    [
+                        'method'  => 'PATCH',
+                        'timeout' => 10,
+                        'headers' => [
+                            'Authorization' => 'Bearer ' . $api_key,
+                            'Content-Type'  => 'application/json',
+                            'Accept'        => 'application/json',
+                            'User-Agent'    => 'Siloq/' . SILOQ_VERSION,
+                        ],
+                        'body' => wp_json_encode( $profile_payload ),
+                    ]
+                );
             }
         } else {
             $log_entry['api_sync'] = 'skipped_no_credentials';
