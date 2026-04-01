@@ -10553,4 +10553,54 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => $result['message'] ?? 'Analysis request failed' ) );
         }
     }
+
+    // =========================================================================
+    // AJAX: Content tab — Publish a draft post
+    // =========================================================================
+
+    public static function ajax_publish_draft() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'publish_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        if ( ! $post_id ) {
+            wp_send_json_error( array( 'message' => 'Missing post_id.' ) );
+        }
+
+        $post = get_post( $post_id );
+        if ( ! $post ) {
+            wp_send_json_error( array( 'message' => 'Post not found.' ) );
+        }
+
+        // Update post status to publish
+        $result = wp_update_post( array(
+            'ID'          => $post_id,
+            'post_status' => 'publish',
+        ), true );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        // Notify the Siloq API that this post was published
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( $site_id ) {
+            $api = new Siloq_API_Client();
+            $api->post( '/sites/' . $site_id . '/content/jobs/publish-notify/', array(
+                'wp_post_id' => $post_id,
+                'wp_status'  => 'publish',
+            ) );
+            // Fire-and-forget — don't fail if API call fails
+        }
+
+        $permalink = get_permalink( $post_id );
+
+        wp_send_json_success( array(
+            'message'   => 'Post published.',
+            'post_id'   => $post_id,
+            'permalink' => $permalink,
+        ) );
+    }
 }
