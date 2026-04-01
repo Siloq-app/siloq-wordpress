@@ -16,7 +16,7 @@
     right: 0;
     bottom: 200px;
     z-index: 9999999;
-    background: #4f46e5;
+    background: #D39938;
     color: #fff;
     border-radius: 8px 0 0 8px;
     padding: 10px 8px 10px 10px;
@@ -32,14 +32,14 @@
     writing-mode: vertical-rl;
     text-orientation: mixed;
     user-select: none;
-    box-shadow: -2px 2px 12px rgba(79, 70, 229, 0.45);
+    box-shadow: -2px 2px 12px rgba(211, 153, 56, 0.45);
     transition: background 0.2s ease, box-shadow 0.2s ease;
     line-height: 1.3;
 }
 
 #siloq-fp-trigger:hover {
-    background: #4338ca;
-    box-shadow: -3px 3px 16px rgba(79, 70, 229, 0.6);
+    background: #B8822E;
+    box-shadow: -3px 3px 16px rgba(211, 153, 56, 0.6);
 }
 
 /* Pulsing amber dot — visible when window.siloqHasRecommendations === true */
@@ -74,7 +74,7 @@
     width: 360px;
     height: 100vh;
     background: #fff;
-    border-left: 3px solid #4f46e5;
+    border-left: 3px solid #D39938;
     z-index: 9999999;
     transition: right 0.3s ease;
     display: flex;
@@ -99,7 +99,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    background: #4f46e5;
+    background: #D39938;
     color: #fff;
     font-size: 14px;
     font-weight: 700;
@@ -149,12 +149,12 @@
 }
 
 .siloq-fp-tab:hover {
-    color: #4f46e5;
+    color: #D39938;
 }
 
 .siloq-fp-tab.active {
-    color: #4f46e5;
-    border-bottom-color: #4f46e5;
+    color: #D39938;
+    border-bottom-color: #D39938;
     font-weight: 600;
 }
 
@@ -189,7 +189,7 @@
 #siloq-fp-score .siloq-score-number {
     font-size: 36px;
     font-weight: 800;
-    color: #4f46e5;
+    color: #D39938;
     line-height: 1;
 }
 
@@ -246,14 +246,14 @@
 }
 
 .siloq-fp-btn-primary {
-    background: #4f46e5;
+    background: #D39938;
     color: #fff;
     width: 100%;
     justify-content: center;
 }
 
 .siloq-fp-btn-primary:hover {
-    background: #4338ca;
+    background: #B8822E;
 }
 
 .siloq-fp-btn {
@@ -341,8 +341,8 @@
 
 .siloq-fp-faq-edit:focus {
     outline: none;
-    border-color: #4f46e5;
-    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+    border-color: #D39938;
+    box-shadow: 0 0 0 2px rgba(211, 153, 56, 0.2);
 }
 
 /* Badges */
@@ -438,7 +438,7 @@
 
 #siloq-fp-status.error   { color: #ef4444; }
 #siloq-fp-status.success { color: #10b981; }
-#siloq-fp-status.loading { color: #4f46e5; }
+#siloq-fp-status.loading { color: #D39938; }
 
 /* Spinner (used inside status bar) */
 .siloq-spinner {

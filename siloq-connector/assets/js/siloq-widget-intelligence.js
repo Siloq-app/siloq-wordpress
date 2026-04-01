@@ -394,10 +394,10 @@
         var $results = $container.find('.siloq-wi-results');
 
         // Layer badge
-        var layerColors = { apex_hub: '#7c3aed', hub: '#4f46e5', spoke: '#0891b2', supporting: '#059669' };
+        var layerColors = { apex_hub: '#D39938', hub: '#D39938', spoke: '#0891b2', supporting: '#059669' };
         var layerLabel  = { apex_hub: 'Apex Hub', hub: 'Hub Page', spoke: 'Spoke Page', supporting: 'Supporting Content' };
         var layer = data.layer || 'spoke';
-        var lBg = layer === 'apex_hub' ? '#7c3aed' : (layerColors[layer] || '#6b7280') + '20';
+        var lBg = layer === 'apex_hub' ? '#D39938' : (layerColors[layer] || '#6b7280') + '20';
         var lFg = layer === 'apex_hub' ? '#fff' : (layerColors[layer] || '#6b7280');
         $container.find('.siloq-wi-layer-badge').html(
             '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;' +
@@ -470,12 +470,12 @@
         if (activeWidget.type === 'heading' && data.suggested_heading_tag) {
             $container.find('.siloq-wi-heading-tag').show();
             $container.find('.siloq-wi-tag-display').html(
-                '<span style="font-size:13px;font-weight:700;color:#4f46e5;">' +
+                '<span style="font-size:13px;font-weight:700;color:#D39938;">' +
                 data.suggested_heading_tag.toUpperCase() + '</span>' +
                 '<button class="siloq-wi-apply-tag-btn"' +
                 ' data-widget-id="' + esc(activeWidget.widget_id) + '"' +
                 ' data-tag="' + esc(data.suggested_heading_tag) + '"' +
-                ' style="margin-left:8px;font-size:11px;padding:2px 8px;background:#ede9fe;color:#4f46e5;' +
+                ' style="margin-left:8px;font-size:11px;padding:2px 8px;background:rgba(211,153,56,0.15);color:#D39938;' +
                 'border:none;border-radius:4px;cursor:pointer;">Apply Tag</button>'
             );
         } else {
@@ -504,7 +504,7 @@
                     ' data-prompt="'   + esc(rec.ai_prompt          || '') + '"' +
                     ' data-filename="' + esc(rec.suggested_filename  || '') + '"' +
                     ' data-alt="'      + esc(rec.suggested_alt       || '') + '"' +
-                    ' style="font-size:11px;padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:5px;cursor:pointer;">' +
+                    ' style="font-size:11px;padding:4px 10px;background:#D39938;color:#fff;border:none;border-radius:5px;cursor:pointer;">' +
                     '🎨 Generate Image (AI)</button>' +
                     '</div>'
                 );
@@ -683,7 +683,7 @@
 
                 if (linkTo.length) {
                     html += '<div style="margin-bottom:10px;">';
-                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#4f46e5;margin:0 0 5px;">This page should link to:</p>';
+                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#D39938;margin:0 0 5px;">This page should link to:</p>';
                     linkTo.forEach(function(p) {
                         html += renderWILinkRow(p);
                     });
@@ -692,7 +692,7 @@
 
                 if (linkFrom.length) {
                     html += '<div>';
-                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#4f46e5;margin:0 0 5px;">Should link to this page:</p>';
+                    html += '<p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#D39938;margin:0 0 5px;">Should link to this page:</p>';
                     linkFrom.forEach(function(p) {
                         html += renderWILinkRow(p);
                     });
@@ -713,7 +713,7 @@
     function renderWILinkRow(page) {
         var linked = page.already_linked;
         var isHub  = page.hub_link === true;
-        var typeColors = {apex_hub:'#7c3aed', hub:'#4f46e5', spoke:'#0891b2', supporting:'#059669', orphan:'#9ca3af'};
+        var typeColors = {apex_hub:'#D39938', hub:'#D39938', spoke:'#0891b2', supporting:'#059669', orphan:'#9ca3af'};
         var tColor = typeColors[page.page_type] || '#6b7280';
         var applyBtn = '';
         if (!linked) {
@@ -724,16 +724,16 @@
                 + 'data-url="' + encodedUrl + '" '
                 + 'data-anchor="' + encodedAnchor + '"'
                 + hubFlag
-                + ' style="margin-top:3px;font-size:10px;padding:2px 8px;background:#4f46e5;color:#fff;border:none;border-radius:3px;cursor:pointer;white-space:nowrap;">'
+                + ' style="margin-top:3px;font-size:10px;padding:2px 8px;background:#D39938;color:#fff;border:none;border-radius:3px;cursor:pointer;white-space:nowrap;">'
                 + (isHub ? '⭐ Insert Hub Link' : 'Insert Link')
                 + '</button>';
         }
         return '<div class="siloq-link-row" style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid #f3f4f6;'
-            + (isHub ? 'background:#f5f3ff;margin:0 -8px;padding:6px 8px;border-left:3px solid #7c3aed;' : '') + '">'
+            + (isHub ? 'background:rgba(211,153,56,0.1);margin:0 -8px;padding:6px 8px;border-left:3px solid #D39938;' : '') + '">'
             + '<span style="margin-top:2px;font-size:10px;">' + (linked ? '✅' : '⬜') + '</span>'
             + '<div style="flex:1;min-width:0;">'
             + '<a href="' + esc(page.url || '#') + '" target="_blank" style="font-size:11px;font-weight:' + (isHub ? '700' : '600') + ';color:#1e40af;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-            + esc(page.title) + (isHub ? ' <span style="font-size:9px;color:#7c3aed;">(hub)</span>' : '') + '</a>'
+            + esc(page.title) + (isHub ? ' <span style="font-size:9px;color:#D39938;">(hub)</span>' : '') + '</a>'
             + '<span style="font-size:10px;color:' + tColor + ';font-weight:600;">' + esc(page.page_type || '') + '</span>'
             + (page.anchor_text && !linked ? '<span style="font-size:10px;color:#6b7280;"> · "' + esc(page.anchor_text) + '"</span>' : '')
             + '<br>' + applyBtn

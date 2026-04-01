@@ -70,7 +70,7 @@ window.SiloqIntelligenceCore = (function ($) {
             '<div class="siloq-wi-container" data-widget-type="' + esc(widgetType) + '" ' +
             'style="padding:12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:12px;">' +
                 '<button type="button" class="siloq-wi-analyze-btn" ' +
-                'style="width:100%;padding:8px;background:#4f46e5;color:#fff;border:none;border-radius:6px;' +
+                'style="width:100%;padding:8px;background:#D39938;color:#fff;border:none;border-radius:6px;' +
                 'font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px;">⚡ Analyze This Widget</button>' +
                 '<div class="siloq-wi-loading" style="display:none;text-align:center;padding:10px;color:#6b7280;font-size:11px;">' +
                     '<span class="spinner is-active" style="float:none"></span> Analyzing...</div>' +
@@ -87,7 +87,7 @@ window.SiloqIntelligenceCore = (function ($) {
                         '</div>' +
                         '<div class="siloq-wi-heading-warnings"></div>' +
                         '<div style="display:flex;gap:6px;margin-top:6px;">' +
-                            '<button class="siloq-wi-apply-btn" style="flex:1;padding:6px;background:#4f46e5;color:#fff;' +
+                            '<button class="siloq-wi-apply-btn" style="flex:1;padding:6px;background:#D39938;color:#fff;' +
                             'border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;">✅ Apply</button>' +
                             '<button class="siloq-wi-skip-btn" style="padding:6px 10px;background:#f3f4f6;' +
                             'border:1px solid #d1d5db;border-radius:5px;font-size:11px;cursor:pointer;">Skip</button>' +
@@ -132,11 +132,11 @@ window.SiloqIntelligenceCore = (function ($) {
     // ── Render analysis results into a panel ─────────────────────────────
 
     function renderResults($container, data, widgetType) {
-        var layerColors = { apex_hub: '#7c3aed', hub: '#4f46e5', spoke: '#0891b2', supporting: '#059669' };
+        var layerColors = { apex_hub: '#D39938', hub: '#D39938', spoke: '#0891b2', supporting: '#059669' };
         var layerLabels = { apex_hub: 'Apex Hub', hub: 'Hub Page', spoke: 'Spoke Page', supporting: 'Supporting' };
         var layer = data.layer || 'spoke';
 
-        var lBg = layer === 'apex_hub' ? '#7c3aed' : (layerColors[layer] || '#6b7280') + '20';
+        var lBg = layer === 'apex_hub' ? '#D39938' : (layerColors[layer] || '#6b7280') + '20';
         var lFg = layer === 'apex_hub' ? '#fff' : (layerColors[layer] || '#6b7280');
         $container.find('.siloq-wi-layer-badge').html(
             '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;' +
@@ -163,10 +163,10 @@ window.SiloqIntelligenceCore = (function ($) {
         if (widgetType === 'heading' && data.suggested_heading_tag) {
             $container.find('.siloq-wi-heading-tag').show();
             $container.find('.siloq-wi-tag-display').html(
-                '<span style="font-size:13px;font-weight:700;color:#4f46e5;">' +
+                '<span style="font-size:13px;font-weight:700;color:#D39938;">' +
                 esc(data.suggested_heading_tag.toUpperCase()) + '</span> ' +
                 '<button class="siloq-wi-apply-tag-btn" data-tag="' + esc(data.suggested_heading_tag) + '" ' +
-                'style="font-size:11px;padding:2px 7px;background:#ede9fe;color:#4f46e5;' +
+                'style="font-size:11px;padding:2px 7px;background:rgba(211,153,56,0.15);color:#D39938;' +
                 'border:none;border-radius:4px;cursor:pointer;">Apply</button>'
             );
         }
@@ -189,7 +189,7 @@ window.SiloqIntelligenceCore = (function ($) {
                         'data-prompt="' + esc(r.ai_prompt || '') + '" ' +
                         'data-filename="' + esc(r.suggested_filename || '') + '" ' +
                         'data-alt="' + esc(r.suggested_alt || '') + '" ' +
-                        'style="font-size:11px;padding:3px 9px;background:#4f46e5;color:#fff;' +
+                        'style="font-size:11px;padding:3px 9px;background:#D39938;color:#fff;' +
                         'border:none;border-radius:5px;cursor:pointer;">🎨 Generate Image</button>' +
                     '</div>'
                 );
@@ -215,7 +215,7 @@ window.SiloqIntelligenceCore = (function ($) {
                     '<p style="font-size:12px;margin:0 0 3px;"><strong>Save as:</strong> ' + esc(filename) + '</p>' +
                     '<p style="font-size:12px;margin:0 0 14px;"><strong>Alt tag:</strong> ' + esc(altTag) + '</p>' +
                     '<div style="display:flex;gap:8px;">' +
-                        '<button class="siloq-modal-copy" style="flex:1;padding:8px;background:#4f46e5;color:#fff;' +
+                        '<button class="siloq-modal-copy" style="flex:1;padding:8px;background:#D39938;color:#fff;' +
                         'border:none;border-radius:6px;cursor:pointer;font-size:13px;">📋 Copy Prompt</button>' +
                         '<button class="siloq-modal-close" style="flex:1;padding:8px;background:#f3f4f6;' +
                         'border:1px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:13px;">Close</button>' +

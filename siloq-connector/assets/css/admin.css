@@ -1175,8 +1175,8 @@
 }
 
 /* Apex Hub badge */
-.siloq-badge-apex_hub { background: #7c3aed; color: #fff; }
-.siloq-layer-badge-apex_hub { border-color: #7c3aed; }
+.siloq-badge-apex_hub { background: #D39938; color: #fff; }
+.siloq-layer-badge-apex_hub { border-color: #D39938; }
 
 /* Status Badge Styles */
 .siloq-status-badge {

@@ -152,7 +152,7 @@
             }
         }
 
-        var layerColors = { hub: '#4f46e5', spoke: '#0891b2', supporting: '#059669' };
+        var layerColors = { hub: '#D39938', spoke: '#0891b2', supporting: '#059669' };
         var layerLabels = { hub: 'Hub Page', spoke: 'Spoke Page', supporting: 'Supporting' };
         var layer = state.result && state.result.layer;
 
