@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.281
+ * Version: 1.5.283
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.281');
+define('SILOQ_VERSION', '1.5.283');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -336,6 +336,39 @@ class Siloq_Connector {
         add_action('wp_head', array('Siloq_Schema_Manager', 'output_schema'));
         // Native meta tag injection for sites with no SEO plugin (priority 1 = before theme)
         add_action('wp_head', array('Siloq_Admin', 'inject_siloq_meta_tags'), 1);
+
+        // Suppress AIOSEO title/description output when Siloq has generated meta for the page
+        add_filter( 'aioseo_title', function( $title ) {
+            if ( ! is_singular() ) return $title;
+            $post_id = get_the_ID();
+            if ( ! $post_id ) return $title;
+            $siloq_title = get_post_meta( $post_id, '_siloq_meta_title', true );
+            return $siloq_title ? '' : $title;
+        }, 99 );
+
+        add_filter( 'aioseo_description', function( $desc ) {
+            if ( ! is_singular() ) return $desc;
+            $post_id = get_the_ID();
+            if ( ! $post_id ) return $desc;
+            $siloq_desc = get_post_meta( $post_id, '_siloq_meta_description', true );
+            return $siloq_desc ? '' : $desc;
+        }, 99 );
+
+        // Yoast suppression
+        add_filter( 'wpseo_title', function( $title ) {
+            if ( ! is_singular() ) return $title;
+            $post_id = get_the_ID();
+            if ( ! $post_id ) return $title;
+            return get_post_meta( $post_id, '_siloq_meta_title', true ) ? '' : $title;
+        }, 99 );
+
+        add_filter( 'wpseo_metadesc', function( $desc ) {
+            if ( ! is_singular() ) return $desc;
+            $post_id = get_the_ID();
+            if ( ! $post_id ) return $desc;
+            return get_post_meta( $post_id, '_siloq_meta_description', true ) ? '' : $desc;
+        }, 99 );
+
         Siloq_Schema_Architect::init();
         
         // Page editor assets
@@ -649,6 +682,7 @@ class Siloq_Connector {
 
             wp_localize_script('siloq-dashboard-v2', 'siloqDash', array(
                 'ajaxUrl'         => admin_url('admin-ajax.php'),
+                'adminUrl'        => admin_url('admin.php'),
                 'nonce'           => wp_create_nonce('siloq_ajax_nonce'),
                 'siteScore'       => intval(get_option('siloq_site_score', 42)),
                 'siteId'          => get_option('siloq_site_id', ''),

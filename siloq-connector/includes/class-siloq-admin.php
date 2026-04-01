@@ -2052,13 +2052,12 @@ class Siloq_Admin {
             <ul class="siloq-tab-nav" role="tablist">
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="true" aria-controls="siloq-tab-dashboard">Dashboard</button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-plan">SEO Plan<span class="siloq-tab-subtitle">Your prioritized action list</span></button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-depth-engine">Content Depth<span class="siloq-tab-subtitle">Find topic gaps</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-pages">Pages<span class="siloq-tab-subtitle">Manage page roles &amp; optimization</span></button></li>
+                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-content">Content<span class="siloq-tab-subtitle">Authors &amp; blog pipeline</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-schema">Structured Data<span class="siloq-tab-subtitle">Help Google understand your pages</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-gsc">GSC<span class="siloq-tab-subtitle">Google Search Console data</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-redirects">Redirects<span class="siloq-tab-subtitle">301 redirect management</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-goals">Goals<span class="siloq-tab-subtitle">Track what matters to your business</span></button></li>
-                <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-content">Content<span class="siloq-tab-subtitle">Authors &amp; blog pipeline</span></button></li>
                 <li><button class="siloq-tab-btn" role="tab" aria-selected="false" aria-controls="siloq-tab-settings">Settings</button></li>
             </ul>
 
@@ -5061,7 +5060,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
             </div><!-- /redirects tab -->
 
             <!-- ═══════ DEPTH ENGINE TAB ═══════ -->
-            <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
+            <div id="siloq-tab-depth-engine" class="siloq-tab-panel" role="tabpanel" aria-hidden="true" style="display:none!important;">
                 <p style="font-size:12px;color:#6b7280;margin:0 0 12px;border-bottom:1px solid #f3f4f6;padding-bottom:10px;">
                     Find the content gaps in your service topics. The more gaps you fill, the more authoritative Google sees your site.
                 </p>
@@ -5798,7 +5797,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 <div class="siloq-card" style="margin-bottom:16px;">
                     <div class="siloq-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                         <h3 class="siloq-card-title">Authors</h3>
-                        <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Siloq Dashboard &rarr;</a>
+                        <button type="button" id="siloq-add-author-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;">+ Add Author</button>
                     </div>
                     <div id="siloq-content-authors" style="padding:12px 0;">
                         <div style="text-align:center;color:#9ca3af;font-size:13px;padding:20px;">Loading authors...</div>
@@ -5811,7 +5810,6 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         <h3 class="siloq-card-title">Blog Content Pipeline</h3>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" id="siloq-generate-content-plan" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;">Generate Content Plan</button>
-                            <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=content" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Open in Dashboard &rarr;</a>
                         </div>
                     </div>
                     <div id="siloq-content-jobs" style="padding:12px 0;">
@@ -5823,6 +5821,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 (function($) {
                     var cfg = window.siloqDash || {};
                     if (!cfg.ajaxUrl) cfg.ajaxUrl = (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+                    if (!cfg.nonce) cfg.nonce = (typeof siloq_ajax_nonce !== 'undefined' ? siloq_ajax_nonce : '');
                     if (!cfg.nonce && typeof wpData !== 'undefined') { cfg.ajaxUrl = wpData.ajax_url; cfg.nonce = wpData.nonce; }
 
                     function loadAuthors() {
@@ -5834,7 +5833,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             }
                             var authors = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.authors || []);
                             if (!authors.length) {
-                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No authors found. <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" style="color:#D39938;">Add authors in Siloq Dashboard</a></div>');
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;"><p style="margin:0 0 10px;">No authors yet. Add your first author to build E-E-A-T signals.</p><a href="' + (cfg.adminUrl || ajaxurl.replace('admin-ajax.php','admin.php')) + '?page=siloq-dashboard#siloq-tab-settings" class="siloq-btn siloq-btn--primary siloq-btn--sm">Add Author in Settings \u2192</a></div>');
                                 return;
                             }
                             var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
@@ -6037,6 +6036,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         if (!contentLoaded) { contentLoaded = true; loadAuthors(); loadContentJobs(); }
                     });
                     if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+
+                    // Add Author button handler
+                    $(document).on('click', '#siloq-add-author-btn', function() {
+                        alert('Author management coming soon — use the Siloq Settings tab.');
+                    });
                 })(jQuery);
                 </script>
             </div><!-- /content tab -->
@@ -8419,37 +8423,57 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( [ 'message' => 'Missing post_id' ] );
         }
 
-        $seo_plugin   = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
-        $applied      = [];
-        $title_applied = false;
-        $desc_applied  = false;
+        // Check if already has Siloq-generated values
+        $existing_title = get_post_meta( $post_id, '_siloq_meta_title', true );
+        $existing_desc  = get_post_meta( $post_id, '_siloq_meta_description', true );
 
-        // Check current title
-        $current_title = self::siloq_get_page_title( $post_id );
-        $needs_title   = ( $current_title === get_the_title( $post_id ) || empty( $current_title ) );
-        if ( $needs_title ) {
-            $title = self::siloq_formula_seo_title( $post_id );
-            self::write_seo_title( $post_id, $title, $seo_plugin );
-            $applied['title'] = $title;
-            $title_applied    = true;
+        if ( $existing_title && $existing_desc ) {
+            wp_send_json_success( [
+                'post_id' => $post_id,
+                'title'   => get_the_title( $post_id ),
+                'applied' => [ 'title' => $existing_title, 'description' => $existing_desc ],
+                'skipped' => true,
+                'message' => 'Already has Siloq meta',
+            ] );
+            return;
         }
 
-        // Check current description
-        $current_desc = self::siloq_get_meta_description( $post_id );
-        $needs_desc   = empty( $current_desc ) || ( is_array( $current_desc ) && isset( $current_desc['status'] ) );
-        if ( $needs_desc ) {
+        $site_id       = get_option( 'siloq_site_id', '' );
+        $siloq_page_id = get_post_meta( $post_id, '_siloq_page_id', true );
+        $applied       = [];
+
+        // Try API call if site is connected and page is synced
+        if ( $site_id && $siloq_page_id ) {
+            $api    = new Siloq_API_Client();
+            $result = $api->post( '/sites/' . $site_id . '/pages/' . $siloq_page_id . '/generate-meta/', [] );
+
+            if ( ! empty( $result['data']['title'] ) ) {
+                update_post_meta( $post_id, '_siloq_meta_title', sanitize_text_field( $result['data']['title'] ) );
+                $applied['title'] = $result['data']['title'];
+            }
+            if ( ! empty( $result['data']['description'] ) ) {
+                update_post_meta( $post_id, '_siloq_meta_description', sanitize_text_field( $result['data']['description'] ) );
+                $applied['description'] = $result['data']['description'];
+            }
+        }
+
+        // Formula fallback if API didn't return values
+        if ( empty( $applied['title'] ) ) {
+            $title = self::siloq_formula_seo_title( $post_id );
+            update_post_meta( $post_id, '_siloq_meta_title', $title );
+            $applied['title'] = $title;
+        }
+        if ( empty( $applied['description'] ) ) {
             $desc = self::siloq_formula_meta_desc( $post_id );
-            self::write_seo_description( $post_id, $desc, $seo_plugin );
+            update_post_meta( $post_id, '_siloq_meta_description', $desc );
             $applied['description'] = $desc;
-            $desc_applied = true;
         }
 
         wp_send_json_success( [
-            'post_id'       => $post_id,
-            'title'         => get_the_title( $post_id ),
-            'applied'       => $applied,
-            'title_applied' => $title_applied,
-            'desc_applied'  => $desc_applied,
+            'post_id' => $post_id,
+            'title'   => get_the_title( $post_id ),
+            'applied' => $applied,
+            'message' => 'Meta generated and stored in Siloq fields',
         ] );
     }
 
@@ -8542,6 +8566,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      * Falls back to _siloq_meta_title (injected via wp_head).
      */
     public static function write_seo_title( $post_id, $title, $plugin = '' ) {
+        // Always store in Siloq's own field first — this is what wp_head uses
+        update_post_meta( $post_id, '_siloq_meta_title', sanitize_text_field( $title ) );
+
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
         }
@@ -8571,6 +8598,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      * Write a meta description to the correct SEO plugin's storage.
      */
     public static function write_seo_description( $post_id, $desc, $plugin = '' ) {
+        // Always store in Siloq's own field first — this is what wp_head uses
+        update_post_meta( $post_id, '_siloq_meta_description', sanitize_text_field( $desc ) );
+
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
         }
@@ -8620,16 +8650,40 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $post_id = get_the_ID();
         if ( ! $post_id ) return;
 
-        $title = get_post_meta( $post_id, '_siloq_meta_title', true );
-        $desc  = get_post_meta( $post_id, '_siloq_meta_description', true );
+        $title     = get_post_meta( $post_id, '_siloq_meta_title', true );
+        $desc      = get_post_meta( $post_id, '_siloq_meta_description', true );
+        $canonical = get_post_meta( $post_id, '_siloq_canonical', true );
+        $robots    = get_post_meta( $post_id, '_siloq_robots', true );
+
+        // Only output if Siloq has generated data for this page
+        if ( ! $title && ! $desc ) return;
 
         if ( $title ) {
             echo '<title>' . esc_html( $title ) . '</title>' . "\n";
-            echo '<meta name="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+            // OG title
+            echo '<meta property="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+            // Twitter title
+            echo '<meta name="twitter:title" content="' . esc_attr( $title ) . '">' . "\n";
         }
         if ( $desc ) {
             echo '<meta name="description" content="' . esc_attr( $desc ) . '">' . "\n";
-            echo '<meta name="og:description" content="' . esc_attr( $desc ) . '">' . "\n";
+            echo '<meta property="og:description" content="' . esc_attr( $desc ) . '">' . "\n";
+            echo '<meta name="twitter:description" content="' . esc_attr( $desc ) . '">' . "\n";
+        }
+        // OG type + URL
+        echo '<meta property="og:type" content="website">' . "\n";
+        echo '<meta property="og:url" content="' . esc_url( get_permalink( $post_id ) ) . '">' . "\n";
+        // Twitter card
+        echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
+        // Canonical
+        if ( $canonical ) {
+            echo '<link rel="canonical" href="' . esc_url( $canonical ) . '">' . "\n";
+        } else {
+            echo '<link rel="canonical" href="' . esc_url( get_permalink( $post_id ) ) . '">' . "\n";
+        }
+        // Robots override (only if explicitly set)
+        if ( $robots ) {
+            echo '<meta name="robots" content="' . esc_attr( $robots ) . '">' . "\n";
         }
     }
 
