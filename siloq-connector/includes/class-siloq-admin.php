@@ -5869,10 +5869,14 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     function loadAuthors() {
                         var $wrap = $('#siloq-content-authors');
                         var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
-                        var restNonce = cfg.restNonce || '';
+                        // Fallback: construct from wpApiSettings if localization failed
+                        if (!restUrl && typeof wpApiSettings !== 'undefined') {
+                            restUrl = wpApiSettings.root.replace(/\/$/, '') + '/siloq/v1';
+                        }
+                        var restNonce = cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
 
                         if (!restUrl) {
-                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">REST API not configured.</div>');
+                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No authors yet. Add your first author to enable E-E-A-T attribution on blog posts.</div>');
                             return;
                         }
 
@@ -5914,17 +5918,30 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
                         var restNonce = cfg.restNonce || '';
 
+                        if (!restUrl) {
+                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">Siloq not fully loaded. Refresh the page.</div>');
+                            return;
+                        }
+
                         $.ajax({
                             url: restUrl + '/content-jobs',
                             method: 'GET',
                             headers: { 'X-WP-Nonce': restNonce },
                             success: function(resp) {
-                                var jobs = Array.isArray(resp) ? resp : (resp.results || resp.jobs || resp.data || []);
+                                // Handle both shapes: wrapped {jobs:[...]} or raw array
+                                var jobs = resp.jobs || (Array.isArray(resp) ? resp : (resp.results || resp.data || []));
+                                var connected = resp.connected !== false;
+
+                                if (!connected) {
+                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">Connect your site to Siloq to enable the blog pipeline.</div>');
+                                    return;
+                                }
+
                                 var actionable = jobs.filter(function(j) {
                                     return j.status === 'pending_approval' || j.status === 'draft';
                                 });
                                 if (!actionable.length) {
-                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No content jobs yet. Click "Generate Content Plan" to create your first blog topics.</div>');
+                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No content jobs yet. Click <strong>Generate Content Plan</strong> to create your first blog topics.</div>');
                                     return;
                                 }
                                 var tierColors = { 1: '#D39938', 2: '#b45309', 3: '#6b7280' };
@@ -5960,9 +5977,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                                 $wrap.html(html);
                             },
                             error: function(xhr) {
-                                var msg = (xhr.status === 403)
+                                var msg = xhr.status === 403
                                     ? 'REST API blocked. Whitelist /wp-json/ in your security plugin.'
-                                    : 'Could not load content pipeline (HTTP ' + xhr.status + ').';
+                                    : 'Could not load pipeline (HTTP ' + xhr.status + ').';
                                 $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + msg + '</div>');
                                 $('#siloq-generate-content-plan').text('Generate Content Plan').prop('disabled', false);
                             }
@@ -6099,12 +6116,113 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     });
                     if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); }
 
-                    // Add Author button handler
-                    $(document).on('click', '#siloq-add-author-btn', function() {
-                        alert('Author management coming soon — use the Siloq Settings tab.');
+                    // Open Add Author modal
+                    $('#siloq-add-author-btn').on('click', function() {
+                        $('#siloq-author-name, #siloq-author-title, #siloq-author-bio, #siloq-author-credentials, #siloq-author-linkedin').val('');
+                        $('#siloq-author-modal-error').hide().text('');
+                        $('#siloq-author-modal-save').text('Save Author').prop('disabled', false);
+                        $('#siloq-author-modal').css('display', 'block');
+                    });
+
+                    // Close modal
+                    $(document).on('click', '#siloq-author-modal-close, #siloq-author-modal-cancel', function() {
+                        $('#siloq-author-modal').hide();
+                    });
+                    // Close on overlay click
+                    $(document).on('click', '#siloq-author-modal', function(e) {
+                        if ($(e.target).is('#siloq-author-modal')) {
+                            $('#siloq-author-modal').hide();
+                        }
+                    });
+
+                    // Save author
+                    $(document).on('click', '#siloq-author-modal-save', function() {
+                        var $btn = $(this);
+                        var name = $('#siloq-author-name').val().trim();
+                        var title = $('#siloq-author-title').val().trim();
+
+                        if (!name || !title) {
+                            $('#siloq-author-modal-error').text('Full Name and Job Title are required.').show();
+                            return;
+                        }
+
+                        $btn.text('Saving...').prop('disabled', true);
+                        $('#siloq-author-modal-error').hide();
+
+                        var credentials = $('#siloq-author-credentials').val().split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+
+                        var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
+                        var restNonce = cfg.restNonce || '';
+
+                        $.ajax({
+                            url: restUrl + '/authors',
+                            method: 'POST',
+                            headers: { 'X-WP-Nonce': restNonce, 'Content-Type': 'application/json' },
+                            data: JSON.stringify({
+                                full_name: name,
+                                job_title: title,
+                                bio: $('#siloq-author-bio').val().trim(),
+                                credentials: credentials,
+                                linkedin: $('#siloq-author-linkedin').val().trim()
+                            }),
+                            success: function(resp) {
+                                $('#siloq-author-modal').hide();
+                                loadAuthors();
+                                var $wrap = $('#siloq-content-authors');
+                                var $toast = $('<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:8px;">Author added successfully.</div>');
+                                $wrap.prepend($toast);
+                                setTimeout(function() { $toast.remove(); }, 4000);
+                            },
+                            error: function(xhr) {
+                                var msg = 'Could not save author.';
+                                try { var d = JSON.parse(xhr.responseText); msg = d.message || d.error || msg; } catch(e) {}
+                                $('#siloq-author-modal-error').text(msg).show();
+                                $btn.text('Save Author').prop('disabled', false);
+                            }
+                        });
                     });
                 })(jQuery);
                 </script>
+            <!-- Add Author Modal -->
+            <div id="siloq-author-modal" style="display:none;position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.6);" aria-modal="true">
+                <div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                    <div style="background:#fff;border-radius:12px;padding:28px;width:460px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+                            <h3 style="font-size:16px;font-weight:700;margin:0;color:#111827;">Add Content Author</h3>
+                            <button type="button" id="siloq-author-modal-close" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1;">&times;</button>
+                        </div>
+                        <p style="font-size:12px;color:#6b7280;margin:0 0 16px;">Authors build E-E-A-T signals. Each blog post gets attributed to an author with verifiable credentials.</p>
+                        <div style="display:flex;flex-direction:column;gap:12px;">
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Full Name *</label>
+                                <input type="text" id="siloq-author-name" placeholder="Jane Smith" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Job Title *</label>
+                                <input type="text" id="siloq-author-title" placeholder="Licensed Master Electrician" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Bio (2-3 sentences)</label>
+                                <textarea id="siloq-author-bio" rows="3" placeholder="Jane has 15 years of commercial electrical experience across Kansas City..." style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea>
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Credentials (comma separated)</label>
+                                <input type="text" id="siloq-author-credentials" placeholder="Master Electrician License, NECA Member, IBEW" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">LinkedIn URL (optional)</label>
+                                <input type="url" id="siloq-author-linkedin" placeholder="https://linkedin.com/in/janesmith" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+                            </div>
+                        </div>
+                        <div id="siloq-author-modal-error" style="display:none;margin-top:12px;padding:8px 12px;background:#fee2e2;color:#dc2626;border-radius:6px;font-size:12px;"></div>
+                        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+                            <button type="button" id="siloq-author-modal-cancel" class="siloq-btn siloq-btn--outline" style="font-size:13px;">Cancel</button>
+                            <button type="button" id="siloq-author-modal-save" class="siloq-btn siloq-btn--primary" style="font-size:13px;">Save Author</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             </div><!-- /content tab -->
 
             <script>

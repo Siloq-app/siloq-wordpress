@@ -25,11 +25,18 @@ class Siloq_REST_API {
             'permission_callback' => '__return_true',
         ) );
 
-        // Authors list
+        // Authors list + create
         register_rest_route( $ns, '/authors', array(
-            'methods'             => 'GET',
-            'callback'            => array( __CLASS__, 'get_authors' ),
-            'permission_callback' => array( __CLASS__, 'require_edit_posts' ),
+            array(
+                'methods'             => 'GET',
+                'callback'            => array( __CLASS__, 'get_authors' ),
+                'permission_callback' => array( __CLASS__, 'require_edit_posts' ),
+            ),
+            array(
+                'methods'             => 'POST',
+                'callback'            => array( __CLASS__, 'create_author' ),
+                'permission_callback' => array( __CLASS__, 'require_edit_posts' ),
+            ),
         ) );
 
         // Content jobs (blog pipeline)
@@ -87,11 +94,37 @@ class Siloq_REST_API {
     public static function get_authors( $request ) {
         $site_id = get_option( 'siloq_site_id', '' );
         if ( empty( $site_id ) ) {
+            // Not an error — site not connected yet
+            return new WP_REST_Response( array(), 200 );
+        }
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/authors/' );
+
+        // Normalize: API may return array directly or wrapped
+        if ( is_array( $result ) && isset( $result[0] ) ) {
+            return new WP_REST_Response( $result, 200 );
+        }
+        if ( is_array( $result ) && isset( $result['results'] ) ) {
+            return new WP_REST_Response( $result['results'], 200 );
+        }
+        if ( is_array( $result ) && isset( $result['data'] ) ) {
+            return new WP_REST_Response( $result['data'], 200 );
+        }
+        // Empty — no authors yet (not an error)
+        return new WP_REST_Response( array(), 200 );
+    }
+
+    public static function create_author( $request ) {
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
             return new WP_Error( 'no_site', 'Site not connected.', array( 'status' => 400 ) );
         }
         $api    = new Siloq_API_Client();
-        $result = $api->get( '/sites/' . $site_id . '/authors/' );
-        return new WP_REST_Response( $result, 200 );
+        $result = $api->post( '/authors/', $request->get_json_params() );
+
+        // Return whatever the API returns
+        $status = isset( $result['id'] ) ? 201 : 200;
+        return new WP_REST_Response( $result, $status );
     }
 
     // ── Content Jobs ──────────────────────────────────────────────────────────
@@ -99,11 +132,26 @@ class Siloq_REST_API {
     public static function get_content_jobs( $request ) {
         $site_id = get_option( 'siloq_site_id', '' );
         if ( empty( $site_id ) ) {
-            return new WP_Error( 'no_site', 'Site not connected.', array( 'status' => 400 ) );
+            // Return empty state — site not connected, not an error
+            return new WP_REST_Response( array(
+                'jobs'      => array(),
+                'message'   => 'Connect your site to Siloq to enable the content pipeline.',
+                'connected' => false,
+            ), 200 );
         }
+
         $api    = new Siloq_API_Client();
         $result = $api->get( '/sites/' . $site_id . '/content/jobs/' );
-        return new WP_REST_Response( $result, 200 );
+
+        // Normalize response — API may return array directly or wrapped object
+        if ( is_array( $result ) && isset( $result[0] ) ) {
+            return new WP_REST_Response( array( 'jobs' => $result, 'connected' => true ), 200 );
+        }
+        if ( is_array( $result ) && isset( $result['data'] ) ) {
+            return new WP_REST_Response( array( 'jobs' => $result['data'], 'connected' => true ), 200 );
+        }
+        // Empty or no jobs
+        return new WP_REST_Response( array( 'jobs' => array(), 'connected' => true ), 200 );
     }
 
     // ── Suggest Spoke ─────────────────────────────────────────────────────────
@@ -140,15 +188,31 @@ class Siloq_REST_API {
     // ── Analyze Page ──────────────────────────────────────────────────────────
 
     public static function analyze_page( $request ) {
-        $post_id = intval( $request->get_param( 'post_id' ) );
         $site_id = get_option( 'siloq_site_id', '' );
-        if ( ! $post_id || ! $site_id ) {
-            return new WP_Error( 'missing_params', 'Missing post_id or site not connected.', array( 'status' => 400 ) );
+        if ( empty( $site_id ) ) {
+            return new WP_Error( 'no_site', 'Site not connected.', array( 'status' => 400 ) );
         }
-        $siloq_page_id = get_post_meta( $post_id, '_siloq_page_id', true );
+
+        // Accept either siloq_page_id (preferred — passed directly from pages list)
+        // OR post_id (WP post ID — used by the Pages tab metabox)
+        $siloq_page_id = intval( $request->get_param( 'siloq_page_id' ) );
+
         if ( ! $siloq_page_id ) {
-            return new WP_Error( 'not_synced', 'Page not synced to Siloq yet — sync first.', array( 'status' => 400 ) );
+            // Fallback: look up via WP post ID
+            $post_id = intval( $request->get_param( 'post_id' ) );
+            if ( $post_id ) {
+                $siloq_page_id = intval( get_post_meta( $post_id, '_siloq_page_id', true ) );
+            }
         }
+
+        if ( ! $siloq_page_id ) {
+            return new WP_Error(
+                'not_synced',
+                'Page ID missing. Sync this page to Siloq first, then try again.',
+                array( 'status' => 400 )
+            );
+        }
+
         $api    = new Siloq_API_Client();
         $result = $api->post( '/sites/' . $site_id . '/pages/' . $siloq_page_id . '/analyze/', array() );
         return new WP_REST_Response( $result, 200 );

@@ -971,7 +971,7 @@
         url: cfg.restUrl.replace(/\/$/, '') + '/analyze-page',
         method: 'POST',
         headers: { 'X-WP-Nonce': cfg.restNonce, 'Content-Type': 'application/json' },
-        data: JSON.stringify({ post_id: postId }),
+        data: JSON.stringify({ siloq_page_id: postId }),
         success: function (resp) {
           $btn.text('Analyzed').prop('disabled', false);
           if (typeof loadPages === 'function') loadPages();
