@@ -8423,37 +8423,57 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( [ 'message' => 'Missing post_id' ] );
         }
 
-        $seo_plugin   = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
-        $applied      = [];
-        $title_applied = false;
-        $desc_applied  = false;
+        // Check if already has Siloq-generated values
+        $existing_title = get_post_meta( $post_id, '_siloq_meta_title', true );
+        $existing_desc  = get_post_meta( $post_id, '_siloq_meta_description', true );
 
-        // Check current title
-        $current_title = self::siloq_get_page_title( $post_id );
-        $needs_title   = ( $current_title === get_the_title( $post_id ) || empty( $current_title ) );
-        if ( $needs_title ) {
-            $title = self::siloq_formula_seo_title( $post_id );
-            self::write_seo_title( $post_id, $title, $seo_plugin );
-            $applied['title'] = $title;
-            $title_applied    = true;
+        if ( $existing_title && $existing_desc ) {
+            wp_send_json_success( [
+                'post_id' => $post_id,
+                'title'   => get_the_title( $post_id ),
+                'applied' => [ 'title' => $existing_title, 'description' => $existing_desc ],
+                'skipped' => true,
+                'message' => 'Already has Siloq meta',
+            ] );
+            return;
         }
 
-        // Check current description
-        $current_desc = self::siloq_get_meta_description( $post_id );
-        $needs_desc   = empty( $current_desc ) || ( is_array( $current_desc ) && isset( $current_desc['status'] ) );
-        if ( $needs_desc ) {
+        $site_id       = get_option( 'siloq_site_id', '' );
+        $siloq_page_id = get_post_meta( $post_id, '_siloq_page_id', true );
+        $applied       = [];
+
+        // Try API call if site is connected and page is synced
+        if ( $site_id && $siloq_page_id ) {
+            $api    = new Siloq_API_Client();
+            $result = $api->post( '/sites/' . $site_id . '/pages/' . $siloq_page_id . '/generate-meta/', [] );
+
+            if ( ! empty( $result['data']['title'] ) ) {
+                update_post_meta( $post_id, '_siloq_meta_title', sanitize_text_field( $result['data']['title'] ) );
+                $applied['title'] = $result['data']['title'];
+            }
+            if ( ! empty( $result['data']['description'] ) ) {
+                update_post_meta( $post_id, '_siloq_meta_description', sanitize_text_field( $result['data']['description'] ) );
+                $applied['description'] = $result['data']['description'];
+            }
+        }
+
+        // Formula fallback if API didn't return values
+        if ( empty( $applied['title'] ) ) {
+            $title = self::siloq_formula_seo_title( $post_id );
+            update_post_meta( $post_id, '_siloq_meta_title', $title );
+            $applied['title'] = $title;
+        }
+        if ( empty( $applied['description'] ) ) {
             $desc = self::siloq_formula_meta_desc( $post_id );
-            self::write_seo_description( $post_id, $desc, $seo_plugin );
+            update_post_meta( $post_id, '_siloq_meta_description', $desc );
             $applied['description'] = $desc;
-            $desc_applied = true;
         }
 
         wp_send_json_success( [
-            'post_id'       => $post_id,
-            'title'         => get_the_title( $post_id ),
-            'applied'       => $applied,
-            'title_applied' => $title_applied,
-            'desc_applied'  => $desc_applied,
+            'post_id' => $post_id,
+            'title'   => get_the_title( $post_id ),
+            'applied' => $applied,
+            'message' => 'Meta generated and stored in Siloq fields',
         ] );
     }
 
@@ -8546,6 +8566,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      * Falls back to _siloq_meta_title (injected via wp_head).
      */
     public static function write_seo_title( $post_id, $title, $plugin = '' ) {
+        // Always store in Siloq's own field first — this is what wp_head uses
+        update_post_meta( $post_id, '_siloq_meta_title', sanitize_text_field( $title ) );
+
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
         }
@@ -8575,6 +8598,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
      * Write a meta description to the correct SEO plugin's storage.
      */
     public static function write_seo_description( $post_id, $desc, $plugin = '' ) {
+        // Always store in Siloq's own field first — this is what wp_head uses
+        update_post_meta( $post_id, '_siloq_meta_description', sanitize_text_field( $desc ) );
+
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
         }
@@ -8624,16 +8650,40 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $post_id = get_the_ID();
         if ( ! $post_id ) return;
 
-        $title = get_post_meta( $post_id, '_siloq_meta_title', true );
-        $desc  = get_post_meta( $post_id, '_siloq_meta_description', true );
+        $title     = get_post_meta( $post_id, '_siloq_meta_title', true );
+        $desc      = get_post_meta( $post_id, '_siloq_meta_description', true );
+        $canonical = get_post_meta( $post_id, '_siloq_canonical', true );
+        $robots    = get_post_meta( $post_id, '_siloq_robots', true );
+
+        // Only output if Siloq has generated data for this page
+        if ( ! $title && ! $desc ) return;
 
         if ( $title ) {
             echo '<title>' . esc_html( $title ) . '</title>' . "\n";
-            echo '<meta name="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+            // OG title
+            echo '<meta property="og:title" content="' . esc_attr( $title ) . '">' . "\n";
+            // Twitter title
+            echo '<meta name="twitter:title" content="' . esc_attr( $title ) . '">' . "\n";
         }
         if ( $desc ) {
             echo '<meta name="description" content="' . esc_attr( $desc ) . '">' . "\n";
-            echo '<meta name="og:description" content="' . esc_attr( $desc ) . '">' . "\n";
+            echo '<meta property="og:description" content="' . esc_attr( $desc ) . '">' . "\n";
+            echo '<meta name="twitter:description" content="' . esc_attr( $desc ) . '">' . "\n";
+        }
+        // OG type + URL
+        echo '<meta property="og:type" content="website">' . "\n";
+        echo '<meta property="og:url" content="' . esc_url( get_permalink( $post_id ) ) . '">' . "\n";
+        // Twitter card
+        echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
+        // Canonical
+        if ( $canonical ) {
+            echo '<link rel="canonical" href="' . esc_url( $canonical ) . '">' . "\n";
+        } else {
+            echo '<link rel="canonical" href="' . esc_url( get_permalink( $post_id ) ) . '">' . "\n";
+        }
+        // Robots override (only if explicitly set)
+        if ( $robots ) {
+            echo '<meta name="robots" content="' . esc_attr( $robots ) . '">' . "\n";
         }
     }
 
