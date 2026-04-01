@@ -2950,10 +2950,14 @@ $audit_fresh = !empty($audit_results);
         <?php endif; ?>
       </div>
     </div>
-    <button class="siloq-btn siloq-btn--primary siloq-run-audit-btn" style="font-size:11px;padding:6px 14px" onclick="siloqRunAudit(this)">
-      <?php echo $audit_fresh ? 'Re-run Audit' : 'Run Audit'; ?>
-    </button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="siloq-btn siloq-btn--primary siloq-run-audit-btn" style="font-size:11px;padding:6px 14px" onclick="siloqRunAudit(this)">
+        <?php echo $audit_fresh ? 'Re-run Audit' : 'Run Audit'; ?>
+      </button>
+      <button id="siloq-full-audit-btn" class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:6px 14px">Run Full Audit</button>
+    </div>
   </div>
+  <div id="siloq-full-audit-status" style="display:none;margin-bottom:10px;"></div>
 
   <?php if ($audit_fresh && isset($audit_results['site_score'])): ?>
   <?php
@@ -10622,6 +10626,76 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_success( array( 'message' => 'Analysis started', 'page_id' => $siloq_page_id ) );
         } else {
             wp_send_json_error( array( 'message' => $result['message'] ?? 'Analysis request failed' ) );
+        }
+    }
+
+    // =========================================================================
+    // AJAX: Start a background job (wrapper around API job endpoints)
+    // =========================================================================
+
+    public static function ajax_start_job() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $job_type = sanitize_key( $_POST['job_type'] ?? '' );
+        $site_id  = get_option( 'siloq_site_id', '' );
+
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'Site not connected.' ) );
+        }
+
+        $endpoint_map = array(
+            'full_audit'      => '/sites/' . $site_id . '/jobs/full-audit/',
+            'meta_generation' => '/sites/' . $site_id . '/jobs/generate-meta/',
+            'audit_links'     => '/sites/' . $site_id . '/jobs/audit-links/',
+        );
+
+        if ( ! isset( $endpoint_map[ $job_type ] ) ) {
+            wp_send_json_error( array( 'message' => 'Unknown job type: ' . $job_type ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->post( $endpoint_map[ $job_type ], array() );
+
+        if ( ! empty( $result['success'] ) && isset( $result['data']['job_id'] ) ) {
+            wp_send_json_success( array(
+                'job_id'          => $result['data']['job_id'],
+                'status'          => $result['data']['status'] ?? 'queued',
+                'already_running' => $result['data']['already_running'] ?? false,
+            ) );
+        } else {
+            wp_send_json_error( array(
+                'message' => $result['message'] ?? 'Failed to start job.',
+            ) );
+        }
+    }
+
+    // =========================================================================
+    // AJAX: Poll job status
+    // =========================================================================
+
+    public static function ajax_job_status() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $job_id = intval( $_POST['job_id'] ?? 0 );
+        if ( ! $job_id ) {
+            wp_send_json_error( array( 'message' => 'Missing job_id.' ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/jobs/' . $job_id . '/' );
+
+        if ( ! empty( $result['success'] ) && is_array( $result['data'] ) ) {
+            wp_send_json_success( $result['data'] );
+        } else {
+            wp_send_json_error( array(
+                'message' => $result['message'] ?? 'Failed to get job status.',
+            ) );
         }
     }
 }
