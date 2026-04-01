@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.279
+ * Version: 1.5.280
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.279');
+define('SILOQ_VERSION', '1.5.280');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -471,6 +471,7 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_get_content_jobs', array('Siloq_Admin', 'ajax_get_content_jobs'));
         add_action('wp_ajax_siloq_approve_content_job', array('Siloq_Admin', 'ajax_approve_content_job'));
         add_action('wp_ajax_siloq_generate_content_plan', array('Siloq_Admin', 'ajax_generate_content_plan'));
+        add_action('wp_ajax_siloq_suggest_spoke', array('Siloq_Admin', 'ajax_suggest_spoke'));
 
         // Agent Approvals + Content Plan (Track 10)
         add_action('wp_ajax_siloq_approve_action',     ['Siloq_Agent_Pages', 'ajax_approve_action']);
@@ -652,6 +653,7 @@ class Siloq_Connector {
                 'siteId'          => get_option('siloq_site_id', ''),
                 'hasAnthropicKey' => ! empty( get_option('siloq_anthropic_api_key', '') ) ? '1' : '',
                 'qwCompleted'     => $qw_completed,
+                'businessName'    => get_bloginfo( 'name' ),
             ));
         }
 
