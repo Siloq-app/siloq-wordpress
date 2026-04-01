@@ -2626,7 +2626,7 @@ if ($has_plan && isset($plan_data['issues'])) {
     </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">
       <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#f0fdf4;color:#16a34a">&#10003; Setup Complete</span>
-      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">&#9679; Month 1 — Active</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:linear-gradient(135deg,#D39938,#B8822E);color:#fff">&#9679; Month 1 — Active</span>
       <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#f0f2f7;color:#6b7280">Month 2</span>
     </div>
   </div>
@@ -2676,7 +2676,7 @@ if ($has_plan && isset($plan_data['issues'])) {
   <div class="siloq-insight-card">
     <div class="siloq-ic-hdr">
       <div class="siloq-ic-title-group"><div class="siloq-ic-icon indigo">&#128202;</div><div class="siloq-ic-title">Search Performance</div></div>
-      <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'siloq-tab-gsc\']'); if(btn){btn.click();} return false;" class="siloq-ic-link" style="color:#4f46e5;font-size:12px;font-weight:500;">Full Report &rarr;</a>
+      <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'siloq-tab-gsc\']'); if(btn){btn.click();} return false;" class="siloq-ic-link" style="color:#D39938;font-size:12px;font-weight:500;">Full Report &rarr;</a>
     </div>
     <?php if ($gsc_impr_28d > 0): ?>
     <div class="siloq-gsc-grid">
@@ -2989,8 +2989,8 @@ $audit_fresh = !empty($audit_results);
       $ap_title = get_the_title($ap['post_id'] ?? 0) ?: ('Post #' . ($ap['post_id'] ?? '?'));
       $ap_type = $ap['tier'] ?? 'supporting';
       $type_colors = array(
-        'apex_hub'   => array('#7c3aed','#f5f3ff'),
-        'hub'        => array('#6366f1','#eef2ff'),
+        'apex_hub'   => array('#D39938','#f5f3ff'),
+        'hub'        => array('#D39938','rgba(211,153,56,0.1)'),
         'spoke'      => array('#0d9488','#f0fdfa'),
         'supporting' => array('#6b7280','#f3f4f6'),
         'orphan'     => array('#dc2626','#fef2f2'),
@@ -3456,9 +3456,9 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
               <?php if ( ! empty( $check['link'] ) && ! empty( $check['link_text'] ) ) : ?>
                 <?php if ( strpos( $check['link'], '#siloq-tab-' ) === 0 ) :
                     $tab_id = ltrim( $check['link'], '#' ); ?>
-                <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'<?php echo esc_js($tab_id); ?>\']'); if(btn){btn.click();} return false;" class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+                <a href="#" onclick="var btn=document.querySelector('[aria-controls=\'<?php echo esc_js($tab_id); ?>\']'); if(btn){btn.click();} return false;" class="siloq-audit-link" style="font-size:11px;color:#D39938;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
                 <?php else : ?>
-                <a href="<?php echo esc_url( $check['link'] ); ?>" target="_blank" rel="noopener" class="siloq-audit-link" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
+                <a href="<?php echo esc_url( $check['link'] ); ?>" target="_blank" rel="noopener" class="siloq-audit-link" style="font-size:11px;color:#D39938;text-decoration:none;margin-top:3px;display:inline-block;"><?php echo esc_html( $check['link_text'] ); ?></a>
                 <?php endif; ?>
               <?php endif; ?>
             </div>
@@ -3588,9 +3588,9 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
                 var isExternal = check.link.indexOf('#') !== 0;
                 if (isTabLink) {
                     var tabId = check.link.replace('#', '');
-                    html += '<a href="#" onclick="var btn=document.querySelector(\'[aria-controls=\\\"' + tabId + '\\\"]\'); if(btn){btn.click();} return false;" style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+                    html += '<a href="#" onclick="var btn=document.querySelector(\'[aria-controls=\\\"' + tabId + '\\\"]\'); if(btn){btn.click();} return false;" style="font-size:11px;color:#D39938;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
                 } else {
-                    html += '<a href="' + siloqEscape(check.link) + '"' + (isExternal ? ' target="_blank" rel="noopener"' : '') + ' style="font-size:11px;color:#6366f1;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
+                    html += '<a href="' + siloqEscape(check.link) + '"' + (isExternal ? ' target="_blank" rel="noopener"' : '') + ' style="font-size:11px;color:#D39938;text-decoration:none;margin-top:3px;display:inline-block;">' + siloqEscape(check.link_text) + '</a>';
                 }
             }
             if (check.action === 'generate' && check.action_text) {
@@ -3666,7 +3666,7 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
                                 <!-- JS fills SVG ring -->
                                 <svg width="80" height="80" viewBox="0 0 80 80" id="siloq-health-ring">
                                     <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" stroke-width="8"/>
-                                    <circle id="siloq-health-arc" cx="40" cy="40" r="34" fill="none" stroke="#4f46e5" stroke-width="8"
+                                    <circle id="siloq-health-arc" cx="40" cy="40" r="34" fill="none" stroke="#D39938" stroke-width="8"
                                         stroke-dasharray="213.6" stroke-dashoffset="213.6"
                                         stroke-linecap="round" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 0.6s ease;"/>
                                 </svg>
@@ -4037,7 +4037,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                     <div class="siloq-card" style="margin-bottom:16px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
                             <h3 style="font-size:15px;font-weight:700;margin:0;">Quick Wins</h3>
-                            <span id="siloq-qw-progress" style="font-size:12px;font-weight:600;color:#4f46e5;"></span>
+                            <span id="siloq-qw-progress" style="font-size:12px;font-weight:600;color:#D39938;"></span>
                         </div>
                         <p style="font-size:12px;color:#6b7280;margin:0 0 14px;">Every item below is fixable in under 2 minutes with Siloq's help. Completed items move to the bottom.</p>
                         <div id="siloq-issues-content">
@@ -4180,9 +4180,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                             </button>
                         </div>
                         <div id="siloq-schema-bulk-progress" style="display:none;margin-top:10px;">
-                            <div style="font-size:12px;color:#4f46e5;font-weight:600;margin-bottom:6px;" id="siloq-schema-bulk-msg">Preparing...</div>
+                            <div style="font-size:12px;color:#D39938;font-weight:600;margin-bottom:6px;" id="siloq-schema-bulk-msg">Preparing...</div>
                             <div style="background:#e0e7ff;border-radius:999px;height:8px;overflow:hidden;">
-                                <div id="siloq-schema-bulk-bar" style="height:100%;background:#4f46e5;border-radius:999px;transition:width 0.3s;width:0%;"></div>
+                                <div id="siloq-schema-bulk-bar" style="height:100%;background:#D39938;border-radius:999px;transition:width 0.3s;width:0%;"></div>
                             </div>
                         </div>
                         <div id="siloq-schema-bulk-summary" style="display:none;margin-top:10px;font-size:12px;padding:8px 12px;border-radius:6px;"></div>
@@ -4411,7 +4411,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                 <option value="construction_trades" <?php selected($bv_industry, 'construction_trades'); ?>>Construction / Trades</option>
                                 <option value="pet_veterinary" <?php selected($bv_industry, 'pet_veterinary'); ?>>Pet / Veterinary</option>
                             </select>
-                            <span id="siloq-bv-industry-note" style="display:none;font-size:12px;color:#6366f1;margin-top:4px;"></span>
+                            <span id="siloq-bv-industry-note" style="display:none;font-size:12px;color:#D39938;margin-top:4px;"></span>
                         </div>
 
                         <!-- Primary Tone -->
@@ -4458,7 +4458,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         <!-- Buttons -->
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
                             <button type="button" id="siloq-bv-save-btn" class="siloq-btn siloq-btn--primary">Save Brand Voice</button>
-                            <button type="button" id="siloq-bv-sync-btn" style="padding:8px 16px;border:1px solid #6366f1;border-radius:6px;background:#eef2ff;color:#4f46e5;font-size:13px;cursor:pointer;font-weight:500;" title="Push brand voice settings to your Siloq profile">Sync to Siloq Profile</button>
+                            <button type="button" id="siloq-bv-sync-btn" style="padding:8px 16px;border:1px solid #D39938;border-radius:6px;background:rgba(211,153,56,0.1);color:#D39938;font-size:13px;cursor:pointer;font-weight:500;" title="Push brand voice settings to your Siloq profile">Sync to Siloq Profile</button>
                         </div>
                         <span id="siloq-bv-msg" style="display:none;margin-top:8px;font-size:13px;color:#16a34a;font-weight:500;"></span>
 
@@ -4614,9 +4614,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                         msg.style.display = 'inline-block';
                                         setTimeout(function(){
                                             btn.textContent = 'Sync to Siloq Profile';
-                                            btn.style.background = '#eef2ff';
-                                            btn.style.borderColor = '#6366f1';
-                                            btn.style.color = '#4f46e5';
+                                            btn.style.background = 'rgba(211,153,56,0.1)';
+                                            btn.style.borderColor = '#D39938';
+                                            btn.style.color = '#D39938';
                                             msg.style.display = 'none';
                                         }, 3000);
                                     })
@@ -4624,9 +4624,9 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                         btn.disabled = false;
                                         btn.style.opacity = '1';
                                         btn.textContent = 'Sync to Siloq Profile';
-                                        btn.style.background = '#eef2ff';
-                                        btn.style.borderColor = '#6366f1';
-                                        btn.style.color = '#4f46e5';
+                                        btn.style.background = 'rgba(211,153,56,0.1)';
+                                        btn.style.borderColor = '#D39938';
+                                        btn.style.color = '#D39938';
                                     });
                             });
                         })();
@@ -4662,7 +4662,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                             <label style="font-weight:600;display:block;margin-bottom:8px;"><?php _e( 'Primary Goal', 'siloq-connector' ); ?></label>
                             <?php foreach ( $goal_labels as $val => $label ) : ?>
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;margin-bottom:6px;">
-                                <input type="radio" name="siloq_goals_primary" value="<?php echo esc_attr( $val ); ?>" <?php checked( $current_goal, $val ); ?> style="accent-color:#6366f1;">
+                                <input type="radio" name="siloq_goals_primary" value="<?php echo esc_attr( $val ); ?>" <?php checked( $current_goal, $val ); ?> style="accent-color:#D39938;">
                                 <?php echo esc_html( $label ); ?>
                             </label>
                             <?php endforeach; ?>
@@ -4739,7 +4739,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                                 for (var k = 0; k < mapData.length; k++) {
                                                     var row = mapData[k];
                                                     var pageCell = row.matched_title
-                                                        ? '<a href="' + row.edit_url + '" target="_blank" style="color:#4f46e5;">' + row.matched_title + '</a>'
+                                                        ? '<a href="' + row.edit_url + '" target="_blank" style="color:#D39938;">' + row.matched_title + '</a>'
                                                         : '<span style="color:#9ca3af;">No match found</span>';
                                                     rows += '<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + row.keyword + '</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + pageCell + '</td></tr>';
                                                 }
@@ -4842,7 +4842,7 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                     </div>
 
                     <div id="siloq-restructure-loading" style="display:none;padding:12px 0;font-size:12px;color:#64748b;">
-                        <span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span>
+                        <span class="siloq-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #e2e8f0;border-top-color:#D39938;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px;"></span>
                         Loading suggestions…
                     </div>
                 </div>
@@ -4883,13 +4883,13 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                 var statusHtml = s.already_exists
                                     ? '<span style="color:#16a34a;font-weight:600;">✓ Exists</span>'
                                     : '<span style="color:#94a3b8;">New</span>';
-                                var typeColor = s.page_type === 'city_spoke' ? '#6366f1' : '#64748b';
+                                var typeColor = s.page_type === 'city_spoke' ? '#D39938' : '#64748b';
                                 html += '<tr style="border-bottom:1px solid #f1f5f9;" data-from="' + siloqEsc(s.from) + '" data-to="' + siloqEsc(s.to) + '" data-post-id="' + parseInt(s.post_id || 0) + '" data-hub-post-id="' + parseInt(s.hub_post_id || 0) + '" data-original-parent="' + parseInt(s.original_parent || 0) + '">';
                                 html += '<td style="padding:8px 10px;"><input type="checkbox" class="siloq-restructure-row-cb"' + (s.already_exists ? ' disabled' : ' checked') + '></td>';
                                 html += '<td style="padding:8px 10px;"><div style="font-weight:600;color:#1e293b;">' + siloqEsc(s.title) + '</div><div style="font-size:10px;color:' + typeColor + ';margin-top:2px;">' + siloqEsc(s.page_type) + '</div></td>';
                                 html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#6b7280;">' + siloqEsc(s.from) + '</td>';
                                 html += '<td style="padding:8px 10px;text-align:center;color:#94a3b8;">→</td>';
-                                html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#6366f1;">' + siloqEsc(s.to) + '</td>';
+                                html += '<td style="padding:8px 10px;font-family:monospace;font-size:11px;color:#D39938;">' + siloqEsc(s.to) + '</td>';
                                 html += '<td style="padding:8px 10px;">' + statusHtml + '</td>';
                                 html += '</tr>';
                             });
@@ -5768,7 +5768,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     for (var k = 0; k < mapData.length; k++) {
                         var row = mapData[k];
                         var pageCell = row.matched_title
-                            ? '<a href="' + row.edit_url + '" target="_blank" style="color:#4f46e5;">' + $('<div>').text(row.matched_title).html() + '</a>'
+                            ? '<a href="' + row.edit_url + '" target="_blank" style="color:#D39938;">' + $('<div>').text(row.matched_title).html() + '</a>'
                             : '<span style="color:#9ca3af;">No match found</span>';
                         rows += '<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + $('<div>').text(row.keyword).html() + '</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + pageCell + '</td></tr>';
                     }
@@ -5834,7 +5834,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             }
                             var authors = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.authors || []);
                             if (!authors.length) {
-                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No authors found. <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" style="color:#4f46e5;">Add authors in Siloq Dashboard</a></div>');
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No authors found. <a href="https://siloq-dashboard-vcoj8.ondigitalocean.app/dashboard?tab=team-authors" target="_blank" style="color:#D39938;">Add authors in Siloq Dashboard</a></div>');
                                 return;
                             }
                             var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
@@ -6043,7 +6043,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
                             wrap.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Created</span>'
                                 + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
-                                + 'style="background:#4f46e5;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
+                                + 'style="background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
                                 + 'Edit Page →</a>';
                             btn.parentNode.replaceChild(wrap, btn);
                         } else if (r && r.data && r.data.cannibal) {
@@ -6207,7 +6207,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             <?php self::render_setup_progress_bar(); ?>
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/logo-siloq.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 30%22><text y=%2222%22 font-size=%2218%22 fill=%22%23D39938%22 font-weight=%22bold%22>Siloq</text></svg>'">
                     <?php _e('Page Sync', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('Content Synchronization — Sync your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
@@ -6261,7 +6261,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         <div class="wrap siloq-sync-status-container">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/logo-siloq.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 30%22><text y=%2222%22 font-size=%2218%22 fill=%22%23D39938%22 font-weight=%22bold%22>Siloq</text></svg>'">
                     <?php _e('Sync Status', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('Content Synchronization Monitor — Track and manage your WordPress content sync with Siloq platform.', 'siloq-connector'); ?></p>
@@ -6424,7 +6424,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         <div class="wrap siloq-content-import-container">
             <div class="siloq-header">
                 <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/siloq-logo.webp'); ?>" alt="Siloq" class="siloq-logo" onerror="this.style.display='none'">
+                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/logo-siloq.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 30%22><text y=%2222%22 font-size=%2218%22 fill=%22%23D39938%22 font-weight=%22bold%22>Siloq</text></svg>'">
                     <?php _e('Content Import', 'siloq-connector'); ?>
                 </h1>
                 <p class="siloq-tagline"><?php _e('AI Content Integration — Import and manage AI-generated content from Siloq platform.', 'siloq-connector'); ?></p>
@@ -6605,7 +6605,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 transition: background 0.3s;
             }
             .siloq-wizard-step-dot.active {
-                background: #4f46e5;
+                background: #D39938;
             }
             .siloq-wizard-step-dot.completed {
                 background: #22c55e;
@@ -6663,7 +6663,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             .siloq-wizard-field select:focus,
             .siloq-wizard-field textarea:focus {
                 outline: none;
-                border-color: #4f46e5;
+                border-color: #D39938;
                 box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
             }
             .siloq-wizard-field textarea {
@@ -6701,7 +6701,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 justify-content: center;
                 width: 100%;
                 padding: 12px 24px;
-                background: #4f46e5;
+                background: #D39938;
                 color: #fff;
                 border: none;
                 border-radius: 8px;
@@ -6739,7 +6739,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 margin-top: 12px;
             }
             .siloq-wizard-link a {
-                color: #4f46e5;
+                color: #D39938;
                 text-decoration: none;
                 font-size: 14px;
             }
@@ -6757,7 +6757,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 cursor: pointer;
             }
             .siloq-wizard-skip a:hover {
-                color: #4f46e5;
+                color: #D39938;
             }
             .siloq-wizard-error {
                 background: #fef2f2;
@@ -6776,7 +6776,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             .siloq-wizard-sync-progress .sync-count {
                 font-size: 36px;
                 font-weight: 700;
-                color: #4f46e5;
+                color: #D39938;
             }
             .siloq-wizard-sync-progress .sync-label {
                 color: #6b7280;
@@ -6792,7 +6792,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             }
             .siloq-wizard-sync-progress .sync-bar-fill {
                 height: 100%;
-                background: #4f46e5;
+                background: #D39938;
                 border-radius: 3px;
                 transition: width 0.5s;
                 width: 0%;
@@ -6852,7 +6852,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 <!-- STEP 1: Connect to Siloq -->
                 <div class="siloq-wizard-panel <?php echo $saved_step === 1 ? 'active' : ''; ?>" id="siloq-wizard-step-1">
                     <div class="siloq-wizard-logo">
-                        <img src="https://siloq.ai/wp-content/uploads/2026/01/logo-siloq.webp" alt="Siloq" style="height:48px;width:auto;" />
+                        <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/logo-siloq.png'); ?>" alt="Siloq" style="height:48px;width:auto;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 30%22><text y=%2222%22 font-size=%2218%22 fill=%22%23D39938%22 font-weight=%22bold%22>Siloq</text></svg>'" />
                     </div>
                     <h2><?php _e('Welcome to Siloq', 'siloq-connector'); ?></h2>
                     <p class="siloq-wizard-subtitle"><?php _e('Connect your site to start optimizing your SEO architecture.', 'siloq-connector'); ?></p>
@@ -6980,27 +6980,27 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
                     <div class="siloq-goal-options" style="display:flex;flex-direction:column;gap:10px;margin:20px 0;">
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="local_leads" checked style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="local_leads" checked style="accent-color:#D39938;">
                             <?php _e( 'Get more phone calls / local leads', 'siloq-connector' ); ?>
                         </label>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="ecommerce_sales" style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="ecommerce_sales" style="accent-color:#D39938;">
                             <?php _e( 'Drive more e-commerce sales', 'siloq-connector' ); ?>
                         </label>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="topic_authority" style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="topic_authority" style="accent-color:#D39938;">
                             <?php _e( 'Build authority on a specific topic', 'siloq-connector' ); ?>
                         </label>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="multi_location" style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="multi_location" style="accent-color:#D39938;">
                             <?php _e( 'Rank in multiple cities', 'siloq-connector' ); ?>
                         </label>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="geo_citations" style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="geo_citations" style="accent-color:#D39938;">
                             <?php _e( 'Be cited by AI assistants (ChatGPT, Perplexity)', 'siloq-connector' ); ?>
                         </label>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                            <input type="radio" name="siloq_primary_goal" value="organic_growth" style="accent-color:#6366f1;">
+                            <input type="radio" name="siloq_primary_goal" value="organic_growth" style="accent-color:#D39938;">
                             <?php _e( 'Grow overall organic traffic', 'siloq-connector' ); ?>
                         </label>
                     </div>
@@ -8038,11 +8038,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             <div class="siloq-gap-card" style="border:1px solid #ede9fe;background:#f5f3ff;border-radius:8px;padding:16px;margin-bottom:12px;">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
                     <div style="flex:1;min-width:200px;">
-                        <span style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING CITY PAGE</span>
+                        <span style="display:inline-block;background:#D39938;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;margin-bottom:8px;letter-spacing:0.5px;">MISSING CITY PAGE</span>
                         <p style="font-size:14px;font-weight:700;color:#2e1065;margin:0 0 6px;"><?php echo esc_html( $suggested_title ); ?></p>
                         <p style="font-size:12px;color:#4b5563;margin:0 0 10px;line-height:1.5;"><?php echo esc_html( $why_it_matters ); ?></p>
                     </div>
-                    <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-create-page-btn" data-title="<?php echo esc_attr( $suggested_title ); ?>" data-type="city" style="white-space:nowrap;background:#7c3aed;border-color:#7c3aed;">Create Page &rarr;</button>
+                    <button class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-create-page-btn" data-title="<?php echo esc_attr( $suggested_title ); ?>" data-type="city" style="white-space:nowrap;background:#D39938;border-color:#D39938;">Create Page &rarr;</button>
                 </div>
             </div>
             <?php
@@ -10191,14 +10191,14 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 <?php endif; ?>
             </div>
             <div style="background:#f3f4f6;border-radius:999px;height:6px;overflow:hidden;margin-bottom:10px;">
-                <div style="background:#4f46e5;height:6px;width:<?php echo $pct; ?>%;border-radius:999px;transition:width 0.3s;"></div>
+                <div style="background:#D39938;height:6px;width:<?php echo $pct; ?>%;border-radius:999px;transition:width 0.3s;"></div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <?php foreach ($steps as $i => $step): ?>
                 <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:<?php echo $step['done'] ? '#16a34a' : '#6b7280'; ?>;">
                     <span style="font-size:12px;"><?php echo $step['done'] ? '✅' : '⬜'; ?></span>
                     <?php if (!$step['done']): ?>
-                    <a href="<?php echo esc_url($step['action_url']); ?>" style="color:#4f46e5;text-decoration:none;" title="<?php echo esc_attr($step['description']); ?>">
+                    <a href="<?php echo esc_url($step['action_url']); ?>" style="color:#D39938;text-decoration:none;" title="<?php echo esc_attr($step['description']); ?>">
                         <?php echo esc_html($step['label']); ?>
                     </a>
                     <?php else: ?>
@@ -10320,5 +10320,35 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         }
 
         wp_send_json_success( array( 'message' => 'Content plan generated.', 'discovery' => $discovery, 'topics' => $topics ) );
+    }
+
+    /**
+     * AJAX: Analyze a single page via the Siloq API.
+     */
+    public static function ajax_analyze_single_page() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( ! $post_id || ! $site_id ) {
+            wp_send_json_error( array( 'message' => 'Missing post or site ID' ) );
+        }
+
+        $siloq_page_id = get_post_meta( $post_id, '_siloq_page_id', true );
+        if ( ! $siloq_page_id ) {
+            wp_send_json_error( array( 'message' => 'Page not synced to Siloq yet — sync first' ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->post( '/sites/' . $site_id . '/pages/' . $siloq_page_id . '/analyze/' );
+
+        if ( ! empty( $result['success'] ) ) {
+            wp_send_json_success( array( 'message' => 'Analysis started', 'page_id' => $siloq_page_id ) );
+        } else {
+            wp_send_json_error( array( 'message' => $result['message'] ?? 'Analysis request failed' ) );
+        }
     }
 }

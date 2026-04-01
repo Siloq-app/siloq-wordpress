@@ -23,8 +23,8 @@
             'color': '#6b7280'
         });
         $(this).css({
-            'border-bottom-color': '#4f46e5',
-            'color': '#4f46e5'
+            'border-bottom-color': '#D39938',
+            'color': '#D39938'
         });
 
         // Show/hide panels
@@ -98,7 +98,7 @@
 
             html += '<div class="siloq-widget-item" id="siloq-wi-' + esc(w.id) + '" style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa;">';
             html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">';
-            html += '<span style="font-size:10px;font-weight:600;padding:2px 6px;background:#ede9fe;color:#4f46e5;border-radius:10px;">' + esc(label) + '</span>';
+            html += '<span style="font-size:10px;font-weight:600;padding:2px 6px;background:rgba(211,153,56,0.15);color:#D39938;border-radius:10px;">' + esc(label) + '</span>';
             html += '</div>';
             html += '<p style="font-size:11px;color:#6b7280;margin:0 0 8px;font-style:italic;">' + esc(preview) + '</p>';
 
@@ -114,7 +114,7 @@
                 html += '<p style="font-size:10px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;">Suggested</p>';
                 html += '<p class="siloq-sr-after" style="font-size:11px;color:#065f46;background:#d1fae5;padding:6px 8px;border-radius:5px;margin:0 0 8px;"></p>';
                 html += '<div style="display:flex;gap:6px;">';
-                html += '<button class="siloq-apply-btn" data-id="' + esc(w.id) + '" data-field="' + esc(w.field) + '" style="font-size:11px;padding:4px 10px;background:#4f46e5;color:#fff;border:none;border-radius:5px;cursor:pointer;">✅ Apply</button>';
+                html += '<button class="siloq-apply-btn" data-id="' + esc(w.id) + '" data-field="' + esc(w.field) + '" style="font-size:11px;padding:4px 10px;background:#D39938;color:#fff;border:none;border-radius:5px;cursor:pointer;">✅ Apply</button>';
                 html += '<button class="siloq-skip-btn" data-id="' + esc(w.id) + '" style="font-size:11px;padding:4px 10px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;">Skip</button>';
                 html += '</div></div>';
             }
@@ -361,7 +361,7 @@
 
                 if (shouldLinkTo.length) {
                     html += '<div style="margin-bottom:16px;">';
-                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:0 0 8px;">This page should link TO:</p>';
+                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#D39938;margin:0 0 8px;">This page should link TO:</p>';
                     shouldLinkTo.forEach(function(page) {
                         html += renderLinkCard(page);
                     });
@@ -370,7 +370,7 @@
 
                 if (shouldLinkFrom.length) {
                     html += '<div>';
-                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#4f46e5;margin:0 0 8px;">Pages that should link TO this page:</p>';
+                    html += '<p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#D39938;margin:0 0 8px;">Pages that should link TO this page:</p>';
                     shouldLinkFrom.forEach(function(page) {
                         html += renderLinkCard(page);
                     });
@@ -398,8 +398,8 @@
         var typeBadgeColor = '#6b7280';
         var typeBadgeBg    = '#f3f4f6';
         var typeLabel      = pageType === 'apex_hub' ? 'APEX HUB' : pageType.toUpperCase();
-        if (pageType === 'apex_hub')   { typeBadgeColor = '#fff'; typeBadgeBg = '#7c3aed'; }
-        if (pageType === 'hub')        { typeBadgeColor = '#4f46e5'; typeBadgeBg = '#ede9fe'; }
+        if (pageType === 'apex_hub')   { typeBadgeColor = '#fff'; typeBadgeBg = '#D39938'; }
+        if (pageType === 'hub')        { typeBadgeColor = '#D39938'; typeBadgeBg = 'rgba(211,153,56,0.15)'; }
         if (pageType === 'spoke')      { typeBadgeColor = '#0891b2'; typeBadgeBg = '#cffafe'; }
         if (pageType === 'supporting') { typeBadgeColor = '#059669'; typeBadgeBg = '#d1fae5'; }
 
@@ -429,7 +429,7 @@
         // Anchor text
         card += '<p style="font-size:11px;margin:0 0 6px;">';
         card += '<span style="color:#6b7280;">Anchor: </span>';
-        card += '<span style="color:#7c3aed;font-weight:600;background:#ede9fe;padding:1px 5px;border-radius:3px;">' + esc(anchor) + '</span>';
+        card += '<span style="color:#D39938;font-weight:600;background:rgba(211,153,56,0.15);padding:1px 5px;border-radius:3px;">' + esc(anchor) + '</span>';
         card += '</p>';
 
         // Status + Copy button row

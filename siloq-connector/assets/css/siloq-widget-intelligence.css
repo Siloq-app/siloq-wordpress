@@ -37,7 +37,7 @@
 .siloq-wi-analyze-btn {
     width: 100%;
     padding: 8px 12px;
-    background: #4f46e5;
+    background: #D39938;
     color: #ffffff;
     border: none;
     border-radius: 6px;
@@ -50,7 +50,7 @@
 }
 
 .siloq-wi-analyze-btn:hover {
-    background: #4338ca;
+    background: #B8822E;
 }
 
 .siloq-wi-analyze-btn:focus {
@@ -125,7 +125,7 @@
 .siloq-wi-apply-btn {
     flex: 1;
     padding: 6px 10px;
-    background: #4f46e5;
+    background: #D39938;
     color: #ffffff;
     border: none;
     border-radius: 5px;
@@ -136,7 +136,7 @@
 }
 
 .siloq-wi-apply-btn:hover {
-    background: #4338ca;
+    background: #B8822E;
 }
 
 .siloq-wi-apply-btn:disabled {

@@ -136,7 +136,7 @@ class Siloq_Elementor_Panel {
 
             <div class="siloq-schema-el-panel-header">
                 <div class="siloq-ep-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;margin:-0px;padding:0 12px;">
-                    <button class="siloq-ep-tab siloq-ep-tab--active" data-siloq-tab="schema" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #4f46e5;color:#4f46e5;">⚡ Schema</button>
+                    <button class="siloq-ep-tab siloq-ep-tab--active" data-siloq-tab="schema" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid #D39938;color:#D39938;">⚡ Schema</button>
                     <button class="siloq-ep-tab" data-siloq-tab="edit-content" style="padding:10px 12px 8px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">✏️ Edit Content</button>
                     <!-- Links tab removed: link map is now in the Siloq Intelligence left panel (⚡ Analyze section) -->
                 </div>
@@ -199,7 +199,7 @@ class Siloq_Elementor_Panel {
 
                 <?php
                 $test_url = 'https://search.google.com/test/rich-results?url=' . urlencode(get_permalink($post_id));
-                echo '<a href="' . esc_url($test_url) . '" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:8px;font-size:11px;color:#4f46e5;font-weight:500;">🔍 Test with Google →</a>';
+                echo '<a href="' . esc_url($test_url) . '" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:8px;font-size:11px;color:#D39938;font-weight:500;">🔍 Test with Google →</a>';
                 ?>
 
             </div><!-- /#siloq-schema-preview-el -->
@@ -209,7 +209,7 @@ class Siloq_Elementor_Panel {
                 <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Load all text widgets on this page. Get AI-suggested improvements, then apply directly in Elementor.</p>
 
                 <button type="button" id="siloq-load-widgets-btn"
-                        style="width:100%;padding:8px;background:#4f46e5;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+                        style="width:100%;padding:8px;background:#D39938;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
                     📋 Load Page Content
                 </button>
 
@@ -228,7 +228,7 @@ class Siloq_Elementor_Panel {
                 <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">View your site's internal linking structure. See which pages should link to and from this page.</p>
 
                 <button type="button" id="siloq-load-links-btn"
-                        style="width:100%;padding:8px;background:#4f46e5;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
+                        style="width:100%;padding:8px;background:#D39938;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
                     🔗 Load Link Map
                 </button>
 

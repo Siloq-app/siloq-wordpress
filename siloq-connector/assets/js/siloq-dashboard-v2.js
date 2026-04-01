@@ -160,7 +160,7 @@
       '<div style="text-align:center;padding:10px 16px;background:#f0fdf4;border-radius:8px;">' +
       '<div style="font-size:22px;font-weight:800;color:#16a34a;">' + hubs.length + '</div><div style="font-size:11px;color:#6b7280;">Hubs</div></div>' +
       '<div style="text-align:center;padding:10px 16px;background:#f8fafc;border-radius:8px;">' +
-      '<div style="font-size:22px;font-weight:800;color:#4f46e5;">' + spokes.length + '</div><div style="font-size:11px;color:#6b7280;">Spokes</div></div>' +
+      '<div style="font-size:22px;font-weight:800;color:#D39938;">' + spokes.length + '</div><div style="font-size:11px;color:#6b7280;">Spokes</div></div>' +
       '<div style="text-align:center;padding:10px 16px;background:#fef2f2;border-radius:8px;">' +
       '<div style="font-size:22px;font-weight:800;color:#dc2626;">' + orphanPages.length + '</div><div style="font-size:11px;color:#6b7280;">Orphans</div></div>' +
       '</div>';
@@ -298,7 +298,7 @@
       function nodeHtml(node, depth) {
         var indent = depth * 18;
         var typeColors = {
-          'apex_hub':  '#7c3aed',
+          'apex_hub':  '#D39938',
           'hub':       '#0ea5e9',
           'spoke':     '#059669',
           'supporting':'#6b7280',
@@ -307,7 +307,7 @@
         };
         var color = typeColors[node.type] || '#6b7280';
         var badge = '';
-        if (node.type === 'apex_hub') badge = '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;border-radius:3px;padding:1px 5px;margin-left:5px;">APEX HUB</span>';
+        if (node.type === 'apex_hub') badge = '<span style="font-size:10px;font-weight:700;color:#D39938;background:rgba(211,153,56,0.15);border-radius:3px;padding:1px 5px;margin-left:5px;">APEX HUB</span>';
         else if (node.type === 'hub')  badge = '<span style="font-size:10px;font-weight:700;color:#0ea5e9;background:#e0f2fe;border-radius:3px;padding:1px 5px;margin-left:5px;">HUB</span>';
         else if (node.type === 'orphan') badge = '<span style="font-size:10px;color:#f59e0b;margin-left:5px;">(no structure assigned)</span>';
         else if (node.type === 'pending') badge = '<span style="font-size:10px;color:#9ca3af;margin-left:5px;">(not yet analyzed)</span>';
@@ -341,7 +341,7 @@
       var circumference = 2 * Math.PI * 34; // 213.6
       var offset = circumference - (score / 100) * circumference;
       arc.style.strokeDashoffset = offset;
-      arc.style.stroke = score >= 80 ? '#0d9488' : score >= 60 ? '#4f46e5' : score >= 40 ? '#f59e0b' : '#dc2626';
+      arc.style.stroke = score >= 80 ? '#0d9488' : score >= 60 ? '#D39938' : score >= 40 ? '#f59e0b' : '#dc2626';
       numEl.textContent = score;
       if (lblEl) {
         var label = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Needs work' : 'Critical issues';
@@ -401,7 +401,7 @@
           } else if (isSchema) {
             actionBtn = '<button class="siloq-schema-fix-btn siloq-btn siloq-btn--sm siloq-btn--primary" '
               + 'data-post-id="' + escAttr(String(act.post_id || '')) + '" '
-              + 'style="background:#4f46e5;">Generate Schema &rarr;</button>';
+              + 'style="background:#D39938;">Generate Schema &rarr;</button>';
           } else if (act.fix_category === 'content' && act.elementor_url) {
             actionBtn = '<a href="' + escAttr(act.elementor_url) + '" target="_blank" class="siloq-btn siloq-btn--sm siloq-btn--outline">'
               + 'Open in Elementor &rarr;</a>';
@@ -479,7 +479,7 @@
     function issueRow(iss, isDone) {
       var key      = (iss.post_id || '') + '_' + (iss.fix_type || sanitizeKey(iss.issue));
       var isAutoFix = iss.fix_category === 'auto' && (iss.fix_type === 'meta_title' || iss.fix_type === 'meta_description');
-      var levelColors = { critical: '#dc2626', important: '#d97706', opportunity: '#4f46e5' };
+      var levelColors = { critical: '#dc2626', important: '#d97706', opportunity: '#D39938' };
       var color = levelColors[iss._level] || '#6b7280';
 
       var actionBtn = '';
@@ -504,7 +504,7 @@
         + 'data-post-id="' + escAttr(String(iss.post_id || '')) + '" '
         + 'data-issue-type="' + escAttr(iss.fix_type || sanitizeKey(iss.issue)) + '" '
         + (isDone ? 'checked ' : '')
-        + 'style="margin-top:3px;accent-color:#4f46e5;width:15px;height:15px;flex-shrink:0;">'
+        + 'style="margin-top:3px;accent-color:#D39938;width:15px;height:15px;flex-shrink:0;">'
         + '<div style="flex:1;">'
         + '<span style="font-size:13px;font-weight:' + (isDone ? '400' : '600') + ';color:' + (isDone ? '#9ca3af' : '#111827') + ';">'
         + escHtml(iss.title) + '</span>'
@@ -960,6 +960,67 @@
         $sel.prop('disabled', false);
       });
     });
+
+    // Analyze This Page button — triggers API analysis
+    $(document).on('click', '.siloq-analyze-page-btn', function () {
+      var $btn = $(this);
+      var postId = $btn.data('post-id');
+      $btn.text('Analyzing...').prop('disabled', true);
+
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_analyze_single_page',
+        nonce: cfg.nonce,
+        post_id: postId
+      }, function (resp) {
+        if (resp && resp.success) {
+          $btn.text('Analyzed').prop('disabled', false);
+          if (typeof loadPages === 'function') loadPages();
+        } else {
+          var msg = (resp && resp.data && resp.data.message) ? resp.data.message : 'Analysis failed';
+          $btn.text(msg.substring(0, 24)).prop('disabled', false);
+        }
+      }).fail(function () {
+        $btn.text('Error — retry').prop('disabled', false);
+      });
+    });
+
+    // Schema fix button in SEO Plan / Intelligence tab — delegates to generate + apply
+    $(document).on('click', '.siloq-schema-fix-btn', function () {
+      var $btn = $(this);
+      var postId = $btn.data('post-id');
+      if (!postId) {
+        alert('No page context for this recommendation. Use the Schema button on the Pages tab.');
+        return;
+      }
+      $btn.prop('disabled', true).text('Generating...');
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_generate_schema',
+        post_id: postId,
+        nonce: cfg.nonce
+      }, function (res) {
+        if (res.success) {
+          $btn.text('Applying...');
+          $.post(cfg.ajaxUrl, {
+            action: 'siloq_apply_schema',
+            post_id: postId,
+            nonce: cfg.nonce
+          }, function (applyRes) {
+            if (applyRes.success) {
+              $btn.text('Schema Applied').prop('disabled', false);
+            } else {
+              $btn.text('Apply failed').prop('disabled', false);
+            }
+          }).fail(function () {
+            $btn.text('Apply error').prop('disabled', false);
+          });
+        } else {
+          var msg = (res.data && res.data.message) ? res.data.message : 'Generation failed';
+          $btn.text(msg.substring(0, 20)).prop('disabled', false);
+        }
+      }).fail(function () {
+        $btn.text('Error — retry').prop('disabled', false);
+      });
+    });
   }
 
   function loadPages(append) {
@@ -1026,6 +1087,19 @@
     });
   }
 
+  function renderScoreBadge(score) {
+    if (score === null || score === undefined || score === 0) {
+      return '<span class="siloq-badge siloq-badge--pending" title="Run Analyze This Page to get a score.">NOT ANALYZED</span>';
+    }
+    var grade, color;
+    if (score >= 90) { grade = 'Architect Grade'; color = '#22c55e'; }
+    else if (score >= 75) { grade = 'Builder Grade'; color = '#84cc16'; }
+    else if (score >= 50) { grade = 'Needs Improvement'; color = '#f59e0b'; }
+    else if (score >= 25) { grade = 'Structural Issues'; color = '#f97316'; }
+    else { grade = 'Foundation Missing'; color = '#ef4444'; }
+    return '<span class="siloq-score-circle" style="color:' + color + '" title="' + grade + '">' + score + '</span>';
+  }
+
   function renderPageCard(page) {
     var scoreColor;
     if (page.score >= 90) scoreColor = '#14b8a6';
@@ -1033,9 +1107,10 @@
     else if (page.score >= 50) scoreColor = '#f59e0b';
     else scoreColor = '#ef4444';
 
+    var hasScore = page.score !== null && page.score !== undefined && page.score !== 0;
     var r = 18;
     var circ = 2 * Math.PI * r;
-    var filled = (page.score / 100) * circ;
+    var filled = hasScore ? (page.score / 100) * circ : 0;
 
     var typeBadgeClass = 'gray';
     if (page.page_type === 'apex_hub') typeBadgeClass = 'apex_hub';
@@ -1092,15 +1167,18 @@
 
     return '<div class="siloq-page-card" data-title="' + escAttr(page.title) + '" data-type="' + escAttr(page.page_type) + '">'
       + '<div class="siloq-page-card__top">'
-      + '<div class="siloq-page-card__score-ring">'
-      + '<svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="' + r + '"/>'
-      + '<circle class="ring-fg" cx="22" cy="22" r="' + r + '" stroke="' + scoreColor + '" stroke-dasharray="' + filled + ' ' + circ + '"/></svg>'
-      + '<span class="siloq-page-card__score-num">' + page.score + '</span>'
-      + '</div>'
+      + (hasScore
+        ? '<div class="siloq-page-card__score-ring">'
+          + '<svg viewBox="0 0 44 44"><circle class="ring-bg" cx="22" cy="22" r="' + r + '"/>'
+          + '<circle class="ring-fg" cx="22" cy="22" r="' + r + '" stroke="' + scoreColor + '" stroke-dasharray="' + filled + ' ' + circ + '"/></svg>'
+          + '<span class="siloq-page-card__score-num">' + page.score + '</span>'
+          + '</div>'
+        : '<div class="siloq-page-card__score-ring">' + renderScoreBadge(page.score) + '</div>'
+      )
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Open in Elementor and run Analyze."' : '') + (page.page_type === 'pending' ? ' title="Open in Elementor and run Analyze to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml(page.page_type.toUpperCase()))) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Click Analyze This Page to classify."' : '') + (page.page_type === 'pending' ? ' title="Click Analyze This Page to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml(page.page_type.toUpperCase()))) + '</span>'
       + roleSelect
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'
@@ -1108,7 +1186,7 @@
       + '</div>'
       + '</div>'
       + '<div class="siloq-page-card__actions">'
-      + '<a href="' + escAttr(page.elementor_url) + '" class="siloq-btn siloq-btn--sm siloq-btn--primary">Analyze</a>'
+      + '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--primary siloq-analyze-page-btn" data-post-id="' + page.id + '" data-page-url="' + escAttr(page.url || '') + '">Analyze This Page</button>'
       + (issues.length > 0 ? '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-view-issues-btn">View Issues</button>' : '')
       + '<button type="button" class="siloq-btn siloq-btn--sm siloq-btn--outline siloq-page-schema-btn" data-post-id="' + page.id + '" title="Generate schema markup for this page">'
       + (page.has_schema ? '✅ Schema' : '⚡ Schema') + '</button>'
@@ -1410,7 +1488,7 @@
       }
       if (p.permalink) {
         var testUrl = 'https://search.google.com/test/rich-results?url=' + encodeURIComponent(p.permalink);
-        html += ' <a href="' + escAttr(testUrl) + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#4f46e5;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;">🔍 Test with Google →</a>';
+        html += ' <a href="' + escAttr(testUrl) + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#D39938;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;">🔍 Test with Google →</a>';
       }
       html += '</div>';
       if (p.schema_json) {
@@ -1571,7 +1649,7 @@
           + '<td style="padding:8px 10px;text-align:center;">'
           + '<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">'
           + '<input type="checkbox" class="siloq-redir-toggle" data-id="' + r.id + '" ' + (isEnabled ? 'checked' : '') + ' style="opacity:0;width:0;height:0;">'
-          + '<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:' + (isEnabled ? '#4f46e5' : '#d1d5db') + ';border-radius:20px;transition:0.2s;"></span>'
+          + '<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:' + (isEnabled ? '#D39938' : '#d1d5db') + ';border-radius:20px;transition:0.2s;"></span>'
           + '<span style="position:absolute;height:16px;width:16px;left:' + (isEnabled ? '18px' : '2px') + ';bottom:2px;background:#fff;border-radius:50%;transition:0.2s;"></span>'
           + '</label>'
           + '</td>'
@@ -1587,7 +1665,7 @@
 
     $(document).on('click', '.siloq-redir-filter', function () {
       $('.siloq-redir-filter').removeClass('siloq-redir-filter--active').css({'background':'#fff','color':'#374151','font-weight':'400'});
-      $(this).addClass('siloq-redir-filter--active').css({'background':'#4f46e5','color':'#fff','font-weight':'600'});
+      $(this).addClass('siloq-redir-filter--active').css({'background':'#D39938','color':'#fff','font-weight':'600'});
       var filter = $(this).data('filter');
       var filtered = allRedirects;
       if (filter === 'enabled')  filtered = allRedirects.filter(function(r){ return r.enabled == 1; });
