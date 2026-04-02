@@ -4765,38 +4765,55 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                                     if (v) keywords.push(v);
                                 }
 
-                                var fd = new FormData();
-                                fd.append('action', 'siloq_save_goals_tab');
-                                fd.append('nonce', '<?php echo esc_js( wp_create_nonce( 'siloq_ajax_nonce' ) ); ?>');
-                                fd.append('primary_goal', primaryGoal);
-                                for (var j = 0; j < keywords.length; j++) { fd.append('target_keywords[]', keywords[j]); }
+                                var _restUrl = (typeof siloqDash !== 'undefined' && siloqDash.restUrl || '').replace(/\/$/,'');
+                                var _restNonce = (typeof siloqDash !== 'undefined' && siloqDash.restNonce) || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
 
-                                fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                                fetch(_restUrl + '/goals', {
+                                    method: 'POST',
+                                    headers: { 'X-WP-Nonce': _restNonce, 'Content-Type': 'application/json' },
+                                    credentials: 'same-origin',
+                                    body: JSON.stringify({ primary_goal: primaryGoal, target_keywords: keywords })
+                                })
                                     .then(function(r){ return r.json(); })
                                     .then(function(res){
                                         btn.disabled = false;
                                         btn.textContent = '<?php echo esc_js( __( 'Save & Sync Goals', 'siloq-connector' ) ); ?>';
                                         var msg = document.getElementById('siloq-goals-msg');
-                                        if (res.success) {
-                                            msg.textContent = '<?php echo esc_js( __( 'Goals saved and synced.', 'siloq-connector' ) ); ?>';
+                                        if (res.success !== false) {
+                                            msg.textContent = res.message || '<?php echo esc_js( __( 'Goals saved and synced.', 'siloq-connector' ) ); ?>';
                                             msg.style.color = '#16a34a';
                                             // Show keyword → page mapping table
-                                            var mapData = (res.data && res.data.keyword_map) ? res.data.keyword_map : [];
+                                            var mapData = res.keyword_map || [];
                                             if (mapData.length) {
                                                 var tbody = document.getElementById('siloq-goals-keyword-map-body');
-                                                var rows = '';
+                                                tbody.textContent = '';
                                                 for (var k = 0; k < mapData.length; k++) {
                                                     var row = mapData[k];
-                                                    var pageCell = row.matched_title
-                                                        ? '<a href="' + row.edit_url + '" target="_blank" style="color:#D39938;">' + row.matched_title + '</a>'
-                                                        : '<span style="color:#9ca3af;">No match found</span>';
-                                                    rows += '<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + row.keyword + '</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">' + pageCell + '</td></tr>';
+                                                    var tr = document.createElement('tr');
+                                                    var td1 = document.createElement('td');
+                                                    td1.style.cssText = 'padding:6px 8px;border:1px solid #e2e8f0;';
+                                                    td1.textContent = row.keyword;
+                                                    var td2 = document.createElement('td');
+                                                    td2.style.cssText = 'padding:6px 8px;border:1px solid #e2e8f0;';
+                                                    if (row.matched_title) {
+                                                        var a = document.createElement('a');
+                                                        a.href = row.edit_url;
+                                                        a.target = '_blank';
+                                                        a.style.color = '#D39938';
+                                                        a.textContent = row.matched_title;
+                                                        td2.appendChild(a);
+                                                    } else {
+                                                        td2.textContent = 'No match found';
+                                                        td2.style.color = '#9ca3af';
+                                                    }
+                                                    tr.appendChild(td1);
+                                                    tr.appendChild(td2);
+                                                    tbody.appendChild(tr);
                                                 }
-                                                tbody.innerHTML = rows;
                                                 document.getElementById('siloq-goals-keyword-map').style.display = 'block';
                                             }
                                         } else {
-                                            msg.textContent = (res.data && res.data.message) ? res.data.message : '<?php echo esc_js( __( 'Error saving goals.', 'siloq-connector' ) ); ?>';
+                                            msg.textContent = res.message || '<?php echo esc_js( __( 'Error saving goals.', 'siloq-connector' ) ); ?>';
                                             msg.style.color = '#ef4444';
                                         }
                                         msg.style.display = 'inline-block';
@@ -5800,21 +5817,22 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             if (v) keywords.push(v);
         });
 
-        var nonce = (typeof siloqAdminData !== 'undefined' && siloqAdminData.ajax_nonce) ? siloqAdminData.ajax_nonce : ((typeof siloqDash !== 'undefined') ? siloqDash.nonce : '');
-        var postData = $.param({action: 'siloq_save_goals_tab', nonce: nonce, primary_goal: primaryGoal})
-            + '&' + $.param({'priority_services[]': services})
-            + '&' + $.param({'priority_cities[]': cities})
-            + '&' + $.param({'target_keywords[]': keywords});
+        var _restUrl = (typeof siloqDash !== 'undefined' && siloqDash.restUrl || '').replace(/\/$/,'');
+        var _restNonce = (typeof siloqDash !== 'undefined' && siloqDash.restNonce) || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
 
-        $.post(ajaxurl, postData, function(res){
-            $btn.prop('disabled', false).text('💾 Save Goals');
-            if (res.success) {
-                var msg = (res.data && res.data.message) ? res.data.message : 'Goals saved!';
+        $.ajax({
+            url: _restUrl + '/goals',
+            method: 'POST',
+            headers: { 'X-WP-Nonce': _restNonce, 'Content-Type': 'application/json' },
+            data: JSON.stringify({ primary_goal: primaryGoal, priority_services: services, priority_cities: cities, target_keywords: keywords }),
+            timeout: 15000,
+            success: function(res){
+                $btn.prop('disabled', false).text('💾 Save Goals');
+                var msg = res.message || 'Goals saved!';
                 $('#siloq-goals-saved-msg').text('✅ ' + msg).show();
                 setTimeout(function(){ $('#siloq-goals-saved-msg').fadeOut(); }, 4000);
                 if (primaryGoal) { $('.siloq-goals-banner').hide(); }
-                // Show keyword → page map
-                var mapData = (res.data && res.data.keyword_map) ? res.data.keyword_map : [];
+                var mapData = res.keyword_map || [];
                 if (mapData.length) {
                     var rows = '';
                     for (var k = 0; k < mapData.length; k++) {
@@ -5827,13 +5845,12 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     $('#siloq-goals-tab-kw-map-body').html(rows);
                     $('#siloq-goals-tab-kw-map').show();
                 }
-            } else {
-                var err = (res.data && res.data.message) ? res.data.message : 'Save failed.';
-                alert('Error: ' + err);
+            },
+            error: function(xhr){
+                $btn.prop('disabled', false).text('💾 Save Goals');
+                var errMsg = xhr.status === 403 ? 'Blocked by security plugin. Whitelist /wp-json/ in security settings.' : 'Save failed. Try again.';
+                alert(errMsg);
             }
-        }).fail(function(){
-            $btn.prop('disabled', false).text('💾 Save Goals');
-            alert('Network error. Please try again.');
         });
     });
 })(jQuery);
@@ -5876,6 +5893,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     if (!cfg.ajaxUrl) cfg.ajaxUrl = (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
                     if (!cfg.nonce) cfg.nonce = (typeof siloq_ajax_nonce !== 'undefined' ? siloq_ajax_nonce : '');
                     if (!cfg.nonce && typeof wpData !== 'undefined') { cfg.ajaxUrl = wpData.ajax_url; cfg.nonce = wpData.nonce; }
+                    function _rUrl() { var u = (cfg.restUrl || '').replace(/\/$/, ''); if (!u && typeof wpApiSettings !== 'undefined') u = wpApiSettings.root.replace(/\/$/, '').replace(/\/wp-json$/, '') + '/wp-json/siloq/v1'; return u; }
+                    function _rNonce() { return cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : ''); }
 
                     function loadAuthors() {
                         var $wrap = $('#siloq-content-authors');
@@ -5988,12 +6007,15 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         $btn.data('loading', true).prop('disabled', true).text('Approving...');
                         var done = 0, total = jobIds.length;
                         jobIds.forEach(function(jid) {
-                            $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jid }, function() {
-                                done++;
-                                if (done >= total) { $btn.data('loading', false); loadContentJobs(); }
-                            }).fail(function() {
-                                done++;
-                                if (done >= total) { $btn.data('loading', false); loadContentJobs(); }
+                            $.ajax({
+                                url: _rUrl() + '/content/approve',
+                                method: 'POST',
+                                headers: { 'X-WP-Nonce': _rNonce(), 'Content-Type': 'application/json' },
+                                data: JSON.stringify({ job_id: jid }),
+                                complete: function() {
+                                    done++;
+                                    if (done >= total) { $btn.data('loading', false); loadContentJobs(); }
+                                }
                             });
                         });
                     });
@@ -6021,12 +6043,17 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             }
                         }, 4000);
 
-                        $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
+                        $.ajax({
+                            url: _rUrl() + '/content/approve',
+                            method: 'POST',
+                            headers: { 'X-WP-Nonce': _rNonce(), 'Content-Type': 'application/json' },
+                            data: JSON.stringify({ job_id: jobId }),
+                            success: function(resp) {
                             clearInterval(stageTimer);
                             $btn.data('loading', false).prop('disabled', false);
-                            if (resp.success) {
+                            var d = resp.data || resp || {};
+                            if (d.content || d.post_id || d.title) {
                                 $btn.text('✓ Done! Preview ready').css('background', '#16a34a');
-                                var d = resp.data || {};
                                 var content = d.content || d.html || d.body || '';
                                 var blogTitle = d.title || topicTitle;
                                 var wordCount = d.word_count || (content ? content.split(/\s+/).length : 0);
@@ -6056,8 +6083,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                                     if (!pid) { $preview.remove(); return; }
                                     var $pbtn = $(this);
                                     $pbtn.text('Publishing...').prop('disabled', true);
-                                    $.post(cfg.ajaxUrl, { action: 'siloq_publish_draft', nonce: cfg.nonce, post_id: pid }, function(r) {
-                                        if (r && r.success) {
+                                    $.ajax({ url: _rUrl() + '/publish-draft', method: 'POST', headers: { 'X-WP-Nonce': _rNonce(), 'Content-Type': 'application/json' }, data: JSON.stringify({ post_id: pid }), success: function(r) {
+                                        if (r && r.success !== false) {
                                             $pbtn.text('✓ Published').css('background', '#16a34a');
                                             setTimeout(function() { $preview.remove(); loadContentJobs(); }, 1500);
                                         } else {
@@ -6070,9 +6097,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             } else {
                                 $btn.text('Error — Retry').css('background', '#dc2626');
                             }
-                        }).fail(function() {
-                            clearInterval(stageTimer);
-                            $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                            },
+                            error: function() {
+                                clearInterval(stageTimer);
+                                $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                            }
                         });
                     });
 
@@ -6081,17 +6110,19 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         var $btn = $(this);
                         if ($btn.data('loading')) return;
                         $btn.data('loading', true).prop('disabled', true).html('<span class="siloq-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:4px;"></span> Generating...');
-                        $.post(cfg.ajaxUrl, { action: 'siloq_generate_content_plan', nonce: cfg.nonce }, function(resp) {
-                            $btn.data('loading', false).prop('disabled', false);
-                            if (resp.success) {
+                        $.ajax({
+                            url: _rUrl() + '/content/generate-plan',
+                            method: 'POST',
+                            headers: { 'X-WP-Nonce': _rNonce(), 'Content-Type': 'application/json' },
+                            data: JSON.stringify({}),
+                            success: function(resp) {
+                                $btn.data('loading', false).prop('disabled', false);
                                 $btn.text('✓ Plan Generated');
                                 loadContentJobs();
-                            } else {
-                                $btn.text('Error — Retry').css('background', '#dc2626');
-                                alert(resp.data && resp.data.message ? resp.data.message : 'Content plan generation failed.');
+                            },
+                            error: function() {
+                                $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
                             }
-                        }).fail(function() {
-                            $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
                         });
                     });
 
@@ -6304,42 +6335,58 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     if (!title) { btn.textContent = 'No title'; return; }
                     btn.textContent = 'Creating...';
                     btn.disabled = true;
-                    jQuery.post(ajaxurl, {
-                        action:     'siloq_create_draft_page',
-                        nonce:      '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
-                        title:      title,
-                        draft_type: draftType,
-                        parent_id:  parentId
-                    }, function(r) {
-                        if (r && r.success && r.data && r.data.edit_url) {
-                            // Replace button with a success message + clickable Edit link
-                            // (window.open is blocked by browsers in AJAX callbacks)
-                            var editUrl = r.data.edit_url;
-                            var wrap = document.createElement('span');
-                            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
-                            wrap.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Created</span>'
-                                + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
-                                + 'style="background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
-                                + 'Edit Page →</a>';
-                            if (btn.parentNode) { btn.parentNode.replaceChild(wrap, btn); } else { btn.textContent = '✓ Created'; btn.disabled = false; }
-                        } else if (r && r.data && r.data.cannibal) {
-                            // Page already exists — show link to existing page
-                            var existUrl = r.data.edit_url || '';
-                            var wrap2 = document.createElement('span');
-                            wrap2.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
-                            wrap2.innerHTML = '<span style="color:#92400e;font-weight:600;">⚠ Already exists</span>'
-                                + (existUrl ? '<a href="' + existUrl + '" target="_blank" rel="noopener" '
-                                + 'style="background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
-                                + 'View Page →</a>' : '');
-                            if (btn.parentNode) { btn.parentNode.replaceChild(wrap2, btn); } else { btn.textContent = '⚠ Already exists'; btn.disabled = false; }
-                        } else {
-                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
-                            btn.textContent = msg;
+
+                    var _restUrl = (typeof siloqDash !== 'undefined' && siloqDash.restUrl || '').replace(/\/$/,'');
+                    var _restNonce = (typeof siloqDash !== 'undefined' && siloqDash.restNonce) || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
+
+                    jQuery.ajax({
+                        url: _restUrl + '/pages/create-draft',
+                        method: 'POST',
+                        headers: { 'X-WP-Nonce': _restNonce, 'Content-Type': 'application/json' },
+                        data: JSON.stringify({ title: title, draft_type: draftType, parent_id: parentId }),
+                        timeout: 15000,
+                        success: function(r) {
+                            if (r && r.edit_url) {
+                                var wrap = document.createElement('span');
+                                wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
+                                var created = document.createElement('span');
+                                created.style.cssText = 'color:#16a34a;font-weight:600;';
+                                created.textContent = '✓ Created';
+                                var link = document.createElement('a');
+                                link.href = r.edit_url;
+                                link.target = '_blank';
+                                link.rel = 'noopener';
+                                link.style.cssText = 'background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;';
+                                link.textContent = 'Edit Post →';
+                                wrap.appendChild(created);
+                                wrap.appendChild(link);
+                                if (btn.parentNode) { btn.parentNode.replaceChild(wrap, btn); } else { btn.textContent = '✓ Created'; btn.disabled = false; }
+                            } else if (r && r.cannibal) {
+                                var wrap2 = document.createElement('span');
+                                wrap2.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
+                                var exists = document.createElement('span');
+                                exists.style.cssText = 'color:#92400e;font-weight:600;';
+                                exists.textContent = '⚠ Already exists';
+                                wrap2.appendChild(exists);
+                                if (r.edit_url) {
+                                    var link2 = document.createElement('a');
+                                    link2.href = r.edit_url;
+                                    link2.target = '_blank';
+                                    link2.rel = 'noopener';
+                                    link2.style.cssText = 'background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;';
+                                    link2.textContent = 'View Page →';
+                                    wrap2.appendChild(link2);
+                                }
+                                if (btn.parentNode) { btn.parentNode.replaceChild(wrap2, btn); } else { btn.textContent = '⚠ Already exists'; btn.disabled = false; }
+                            } else {
+                                btn.textContent = (r && r.message) ? r.message : 'Failed — try again';
+                                btn.disabled = false;
+                            }
+                        },
+                        error: function(xhr) {
+                            btn.textContent = 'Error ' + xhr.status + ' — retry';
                             btn.disabled = false;
                         }
-                    }).fail(function(xhr) {
-                        btn.textContent = 'Error ' + xhr.status + ' — retry';
-                        btn.disabled = false;
                     });
                 }
 
@@ -7507,19 +7554,22 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 var primaryGoalEl = document.querySelector('input[name="siloq_primary_goal"]:checked');
                 var primaryGoal = primaryGoalEl ? primaryGoalEl.value : 'local_leads';
 
-                var fd = new FormData();
-                fd.append('action', 'siloq_save_goals');
-                fd.append('nonce', nonce);
-                fd.append('primary_goal', primaryGoal);
-
-                // Collect keyword phrases from wizard step 5 inputs
+                var kwValues = [];
                 var kwInputs = document.querySelectorAll('.siloq-wizard-keyword-input');
                 for (var ki = 0; ki < kwInputs.length; ki++) {
                     var kv = kwInputs[ki].value.trim();
-                    if (kv) fd.append('target_keywords[]', kv);
+                    if (kv) kwValues.push(kv);
                 }
 
-                fetch(ajaxUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                var _restUrl = (typeof siloqDash !== 'undefined' && siloqDash.restUrl || '').replace(/\/$/,'');
+                var _restNonce = (typeof siloqDash !== 'undefined' && siloqDash.restNonce) || '';
+
+                fetch(_restUrl + '/goals', {
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': _restNonce, 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ primary_goal: primaryGoal, target_keywords: kwValues })
+                })
                     .then(function(r) { return r.json(); })
                     .then(function(res) {
                         if (btn) { btn.classList.remove('loading'); btn.disabled = false; }

@@ -1,11 +1,23 @@
 /**
  * Siloq Dashboard v2 — Tab switching, score ring, plan AJAX, roadmap persistence, pages tab
- * Version: 1.5.130
+ * Version: 1.5.288
  */
 (function ($) {
   'use strict';
 
   var cfg = window.siloqDash || {};
+
+  // REST API helper — all user-facing calls go through /wp-json/siloq/v1/
+  function restUrl() {
+    var u = (cfg.restUrl || '').replace(/\/$/, '');
+    if (!u && typeof wpApiSettings !== 'undefined') {
+      u = wpApiSettings.root.replace(/\/$/, '').replace(/\/wp-json$/, '') + '/wp-json/siloq/v1';
+    }
+    return u;
+  }
+  function restNonce() {
+    return cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
+  }
   // Seed Quick Wins completed state from PHP (persisted across sessions)
   window.siloqQwCompleted = cfg.qwCompleted || {};
 
@@ -94,21 +106,25 @@
 
   function loadPlanData($btn) {
     if ($btn) { $btn.prop('disabled', true).text('Generating...'); }
-    $.post(cfg.ajaxUrl, {
-      action: 'siloq_get_plan_data',
-      nonce: cfg.nonce
-    }, function (resp) {
-      if (resp.success && resp.data) {
-        planLoaded = true;
-        renderPlanData(resp.data);
-        if ($btn) { $btn.text('Refresh Plan').addClass('siloq-btn--success').prop('disabled', false); }
-      } else {
+    $.ajax({
+      url: restUrl() + '/plan',
+      method: 'GET',
+      headers: { 'X-WP-Nonce': restNonce() },
+      success: function (resp) {
+        var d = resp.data || resp;
+        if (d && (d.architecture || d.actions || d.site_score !== undefined)) {
+          planLoaded = true;
+          renderPlanData(d);
+          if ($btn) { $btn.text('Refresh Plan').addClass('siloq-btn--success').prop('disabled', false); }
+        } else {
+          if ($btn) { $btn.prop('disabled', false).text('Generate Your SEO Plan →'); }
+          var msg = (d && d.message) ? d.message : 'Failed to generate plan. Please try again.';
+          $('#siloq-architecture-content').html('<p class="siloq-empty" style="color:#c0392b">' + msg + '</p>');
+        }
+      },
+      error: function () {
         if ($btn) { $btn.prop('disabled', false).text('Generate Your SEO Plan →'); }
-        var msg = resp.data && resp.data.message ? resp.data.message : 'Failed to generate plan. Please try again.';
-        $('#siloq-architecture-content').html('<p class="siloq-empty" style="color:#c0392b">' + msg + '</p>');
       }
-    }).fail(function () {
-      if ($btn) { $btn.prop('disabled', false).text('Generate Your SEO Plan →'); }
     });
   }
 
@@ -220,35 +236,40 @@
         if ($btn.data('loading')) $btn.html(spinnerHtml + 'Scoring entity readiness... (3/3)');
       }, 12000);
 
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_generate_intelligence',
-        nonce: cfg.nonce
-      }, function (resp) {
-        clearTimeout(stepTimer1);
-        clearTimeout(stepTimer2);
-        $btn.data('loading', false).prop('disabled', false);
+      $.ajax({
+        url: restUrl() + '/intelligence/generate',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({}),
+        success: function (resp) {
+          clearTimeout(stepTimer1);
+          clearTimeout(stepTimer2);
+          $btn.data('loading', false).prop('disabled', false);
+          var d = resp.data || resp;
 
-        if (!resp.success) {
-          var stepInfo = resp.data && resp.data.step ? ' (failed at step ' + resp.data.step + ')' : '';
-          $btn.html('\u26A0 Error' + stepInfo + ' \u2014 Retry');
-          $('#siloq-actions-content').html(
-            '<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">' +
-            (resp.data && resp.data.message ? resp.data.message : 'Intelligence generation failed. Try again.') +
-            '</div>'
-          );
-          return;
+          if (d.error || d.message === 'Intelligence generation failed. Try again.') {
+            var stepInfo = d.step ? ' (failed at step ' + d.step + ')' : '';
+            $btn.html('\u26A0 Error' + stepInfo + ' \u2014 Retry');
+            $('#siloq-actions-content').html(
+              '<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">' +
+              (d.message || 'Intelligence generation failed. Try again.') +
+              '</div>'
+            );
+            return;
+          }
+
+          $btn.html('\u2713 Done! Refreshing...');
+          renderIntelligenceResult(d);
+          setTimeout(function() {
+            $btn.html('\u2713 Plan Generated \u2014 Refresh to see updates');
+          }, 2000);
+        },
+        error: function () {
+          clearTimeout(stepTimer1);
+          clearTimeout(stepTimer2);
+          $btn.data('loading', false).prop('disabled', false).html('\u26A0 Error \u2014 Retry');
+          $('#siloq-actions-content').html('<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">Request failed. Check your connection and try again.</div>');
         }
-
-        $btn.html('\u2713 Done! Refreshing...');
-        renderIntelligenceResult(resp.data);
-        setTimeout(function() {
-          $btn.html('\u2713 Plan Generated \u2014 Refresh to see updates');
-        }, 2000);
-      }).fail(function () {
-        clearTimeout(stepTimer1);
-        clearTimeout(stepTimer2);
-        $btn.data('loading', false).prop('disabled', false).html('\u26A0 Error \u2014 Retry');
-        $('#siloq-actions-content').html('<div style="padding:16px;background:#fef2f2;border-radius:8px;color:#dc2626;font-size:13px;">Request failed. Check your connection and try again.</div>');
       });
     });
 
@@ -535,12 +556,11 @@
 
     qwCompleted[key] = checked ? true : false;
 
-    $.post(cfg.ajaxUrl, {
-      action:     'siloq_save_quick_win',
-      nonce:      cfg.nonce,
-      post_id:    postId,
-      issue_type: issType,
-      checked:    checked ? 1 : 0
+    $.ajax({
+      url: restUrl() + '/quick-win',
+      method: 'POST',
+      headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+      data: JSON.stringify({ post_id: postId, issue_type: issType, checked: checked ? 1 : 0 })
     });
 
     // Move row to bottom (completed) or top (uncompleted) after a short delay
@@ -614,12 +634,18 @@
     var field  = $btn.data('field');
     var $ta    = $btn.closest('.siloq-inline-fix-panel, .siloq-qw-fix-panel').find('.siloq-fix-textarea');
     $btn.text('Generating...').prop('disabled', true);
-    $.post(cfg.ajaxUrl, { action: 'siloq_generate_meta_suggestion', nonce: cfg.nonce, post_id: postId, field: field, use_ai: 1 }, function(res) {
-      if (res.success && res.data.suggestion) {
-        $ta.val(res.data.suggestion).trigger('input');
-      }
-      $btn.text('✨ Improve with AI').prop('disabled', false);
-    }).fail(function() { $btn.text('✨ Improve with AI').prop('disabled', false); });
+    $.ajax({
+      url: restUrl() + '/meta-suggestion',
+      method: 'POST',
+      headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+      data: JSON.stringify({ post_id: postId, field: field, use_ai: 1 }),
+      success: function(res) {
+        var d = res.data || res;
+        if (d.suggestion) { $ta.val(d.suggestion).trigger('input'); }
+        $btn.text('✨ Improve with AI').prop('disabled', false);
+      },
+      error: function() { $btn.text('✨ Improve with AI').prop('disabled', false); }
+    });
   });
 
   // Confirm & Apply — writes directly via ajax_dashboard_fix
@@ -638,26 +664,29 @@
     var fixMode = fixType === 'meta_title' ? 'fix_meta' : 'fix_meta';
     var fixSubtype = fixType === 'meta_title' ? 'title' : 'description';
 
-    $.post(cfg.ajaxUrl, {
-      action:       'siloq_dashboard_fix',
-      nonce:        cfg.nonce,
-      post_id:      postId,
-      fix_action:   fixMode,
-      fix_type:     fixSubtype,
-      custom_value: value  // Pass user's edited value directly
-    }, function(res) {
-      if (res.success) {
-        $panel.html('<div style="font-size:12px;color:#059669;font-weight:600;padding:6px 0;">✅ Applied: "' + escHtml(value.substring(0, 60)) + (value.length > 60 ? '...' : '') + '"</div>');
-        // Auto-check the Quick Win if this came from QW
-        if (qwKey) {
-          var $cb = $('#siloq-issues-content .siloq-qw-checkbox[data-key="' + qwKey + '"]');
-          if ($cb.length && !$cb.is(':checked')) {
-            $cb.prop('checked', true).trigger('change');
+    $.ajax({
+      url: restUrl() + '/dashboard-fix',
+      method: 'POST',
+      headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+      data: JSON.stringify({ post_id: postId, fix_action: fixMode, fix_type: fixSubtype, custom_value: value }),
+      success: function(res) {
+        var d = res.data || res;
+        if (d.success !== false && !d.error) {
+          $panel.html('<div style="font-size:12px;color:#059669;font-weight:600;padding:6px 0;">✅ Applied: "' + escHtml(value.substring(0, 60)) + (value.length > 60 ? '...' : '') + '"</div>');
+          if (qwKey) {
+            var $cb = $('#siloq-issues-content .siloq-qw-checkbox[data-key="' + qwKey + '"]');
+            if ($cb.length && !$cb.is(':checked')) {
+              $cb.prop('checked', true).trigger('change');
+            }
           }
+        } else {
+          var msg = d.message || 'Apply failed.';
+          $panel.html('<div style="font-size:12px;color:#dc2626;padding:6px 0;">⚠ ' + escHtml(msg) + '</div>');
+          $btn.prop('disabled', false).text('Confirm & Apply');
         }
-      } else {
-        var msg = res.data && res.data.message ? res.data.message : 'Apply failed.';
-        $panel.html('<div style="font-size:12px;color:#dc2626;padding:6px 0;">⚠ ' + escHtml(msg) + '</div>');
+      },
+      error: function() {
+        $panel.html('<div style="font-size:12px;color:#dc2626;padding:6px 0;">⚠ Request failed.</div>');
         $btn.prop('disabled', false).text('Confirm & Apply');
       }
     });
@@ -721,16 +750,24 @@
       $('#siloq-fix-all-pbar').css('width', pct + '%');
       $('#siloq-fix-all-msg').text('Applying to ' + (pageTitles[postId] || 'Page ' + postId) + '... (' + done + ' of ' + total + ')');
 
-      $.post(cfg.ajaxUrl, { action: 'siloq_fix_all_seo', nonce: cfg.nonce, post_id: postId }, function(res) {
-        if (res.success) {
-          applied.push({ title: res.data.title || ('Page ' + postId), seo_title: res.data.applied && res.data.applied.title });
-        } else {
+      $.ajax({
+        url: restUrl() + '/fix-all-seo',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ post_id: postId }),
+        success: function(res) {
+          var d = res.data || res;
+          if (d.title || d.applied) {
+            applied.push({ title: d.title || ('Page ' + postId), seo_title: d.applied && d.applied.title });
+          } else {
+            failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
+          }
+          setTimeout(applyNext, 600);
+        },
+        error: function() {
           failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
+          setTimeout(applyNext, 600);
         }
-        setTimeout(applyNext, 600);
-      }).fail(function() {
-        failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
-        setTimeout(applyNext, 600);
       });
     }
     applyNext();
@@ -746,11 +783,11 @@
       $item.toggleClass('is-done', checked);
 
       // Save to server
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_save_roadmap_progress',
-        nonce: cfg.nonce,
-        key: key,
-        checked: checked ? 1 : 0
+      $.ajax({
+        url: restUrl() + '/roadmap-progress',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ key: key, checked: checked ? 1 : 0 })
       });
     });
   }
@@ -834,33 +871,31 @@
       function runBatch(offset) {
         $btn.prop('disabled', true).html('<span class="siloq-spinner"></span> Syncing ' + (grandTotal ? totalSynced + '/' + grandTotal : '...') + ' pages');
 
-        $.post(cfg.ajaxUrl, {
-          action: 'siloq_sync_all_pages',
-          nonce:  cfg.nonce,
-          offset: offset
-        }, function (resp) {
-          // Use resp.data regardless of resp.success — a batch may have API errors
-          // for some pages but still return has_more for the next batch.
-          var d = resp.data || {};
-          totalSynced += (d.synced || 0);
-          if (d.total) grandTotal = d.total;
+        $.ajax({
+          url: restUrl() + '/sync/all',
+          method: 'POST',
+          headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+          data: JSON.stringify({ offset: offset }),
+          success: function (resp) {
+            var d = resp.data || resp || {};
+            totalSynced += (d.synced || 0);
+            if (d.total) grandTotal = d.total;
 
-          if (d.has_more && d.next_offset !== undefined) {
-            // More batches to process — keep going
-            runBatch(d.next_offset);
-          } else {
-            // All done (or no data returned at all)
-            $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+            if (d.has_more && d.next_offset !== undefined) {
+              runBatch(d.next_offset);
+            } else {
+              $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All');
+              pagesOffset = 0;
+              pagesLoaded = false;
+              loadPages(false);
+            }
+          },
+          error: function () {
+            $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All (' + totalSynced + ' synced)');
             pagesOffset = 0;
             pagesLoaded = false;
             loadPages(false);
           }
-        }).fail(function () {
-          // Network/PHP fatal — stop and show what synced so far
-          $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sync All (' + totalSynced + ' synced)');
-          pagesOffset = 0;
-          pagesLoaded = false;
-          loadPages(false);
         });
       }
 
@@ -881,54 +916,59 @@
       var $feedback = $('.siloq-page-schema-feedback-' + postId);
       $btn.prop('disabled', true).text('Generating...');
       $feedback.hide().removeClass('siloq-schema-fb--ok siloq-schema-fb--err');
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_generate_schema',
-        post_id: postId,
-        nonce: cfg.nonce
-      }, function (res) {
-        if (res.success) {
-          // Auto-apply the generated schema
-          $btn.text('Applying...');
-          $.post(cfg.ajaxUrl, {
-            action: 'siloq_apply_schema',
-            post_id: postId,
-            nonce: cfg.nonce
-          }, function (applyRes) {
-            if (applyRes.success) {
-              $btn.text('✅ Schema').prop('disabled', false);
-              $feedback.text('✅ Schema generated and applied.')
-                .css({'background': '#f0fdf4', 'color': '#166534', 'border': '1px solid #86efac'})
-                .show();
-            } else {
-              // Generated but apply failed — show warning
-              $btn.text('✅ Schema').prop('disabled', false);
-              var warn = (applyRes.data && applyRes.data.message) ? applyRes.data.message : 'Generated but auto-apply failed. Apply from Schema tab.';
-              $feedback.text('⚠️ ' + warn)
-                .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
-                .show();
-            }
-            setTimeout(function () { $feedback.hide(); }, 6000);
-          }).fail(function () {
-            $btn.text('✅ Schema').prop('disabled', false);
-            $feedback.text('⚠️ Schema generated but auto-apply failed. Apply from Schema tab.')
-              .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
+      $.ajax({
+        url: restUrl() + '/schema/generate',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ post_id: postId }),
+        success: function (res) {
+          var d = res.data || res;
+          if (d.schema || d.success !== false) {
+            $btn.text('Applying...');
+            $.ajax({
+              url: restUrl() + '/schema/apply',
+              method: 'POST',
+              headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+              data: JSON.stringify({ post_id: postId }),
+              success: function (applyRes) {
+                var ad = applyRes.data || applyRes;
+                $btn.text('✅ Schema').prop('disabled', false);
+                if (ad.success !== false && !ad.error) {
+                  $feedback.text('✅ Schema generated and applied.')
+                    .css({'background': '#f0fdf4', 'color': '#166534', 'border': '1px solid #86efac'})
+                    .show();
+                } else {
+                  var warn = ad.message || 'Generated but auto-apply failed. Apply from Schema tab.';
+                  $feedback.text('⚠️ ' + warn)
+                    .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
+                    .show();
+                }
+                setTimeout(function () { $feedback.hide(); }, 6000);
+              },
+              error: function () {
+                $btn.text('✅ Schema').prop('disabled', false);
+                $feedback.text('⚠️ Schema generated but auto-apply failed. Apply from Schema tab.')
+                  .css({'background': '#fef3c7', 'color': '#92400e', 'border': '1px solid #fcd34d'})
+                  .show();
+                setTimeout(function () { $feedback.hide(); }, 6000);
+              }
+            });
+          } else {
+            var msg = d.message || 'Schema generation failed.';
+            $btn.text('⚡ Schema').prop('disabled', false);
+            $feedback.text('⚠️ ' + msg)
+              .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
               .show();
             setTimeout(function () { $feedback.hide(); }, 6000);
-          });
-        } else {
-          var msg = (res.data && res.data.message) ? res.data.message : 'Schema generation failed.';
+          }
+        },
+        error: function (xhr) {
           $btn.text('⚡ Schema').prop('disabled', false);
-          $feedback.text('⚠️ ' + msg)
+          $feedback.text('⚠️ Server error (HTTP ' + xhr.status + '). Check WP error log.')
             .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
             .show();
           setTimeout(function () { $feedback.hide(); }, 6000);
         }
-      }).fail(function (xhr) {
-        $btn.text('⚡ Schema').prop('disabled', false);
-        $feedback.text('⚠️ Server error (HTTP ' + xhr.status + '). Check WP error log.')
-          .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
-          .show();
-        setTimeout(function () { $feedback.hide(); }, 6000);
       });
     });
 
@@ -938,26 +978,25 @@
       var pageId = $sel.data('page-id');
       var role = $sel.val();
       $sel.prop('disabled', true);
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_set_page_role',
-        nonce: cfg.nonce,
-        page_id: pageId,
-        role: role
-      }, function (res) {
-        $sel.prop('disabled', false);
-        if (res.success) {
-          // Update the badge on the card
+      $.ajax({
+        url: restUrl() + '/pages/role',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ page_id: pageId, role: role }),
+        success: function (res) {
+          $sel.prop('disabled', false);
+          var d = res.data || res;
           var $card = $sel.closest('.siloq-page-card');
           var displayType = role || $card.data('type');
           $card.data('type', displayType);
           var $badge = $card.find('.siloq-badge').first();
           $badge.attr('class', 'siloq-badge siloq-badge--' + (displayType || 'gray'))
                 .text(displayType ? displayType.toUpperCase() : 'AUTO');
-        } else {
-          alert(res.data && res.data.message ? res.data.message : 'Failed to update role.');
+        },
+        error: function (xhr) {
+          $sel.prop('disabled', false);
+          if (xhr.status === 403) alert('Blocked by security plugin. Whitelist /wp-json/ in security settings.');
         }
-      }).fail(function () {
-        $sel.prop('disabled', false);
       });
     });
 
@@ -983,7 +1022,7 @@
             $btn.after('<span class="siloq-analyze-error" style="font-size:11px;color:#dc2626;display:block;margin-top:4px;"></span>');
             $errMsg = $btn.next('.siloq-analyze-error');
           }
-          $errMsg.text(xhr.status === 403 ? 'Blocked by security plugin — whitelist admin-ajax.php or /wp-json/' : 'Analysis failed. Try again.');
+          $errMsg.text(xhr.status === 403 ? 'Blocked by security plugin — whitelist /wp-json/ in security settings.' : 'Analysis failed. Try again.');
           setTimeout(function() { $errMsg.text(''); }, 8000);
         }
       });
@@ -998,32 +1037,32 @@
         return;
       }
       $btn.prop('disabled', true).text('Generating...');
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_generate_schema',
-        post_id: postId,
-        nonce: cfg.nonce
-      }, function (res) {
-        if (res.success) {
-          $btn.text('Applying...');
-          $.post(cfg.ajaxUrl, {
-            action: 'siloq_apply_schema',
-            post_id: postId,
-            nonce: cfg.nonce
-          }, function (applyRes) {
-            if (applyRes.success) {
-              $btn.text('Schema Applied').prop('disabled', false);
-            } else {
-              $btn.text('Apply failed').prop('disabled', false);
-            }
-          }).fail(function () {
-            $btn.text('Apply error').prop('disabled', false);
-          });
-        } else {
-          var msg = (res.data && res.data.message) ? res.data.message : 'Generation failed';
-          $btn.text(msg.substring(0, 20)).prop('disabled', false);
-        }
-      }).fail(function () {
-        $btn.text('Error — retry').prop('disabled', false);
+      $.ajax({
+        url: restUrl() + '/schema/generate',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ post_id: postId }),
+        success: function (res) {
+          var d = res.data || res;
+          if (d.schema || d.success !== false) {
+            $btn.text('Applying...');
+            $.ajax({
+              url: restUrl() + '/schema/apply',
+              method: 'POST',
+              headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+              data: JSON.stringify({ post_id: postId }),
+              success: function (applyRes) {
+                var ad = applyRes.data || applyRes;
+                $btn.text(ad.success !== false ? 'Schema Applied' : 'Apply failed').prop('disabled', false);
+              },
+              error: function () { $btn.text('Apply error').prop('disabled', false); }
+            });
+          } else {
+            var msg = d.message || 'Generation failed';
+            $btn.text(msg.substring(0, 20)).prop('disabled', false);
+          }
+        },
+        error: function () { $btn.text('Error — retry').prop('disabled', false); }
       });
     });
   }
@@ -1038,21 +1077,22 @@
       $loadMore.hide();
     }
 
-    $.post(cfg.ajaxUrl, {
-      action: 'siloq_get_pages_list',
-      nonce: cfg.nonce,
-      offset: pagesOffset,
-      filter: pagesFilter
-    }, function (resp) {
-      if (!resp.success) {
+    $.ajax({
+      url: restUrl() + '/pages/list',
+      method: 'GET',
+      headers: { 'X-WP-Nonce': restNonce() },
+      data: { offset: pagesOffset, filter: pagesFilter },
+      success: function (resp) {
+      var rd = resp.data || resp;
+      if (!rd || !rd.pages) {
         if (!append) {
           $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
         }
         return;
       }
 
-      var pages = resp.data.pages;
-      pagesOffset = resp.data.offset;
+      var pages = rd.pages;
+      pagesOffset = rd.offset;
       pagesLoaded = true;
 
       if (!append) $grid.empty();
@@ -1085,9 +1125,11 @@
       }
 
       $loadMore.toggle(pages.length >= 20);
-    }).fail(function () {
-      if (!append) {
-        $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+      },
+      error: function () {
+        if (!append) {
+          $grid.html('<div class="siloq-pages-empty"><div class="siloq-pages-empty__icon">&#9888;</div><p class="siloq-pages-empty__title">Failed to load pages</p></div>');
+        }
       }
     });
   }
@@ -1310,21 +1352,24 @@
         $bar.css('width', pct + '%');
         $msg.text('Applying schema to page ' + done + ' of ' + total + '...');
 
-        $.post(cfg.ajaxUrl, {
-          action:  'siloq_bulk_apply_schema',
-          nonce:   cfg.nonce,
-          post_id: postId
-        }, function (res) {
-          if (res.success) {
-            applied.push({id: postId, title: res.data.title});
-          } else {
-            failed.push({id: postId, title: res.data.title || ('Page ' + postId), error: res.data.message});
+        $.ajax({
+          url: restUrl() + '/schema/bulk-apply',
+          method: 'POST',
+          headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+          data: JSON.stringify({ post_id: postId }),
+          success: function (res) {
+            var d = res.data || res;
+            if (d.title || d.success !== false) {
+              applied.push({id: postId, title: d.title || ('Page ' + postId)});
+            } else {
+              failed.push({id: postId, title: d.title || ('Page ' + postId), error: d.message});
+            }
+            setTimeout(applyNext, 1000);
+          },
+          error: function () {
+            failed.push({id: postId, title: 'Page ' + postId, error: 'Network error'});
+            setTimeout(applyNext, 1000);
           }
-          // 1-second delay between pages to avoid server overload
-          setTimeout(applyNext, 1000);
-        }).fail(function () {
-          failed.push({id: postId, title: 'Page ' + postId, error: 'Network error'});
-          setTimeout(applyNext, 1000);
         });
       }
 
@@ -1337,27 +1382,31 @@
       var $msg = $('#siloq-schema-repair-msg');
       $btn.prop('disabled', true).text('Repairing...');
       $msg.hide();
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_repair_elementor_meta',
-        nonce: cfg.nonce
-      }, function (res) {
-        $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
-        var ok = res.success;
-        var text = (res.data && res.data.message) ? res.data.message : (ok ? 'Repair complete.' : 'Repair failed.');
-        $msg.text(text)
-            .css({
-              'background': ok ? '#f0fdf4' : '#fef2f2',
-              'color': ok ? '#166534' : '#991b1b',
-              'border': '1px solid ' + (ok ? '#86efac' : '#fca5a5')
-            })
-            .show();
-        setTimeout(function () { $msg.hide(); }, 8000);
-      }).fail(function () {
-        $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
-        $msg.text('Request failed — check WP error log.')
-            .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
-            .show();
-        setTimeout(function () { $msg.hide(); }, 6000);
+      $.ajax({
+        url: restUrl() + '/schema/repair',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({}),
+        success: function (res) {
+          $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
+          var d = res.data || res;
+          var text = d.message || 'Repair complete.';
+          $msg.text(text)
+              .css({
+                'background': '#f0fdf4',
+                'color': '#166534',
+                'border': '1px solid #86efac'
+              })
+              .show();
+          setTimeout(function () { $msg.hide(); }, 8000);
+        },
+        error: function () {
+          $btn.prop('disabled', false).text('🔧 Repair Schema Panels');
+          $msg.text('Request failed — check WP error log.')
+              .css({'background': '#fef2f2', 'color': '#991b1b', 'border': '1px solid #fca5a5'})
+              .show();
+          setTimeout(function () { $msg.hide(); }, 6000);
+        }
       });
     });
 
@@ -1366,47 +1415,46 @@
       var $btn = $(this);
       var $row = $btn.closest('.siloq-schema-page-row');
       var postId = $btn.data('post-id');
-      var nonce = cfg.nonce || (window.siloqAjax && window.siloqAjax.nonce) || '';
-      var ajaxUrl = cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl || '';
       $btn.prop('disabled', true).text('Generating...');
-      // Clear any previous inline error for this row
       $row.find('.siloq-schema-inline-error').remove();
-      $.post(ajaxUrl, {
-        action: 'siloq_generate_schema',
-        post_id: postId,
-        nonce: nonce
-      }, function (res) {
-        if (res.success) {
-          $btn.text('✓ Generated').addClass('siloq-btn--success');
-          // Show profile warnings inline (non-blocking)
-          if (res.data && res.data.profile_warnings && res.data.profile_warnings.length) {
-            var warnHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:4px 8px;margin-top:4px;">'
-              + '⚠️ ' + escHtml(res.data.profile_warnings[0]) + '</div>';
-            $btn.after(warnHtml);
+      $.ajax({
+        url: restUrl() + '/schema/generate',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ post_id: postId }),
+        success: function (res) {
+          var d = res.data || res;
+          if (d.schema || d.success !== false) {
+            $btn.text('✓ Generated').addClass('siloq-btn--success');
+            if (d.profile_warnings && d.profile_warnings.length) {
+              var warnHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:4px 8px;margin-top:4px;">'
+                + '⚠️ ' + escHtml(d.profile_warnings[0]) + '</div>';
+              $btn.after(warnHtml);
+            }
+            schemaLoaded = false;
+            setTimeout(function () { loadSchemaStatus(); }, 800);
+          } else {
+            var msg = d.message || 'Schema generation failed.';
+            $btn.text('Error').addClass('siloq-btn--danger');
+            var errHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;margin-top:4px;">'
+              + '⚠️ ' + escHtml(msg);
+            if (d.fix_url) {
+              errHtml += ' <a href="' + escAttr(d.fix_url) + '" target="_blank" style="color:#dc2626;font-weight:600;">Fix now →</a>';
+            }
+            errHtml += '</div>';
+            $btn.after(errHtml);
           }
-          schemaLoaded = false;
-          setTimeout(function () { loadSchemaStatus(); }, 800);
-        } else {
-          var msg = (res.data && res.data.message) ? res.data.message : 'Schema generation failed.';
-          $btn.text('Error').addClass('siloq-btn--danger');
-          // Show error inline in the row, not as an alert
+          setTimeout(function () {
+            $btn.prop('disabled', false).text('Generate Schema').removeClass('siloq-btn--success siloq-btn--danger');
+          }, 3000);
+        },
+        error: function (xhr) {
+          var rawMsg = 'Server error (HTTP ' + xhr.status + '). Check WP error log for details.';
+          $btn.prop('disabled', false).text('Generate Schema');
           var errHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;margin-top:4px;">'
-            + '⚠️ ' + escHtml(msg);
-          if (res.data && res.data.fix_url) {
-            errHtml += ' <a href="' + escAttr(res.data.fix_url) + '" target="_blank" style="color:#dc2626;font-weight:600;">Fix now →</a>';
-          }
-          errHtml += '</div>';
+            + '⚠️ ' + escHtml(rawMsg) + '</div>';
           $btn.after(errHtml);
         }
-        setTimeout(function () {
-          $btn.prop('disabled', false).text('Generate Schema').removeClass('siloq-btn--success siloq-btn--danger');
-        }, 3000);
-      }).fail(function (xhr) {
-        var rawMsg = 'Server error (HTTP ' + xhr.status + '). Check WP error log for details.';
-        $btn.prop('disabled', false).text('Generate Schema');
-        var errHtml = '<div class="siloq-schema-inline-error" style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:4px 8px;margin-top:4px;">'
-          + '⚠️ ' + escHtml(rawMsg) + '</div>';
-        $btn.after(errHtml);
       });
     });
 
@@ -1444,22 +1492,26 @@
   function loadSchemaStatus() {
     var $list = $('#siloq-schema-pages-list');
     $list.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading schema status...</span></div>');
-    $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
-      action: 'siloq_get_all_schema_status',
-      nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
-    }, function (res) {
-      schemaLoaded = true;
-      if (!res.success || !res.data || !res.data.pages) {
-        var syncedCount = (typeof siloqSyncedMetaCount !== 'undefined') ? siloqSyncedMetaCount : -1;
-        var diagMsg = syncedCount === 0
-          ? 'No pages have been synced yet. Go to the <strong>Pages</strong> tab and run <strong>Sync All Pages</strong> first.'
-          : (syncedCount > 0 ? syncedCount + ' pages are synced. Loading schema status — please refresh if this persists.' : 'No synced pages found. Sync pages first from the Pages tab.');
-        $list.html('<div class="siloq-empty"><p>' + diagMsg + '</p></div>');
-        return;
+    $.ajax({
+      url: restUrl() + '/schema/status',
+      method: 'GET',
+      headers: { 'X-WP-Nonce': restNonce() },
+      success: function (res) {
+        schemaLoaded = true;
+        var d = res.data || res;
+        if (!d || !d.pages) {
+          var syncedCount = (typeof siloqSyncedMetaCount !== 'undefined') ? siloqSyncedMetaCount : -1;
+          var diagMsg = syncedCount === 0
+            ? 'No pages have been synced yet. Go to the <strong>Pages</strong> tab and run <strong>Sync All Pages</strong> first.'
+            : (syncedCount > 0 ? syncedCount + ' pages are synced. Loading schema status — please refresh if this persists.' : 'No synced pages found. Sync pages first from the Pages tab.');
+          $list.html('<div class="siloq-empty"><p>' + diagMsg + '</p></div>');
+          return;
+        }
+        renderSchemaPages(d.pages);
+      },
+      error: function () {
+        $list.html('<div class="siloq-empty"><p>Failed to load schema status.</p></div>');
       }
-      renderSchemaPages(res.data.pages);
-    }).fail(function () {
-      $list.html('<div class="siloq-empty"><p>Failed to load schema status.</p></div>');
     });
   }
 
@@ -1528,20 +1580,24 @@
     }
     var $content = $('#siloq-schema-graph-content');
     $content.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading schema graph...</span></div>');
-    $.post(cfg.ajaxUrl || (window.siloqAjax && window.siloqAjax.ajaxurl) || ajaxurl, {
-      action: 'siloq_get_schema_graph',
-      nonce: (window.siloqAjax && window.siloqAjax.nonce) || cfg.nonce
-    }, function (res) {
-      schemaGraphLoaded = true;
-      if (!res.success) {
-        var msg = (res.data && res.data.message) ? res.data.message : 'Schema graph available after site analysis.';
-        $content.html('<div class="siloq-empty"><p>' + escHtml(msg) + '</p></div>');
-        return;
+    $.ajax({
+      url: restUrl() + '/schema/graph',
+      method: 'GET',
+      headers: { 'X-WP-Nonce': restNonce() },
+      success: function (res) {
+        schemaGraphLoaded = true;
+        var d = res.data || res;
+        if (!d || (!d.entities && !d.nodes)) {
+          var msg = d && d.message ? d.message : 'Schema graph available after site analysis.';
+          $content.html('<div class="siloq-empty"><p>' + escHtml(msg) + '</p></div>');
+          return;
+        }
+        renderSchemaGraph(d);
+      },
+      error: function () {
+        schemaGraphLoaded = true;
+        $content.html('<div class="siloq-empty"><p>Schema graph available after site analysis.</p></div>');
       }
-      renderSchemaGraph(res.data);
-    }).fail(function () {
-      schemaGraphLoaded = true;
-      $content.html('<div class="siloq-empty"><p>Schema graph available after site analysis.</p></div>');
     });
   }
 
@@ -1615,17 +1671,20 @@
     function loadRedirects() {
       var $list = $('#siloq-redir-list');
       $list.html('<div class="siloq-pages-loading"><span class="siloq-spinner"></span><span>Loading redirects...</span></div>');
-      $.post(cfg.ajaxUrl, { action: 'siloq_get_redirects', nonce: cfg.nonce }, function (res) {
-        redirectsLoaded = true;
-        if (!res.success) {
-          $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Failed to load redirects. The redirects table may not exist yet — try deactivating and reactivating the Siloq plugin.</p>');
-          return;
+      $.ajax({
+        url: restUrl() + '/redirects',
+        method: 'GET',
+        headers: { 'X-WP-Nonce': restNonce() },
+        success: function (res) {
+          redirectsLoaded = true;
+          var d = res.data || res;
+          allRedirects = d.redirects || (Array.isArray(d) ? d : []);
+          updateRedirectCounts();
+          renderRedirectList(allRedirects);
+        },
+        error: function () {
+          $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Request failed — check your connection and try again.</p>');
         }
-        allRedirects = res.data.redirects || [];
-        updateRedirectCounts();
-        renderRedirectList(allRedirects);
-      }).fail(function () {
-        $list.html('<p style="font-size:13px;color:#991b1b;padding:12px;">Request failed — check your connection and try again.</p>');
       });
     }
 
@@ -1711,9 +1770,12 @@
     $(document).on('change', '.siloq-redir-toggle', function () {
       var $cb = $(this);
       var id  = $cb.data('id');
-      $.post(cfg.ajaxUrl, { action: 'siloq_toggle_redirect', nonce: cfg.nonce, redirect_id: id }, function (res) {
-        if (res.success) {
-          // Refresh the list to show updated state
+      $.ajax({
+        url: restUrl() + '/redirects/toggle',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ redirect_id: id }),
+        success: function () {
           redirectsLoaded = false;
           loadRedirects();
         }
@@ -1727,14 +1789,19 @@
       var id   = $btn.data('id');
       if (!confirm('Delete this redirect? This cannot be undone.')) return;
       $btn.text('...').prop('disabled', true);
-      $.post(cfg.ajaxUrl, { action: 'siloq_delete_redirect', nonce: cfg.nonce, redirect_id: id }, function (res) {
-        if (res.success) {
+      $.ajax({
+        url: restUrl() + '/redirects/delete',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ redirect_id: id }),
+        success: function () {
           $btn.closest('tr').fadeOut(300, function () { $(this).remove(); });
           allRedirects = allRedirects.filter(function(r){ return r.id != id; });
           updateRedirectCounts();
-        } else {
+        },
+        error: function () {
           $btn.text('🗑️').prop('disabled', false);
-          alert(res.data && res.data.message ? res.data.message : 'Delete failed.');
+          alert('Delete failed.');
         }
       });
     });
@@ -1754,24 +1821,26 @@
       }
 
       $btn.prop('disabled', true).text('Adding...');
-      $.post(cfg.ajaxUrl, {
-        action: 'siloq_add_redirect',
-        nonce: cfg.nonce,
-        from: from,
-        to: to,
-        status_code: type
-      }, function (res) {
-        $btn.prop('disabled', false).text('Add Redirect');
-        if (res.success) {
+      $.ajax({
+        url: restUrl() + '/redirects',
+        method: 'POST',
+        headers: { 'X-WP-Nonce': restNonce(), 'Content-Type': 'application/json' },
+        data: JSON.stringify({ from: from, to: to, status_code: type }),
+        success: function (res) {
+          $btn.prop('disabled', false).text('Add Redirect');
+          var d = res.data || res;
           $('#siloq-redir-from').val('');
           $('#siloq-redir-to').val('');
-          $msg.text('✅ ' + (res.data.message || 'Redirect added.')).css({'background':'#f0fdf4','color':'#166534','border':'1px solid #86efac'}).show();
+          $msg.text('✅ ' + (d.message || 'Redirect added.')).css({'background':'#f0fdf4','color':'#166534','border':'1px solid #86efac'}).show();
           redirectsLoaded = false;
           loadRedirects();
-        } else {
-          $msg.text('⚠️ ' + (res.data && res.data.message ? res.data.message : 'Failed.')).css({'background':'#fef2f2','color':'#991b1b','border':'1px solid #fca5a5'}).show();
+          setTimeout(function () { $msg.fadeOut(); }, 5000);
+        },
+        error: function () {
+          $btn.prop('disabled', false).text('Add Redirect');
+          $msg.text('⚠️ Failed to add redirect.').css({'background':'#fef2f2','color':'#991b1b','border':'1px solid #fca5a5'}).show();
+          setTimeout(function () { $msg.fadeOut(); }, 5000);
         }
-        setTimeout(function () { $msg.fadeOut(); }, 5000);
       });
     });
 
