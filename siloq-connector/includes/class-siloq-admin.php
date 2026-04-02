@@ -3642,6 +3642,262 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 }(jQuery));
 </script>
 
+<!-- ─── Optimization Progress Card ─── -->
+<div class="siloq-card" id="siloq-progress-card" style="margin-top:16px;">
+    <div class="siloq-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h3 class="siloq-card-title">📈 Optimization Progress</h3>
+        <div style="display:flex;gap:8px;">
+            <button type="button" id="siloq-capture-snapshot-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Capture Snapshot</button>
+            <button type="button" id="siloq-view-timeline-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;display:none;">View Timeline</button>
+            <button type="button" id="siloq-generate-case-study-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;display:none;">Generate Case Study</button>
+        </div>
+    </div>
+    <div id="siloq-progress-content" style="padding:12px 0;">
+        <div style="color:#6b7280;font-size:13px;text-align:center;padding:20px;">Loading progress data...</div>
+    </div>
+    <div id="siloq-progress-bar-wrap" style="display:none;padding:8px 0;">
+        <div style="background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden;">
+            <div id="siloq-cs-progress-bar" style="background:linear-gradient(135deg,#FDD96A,#D39938);height:6px;width:0%;transition:width 0.3s;border-radius:4px;"></div>
+        </div>
+        <div id="siloq-cs-progress-msg" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+    </div>
+</div>
+
+<!-- ─── Case Study Modal ─── -->
+<div id="siloq-case-study-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;align-items:flex-start;justify-content:center;padding-top:40px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:12px;padding:32px;width:720px;max-width:94vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:17px;font-weight:700;color:#111827;">Case Study</h3>
+            <div style="display:flex;gap:8px;">
+                <button type="button" id="siloq-copy-markdown-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm">Copy Markdown</button>
+                <button type="button" onclick="document.getElementById('siloq-case-study-modal').style.display='none';" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;padding:0;line-height:1;">&times;</button>
+            </div>
+        </div>
+        <div id="siloq-case-study-content" style="font-size:13px;line-height:1.7;color:#374151;white-space:pre-wrap;font-family:monospace;background:#f9fafb;padding:16px;border-radius:6px;"></div>
+    </div>
+</div>
+
+<!-- ─── Timeline Modal ─── -->
+<div id="siloq-timeline-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;align-items:flex-start;justify-content:center;padding-top:40px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:12px;padding:32px;width:640px;max-width:94vw;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;font-size:17px;font-weight:700;color:#111827;">Optimization Timeline</h3>
+            <button type="button" onclick="document.getElementById('siloq-timeline-modal').style.display='none';" style="background:none;border:none;font-size:22px;cursor:pointer;color:#6b7280;padding:0;line-height:1;">&times;</button>
+        </div>
+        <div id="siloq-timeline-content" style="font-size:13px;"></div>
+    </div>
+</div>
+
+<script>
+(function($) {
+    var restUrl = (siloqDash && siloqDash.restUrl || '').replace(/\/$/,'');
+    var restNonce = (siloqDash && siloqDash.restNonce) || '';
+    var caseStudyMarkdown = '';
+
+    function loadProgress() {
+        if (!restUrl) return;
+        $.ajax({
+            url: restUrl + '/snapshots',
+            method: 'GET',
+            headers: { 'X-WP-Nonce': restNonce },
+            timeout: 15000,
+            success: function(resp) {
+                var snapshots = resp.snapshots || [];
+                var hasBaseline = resp.has_baseline;
+                var $content = $('#siloq-progress-content');
+
+                if (!hasBaseline) {
+                    $content.html('<div style="color:#6b7280;font-size:13px;padding:12px 0;">Apply your first optimization to start tracking progress toward your case study.</div>');
+                    return;
+                }
+
+                var baseline = snapshots.find(function(s){ return s.snapshot_type === 'baseline'; });
+                var latest = null;
+                for (var i = snapshots.length - 1; i >= 0; i--) {
+                    if (snapshots[i].snapshot_type === 'progress' || snapshots[i].snapshot_type === 'milestone') {
+                        latest = snapshots[i];
+                        break;
+                    }
+                }
+                if (!latest) latest = baseline;
+
+                var startedDate = baseline ? new Date(baseline.captured_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—';
+                var daysAgo = baseline ? Math.floor((Date.now() - new Date(baseline.captured_at)) / 86400000) : 0;
+
+                var diff = latest && baseline ? {
+                    score: (latest.ehs_score || 0) - (baseline.ehs_score || 0),
+                    schema: (latest.pages_with_schema || 0) - (baseline.pages_with_schema || 0),
+                    titles: (baseline.missing_meta_title_count || 0) - (latest.missing_meta_title_count || 0),
+                    clicks: baseline.gsc_total_clicks && latest.gsc_total_clicks ?
+                        (((latest.gsc_total_clicks - baseline.gsc_total_clicks) / baseline.gsc_total_clicks) * 100).toFixed(1) : null,
+                } : {score:0,schema:0,titles:0,clicks:null};
+
+                var html = '<div style="font-size:12px;color:#6b7280;margin-bottom:12px;">Started: ' + startedDate + ' (' + daysAgo + ' days ago)</div>';
+                html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">';
+
+                function statCard(label, before, after, change) {
+                    var color = change > 0 ? '#16a34a' : change < 0 ? '#dc2626' : '#6b7280';
+                    var arrow = change > 0 ? '↑' : change < 0 ? '↓' : '→';
+                    return '<div style="background:#f9fafb;border-radius:8px;padding:12px;">'
+                        + '<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">' + label + '</div>'
+                        + '<div style="font-size:18px;font-weight:700;color:#111827;">' + after + '</div>'
+                        + '<div style="font-size:11px;color:' + color + ';">' + arrow + ' ' + (change >= 0 ? '+' : '') + change + ' from baseline</div>'
+                        + '</div>';
+                }
+
+                html += statCard('Logic Grade', baseline.ehs_score || 0, latest.ehs_score || 0, diff.score);
+                html += statCard('Schema Pages', baseline.pages_with_schema || 0, latest.pages_with_schema || 0, diff.schema);
+                html += statCard('Titles Fixed', baseline.missing_meta_title_count || 0, latest.missing_meta_title_count || 0, diff.titles);
+                if (diff.clicks !== null) {
+                    html += '<div style="background:#f9fafb;border-radius:8px;padding:12px;"><div style="font-size:11px;color:#6b7280;margin-bottom:4px;">GSC Clicks</div><div style="font-size:18px;font-weight:700;color:#111827;">' + (latest.gsc_total_clicks || 0) + '</div><div style="font-size:11px;color:' + (diff.clicks >= 0 ? '#16a34a' : '#dc2626') + ';">' + (diff.clicks >= 0 ? '+' : '') + diff.clicks + '%</div></div>';
+                }
+                html += '</div>';
+                $content.html(html);
+
+                $('#siloq-view-timeline-btn, #siloq-generate-case-study-btn').show();
+            },
+            error: function() {
+                $('#siloq-progress-content').html('<div style="color:#6b7280;font-size:13px;padding:12px 0;">Could not load progress data.</div>');
+            }
+        });
+    }
+
+    // Capture snapshot
+    $('#siloq-capture-snapshot-btn').on('click', function() {
+        var $btn = $(this);
+        $btn.text('Capturing...').prop('disabled', true);
+        $.ajax({
+            url: restUrl + '/snapshots/capture',
+            method: 'POST',
+            headers: { 'X-WP-Nonce': restNonce },
+            success: function() {
+                $btn.text('Captured!').css('color','#16a34a');
+                setTimeout(function(){ $btn.text('Capture Snapshot').prop('disabled',false).css('color',''); loadProgress(); }, 2000);
+            },
+            error: function() { $btn.text('Capture Snapshot').prop('disabled', false); }
+        });
+    });
+
+    // Generate case study
+    $('#siloq-generate-case-study-btn').on('click', function() {
+        var $btn = $(this);
+        $btn.text('Generating...').prop('disabled', true);
+        $('#siloq-progress-bar-wrap').show();
+        $('#siloq-cs-progress-bar').css('width','10%');
+        $('#siloq-cs-progress-msg').text('Starting case study generation...');
+
+        $.ajax({
+            url: restUrl + '/jobs/case-study',
+            method: 'POST',
+            headers: { 'X-WP-Nonce': restNonce },
+            success: function(resp) {
+                if (!resp.job_id) { $btn.text('Generate Case Study').prop('disabled', false); return; }
+                pollCaseStudyJob(resp.job_id, $btn);
+            },
+            error: function() { $btn.text('Generate Case Study').prop('disabled', false); $('#siloq-progress-bar-wrap').hide(); }
+        });
+    });
+
+    function pollCaseStudyJob(jobId, $btn) {
+        var startTime = Date.now();
+        function poll() {
+            var elapsed = Date.now() - startTime;
+            if (elapsed > 300000) {
+                $btn.text('Generate Case Study').prop('disabled', false);
+                $('#siloq-progress-bar-wrap').hide();
+                return;
+            }
+            var interval = elapsed < 60000 ? 5000 : elapsed < 180000 ? 15000 : 30000;
+            setTimeout(function() {
+                $.ajax({
+                    url: restUrl + '/jobs/' + jobId + '/status',
+                    headers: { 'X-WP-Nonce': restNonce },
+                    success: function(job) {
+                        if (job.data) job = job.data;
+                        var pct = job.progress_pct || (job.status === 'running' ? 50 : 0);
+                        $('#siloq-cs-progress-bar').css('width', Math.max(pct, 10) + '%');
+                        $('#siloq-cs-progress-msg').text(job.progress_message || 'Generating...');
+
+                        if (job.status === 'complete') {
+                            $('#siloq-cs-progress-bar').css('width', '100%');
+                            $('#siloq-progress-bar-wrap').hide();
+                            $btn.text('Generate Case Study').prop('disabled', false);
+                            caseStudyMarkdown = (job.result && job.result.case_study_markdown) || '';
+                            $('#siloq-case-study-content').text(caseStudyMarkdown);
+                            $('#siloq-case-study-modal').css('display', 'flex');
+                        } else if (job.status === 'failed') {
+                            $('#siloq-progress-bar-wrap').hide();
+                            $btn.text('Generate Case Study').prop('disabled', false);
+                            alert('Case study generation failed: ' + (job.error || 'Unknown error'));
+                        } else {
+                            poll();
+                        }
+                    },
+                    error: function() { poll(); }
+                });
+            }, interval);
+        }
+        poll();
+    }
+
+    // View timeline
+    $('#siloq-view-timeline-btn').on('click', function() {
+        var $content = $('#siloq-timeline-content');
+        $content.html('<div style="color:#6b7280;text-align:center;padding:20px;">Loading...</div>');
+        $('#siloq-timeline-modal').css('display', 'flex');
+        $.ajax({
+            url: restUrl + '/snapshots/events',
+            headers: { 'X-WP-Nonce': restNonce },
+            success: function(resp) {
+                var events = resp.events || [];
+                if (!events.length) {
+                    $content.html('<div style="color:#6b7280;font-size:13px;padding:12px;">No optimization events recorded yet. Apply a fix to start the timeline.</div>');
+                    return;
+                }
+                var typeColors = {meta_fixed:'#7c3aed',schema_added:'#d97706',internal_link:'#2563eb',blog_published:'#16a34a',cannibalization:'#dc2626',redirect_applied:'#6b7280',url_restructured:'#6b7280',content_improved:'#0891b2',orphan_connected:'#059669'};
+                var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+                events.forEach(function(e) {
+                    var color = typeColors[e.event_type] || '#6b7280';
+                    var date = new Date(e.applied_at).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+                    html += '<div style="display:flex;gap:12px;align-items:flex-start;">'
+                        + '<div style="min-width:60px;font-size:11px;color:#6b7280;padding-top:2px;">' + date + '</div>'
+                        + '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';margin-top:5px;flex-shrink:0;"></div>'
+                        + '<div><div style="font-size:13px;color:#111827;">' + $('<span>').text(e.description).html() + '</div>'
+                        + (e.page ? '<div style="font-size:11px;color:#6b7280;">' + $('<span>').text(e.page.title).html() + '</div>' : '')
+                        + '</div></div>';
+                });
+                html += '</div>';
+                $content.html(html);
+            },
+            error: function() { $content.html('<div style="color:#dc2626;font-size:13px;">Could not load timeline.</div>'); }
+        });
+    });
+
+    // Copy markdown
+    $('#siloq-copy-markdown-btn').on('click', function() {
+        if (!caseStudyMarkdown) return;
+        navigator.clipboard.writeText(caseStudyMarkdown).then(function() {
+            $('#siloq-copy-markdown-btn').text('Copied!').css('color','#16a34a');
+            setTimeout(function(){ $('#siloq-copy-markdown-btn').text('Copy Markdown').css('color',''); }, 2000);
+        });
+    });
+
+    // Close modals on overlay click
+    $(document).on('click', '#siloq-case-study-modal, #siloq-timeline-modal', function(e) {
+        if ($(e.target).is(this)) $(this).hide();
+    });
+
+    // Load on Dashboard tab open
+    $(document).on('click', '[aria-controls="siloq-tab-dashboard"]', function() {
+        setTimeout(loadProgress, 300);
+    });
+    // Also load on initial page load if dashboard is active
+    if ($('#siloq-tab-dashboard').hasClass('active')) {
+        loadProgress();
+    }
+})(jQuery);
+</script>
+
             </div><!-- /dashboard tab -->
 
             <!-- ═══════ SEO/GEO PLAN TAB ═══════ -->

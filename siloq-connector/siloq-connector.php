@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.285
+ * Version: 1.5.289
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.288');
+define('SILOQ_VERSION', '1.5.289');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -190,6 +190,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-content-editor.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-debug-logger.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-image-audit.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-case-study.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-ready.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-business-rules.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-scanner-shortcode.php';
@@ -688,6 +689,8 @@ class Siloq_Connector {
                 'ajaxUrl'         => admin_url('admin-ajax.php'),
                 'adminUrl'        => admin_url('admin.php'),
                 'nonce'           => wp_create_nonce('siloq_ajax_nonce'),
+                'restUrl'         => esc_url_raw( rest_url( 'siloq/v1' ) ),
+                'restNonce'       => wp_create_nonce( 'wp_rest' ),
                 'siteScore'       => intval(get_option('siloq_site_score', 42)),
                 'siteId'          => get_option('siloq_site_id', ''),
                 'apiBase'         => rtrim( get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/' ),
