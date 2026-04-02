@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.283
+ * Version: 1.5.285
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.283');
+define('SILOQ_VERSION', '1.5.288');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -513,6 +513,10 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_run_topical_audit',  ['Siloq_Agent_Pages', 'ajax_run_topical_audit']);
         add_action('wp_ajax_siloq_run_blueprint_analysis', ['Siloq_Admin', 'ajax_run_blueprint_analysis']);
 
+        // Job wrappers (WP AJAX fallback for CORS-blocked sites)
+        add_action('wp_ajax_siloq_start_job',   array('Siloq_Admin', 'ajax_start_job'));
+        add_action('wp_ajax_siloq_job_status',  array('Siloq_Admin', 'ajax_job_status'));
+
         // Settings link
         add_filter('plugin_action_links_' . SILOQ_PLUGIN_BASENAME, array($this, 'add_settings_link'));
     }
@@ -686,6 +690,8 @@ class Siloq_Connector {
                 'nonce'           => wp_create_nonce('siloq_ajax_nonce'),
                 'siteScore'       => intval(get_option('siloq_site_score', 42)),
                 'siteId'          => get_option('siloq_site_id', ''),
+                'apiBase'         => rtrim( get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/' ),
+                'apiToken'        => get_option('siloq_api_key', ''),
                 'hasAnthropicKey' => ! empty( get_option('siloq_anthropic_api_key', '') ) ? '1' : '',
                 'qwCompleted'     => $qw_completed,
                 'businessName'    => get_bloginfo( 'name' ),

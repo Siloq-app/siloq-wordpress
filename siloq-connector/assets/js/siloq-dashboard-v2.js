@@ -663,77 +663,331 @@
     });
   });
 
-  // ── Fix All — bulk apply titles + descriptions ────────────────────────
-  $(document).on('click', '#siloq-fix-all-btn', function() {
-    var $btn = $(this);
-    // Collect all pages with missing titles or descriptions from Priority Actions
-    var postIds = [];
-    $('#siloq-actions-content .siloq-action-apply-btn').each(function() {
-      var id = $(this).data('post-id');
-      if (id && postIds.indexOf(id) === -1) postIds.push(id);
-    });
-    // Also collect from Quick Wins
-    $('#siloq-issues-content .siloq-qw-apply-btn').each(function() {
-      var id = $(this).data('post-id');
-      if (id && postIds.indexOf(id) === -1) postIds.push(id);
-    });
+  // ── Unified Job Helpers (direct API → WP AJAX fallback) ──────────────
 
-    if (!postIds.length) {
-      $('#siloq-fix-all-bar').hide();
+  function siloqCreateJob(jobType, onJobId, onError) {
+    var siteId = cfg.siteId;
+    var apiBase = cfg.apiBase;
+    var apiToken = cfg.apiToken;
+
+    var endpointMap = {
+      'full_audit':      apiBase + '/sites/' + siteId + '/jobs/full-audit/',
+      'meta_generation': apiBase + '/sites/' + siteId + '/jobs/generate-meta/',
+      'audit_links':     apiBase + '/sites/' + siteId + '/jobs/audit-links/'
+    };
+    var endpoint = endpointMap[jobType];
+    if (!endpoint) { if (onError) onError('Unknown job type'); return; }
+
+    // Try direct API first
+    $.ajax({
+      url: endpoint,
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiToken },
+      success: function(resp) {
+        if (resp && resp.job_id) {
+          onJobId(resp.job_id, resp.already_running || false);
+        } else if (onError) {
+          onError('No job_id in response');
+        }
+      },
+      error: function() {
+        // Fallback to WP AJAX proxy
+        $.post(cfg.ajaxUrl, {
+          action: 'siloq_start_job',
+          nonce: cfg.nonce,
+          job_type: jobType
+        }, function(resp) {
+          if (resp.success && resp.data && resp.data.job_id) {
+            onJobId(resp.data.job_id, resp.data.already_running || false);
+          } else if (onError) {
+            onError((resp.data && resp.data.message) || 'Failed to start job');
+          }
+        }).fail(function() {
+          if (onError) onError('Both API and WP AJAX failed');
+        });
+      }
+    });
+  }
+
+  function siloqPollJob(jobId, onProgress, onComplete, onError) {
+    var apiBase = cfg.apiBase;
+    var apiToken = cfg.apiToken;
+
+    var pollInterval = setInterval(function() {
+      // Try direct API first
+      $.ajax({
+        url: apiBase + '/jobs/' + jobId + '/',
+        headers: { 'Authorization': 'Bearer ' + apiToken },
+        success: function(job) {
+          handleJobPoll(job);
+        },
+        error: function() {
+          // WP AJAX fallback
+          $.post(cfg.ajaxUrl, {
+            action: 'siloq_job_status',
+            nonce: cfg.nonce,
+            job_id: jobId
+          }, function(resp) {
+            if (resp.success && resp.data) {
+              handleJobPoll(resp.data);
+            }
+          });
+        }
+      });
+    }, 5000);
+
+    function handleJobPoll(job) {
+      if (onProgress) onProgress(job);
+      if (job.status === 'complete') {
+        clearInterval(pollInterval);
+        if (onComplete) onComplete(job);
+      } else if (job.status === 'failed') {
+        clearInterval(pollInterval);
+        if (onError) onError(job.error || 'Job failed');
+      }
+    }
+
+    return pollInterval;
+  }
+
+  // ── Fix All — job-based polling for titles + descriptions ─────────────
+  $(document).on('click', '#siloq-fix-all-btn', function(e) {
+    e.preventDefault();
+    var $btn = $(this);
+    if (!cfg.siteId) { alert('Site not connected.'); return; }
+
+    $btn.text('Starting...').prop('disabled', true);
+
+    siloqCreateJob('meta_generation', function(jobId, alreadyRunning) {
+      var msg = alreadyRunning ? 'Fixing titles...' : 'Starting meta generation...';
+      pollFixAllJob(jobId, $btn, msg);
+    }, function(err) {
+      $btn.text('Fix All Missing Titles & Descriptions').prop('disabled', false);
+      alert('Could not start background job. ' + err);
+    });
+  });
+
+  function pollFixAllJob(jobId, $btn, initialMessage) {
+    var $progress = $('#siloq-fix-all-progress');
+    $progress.html(
+      '<div style="font-size:12px;color:#166534;font-weight:600;margin-bottom:5px;" id="siloq-fix-progress-msg">' + escHtml(initialMessage) + '</div>' +
+      '<div style="background:#bbf7d0;border-radius:999px;height:6px;"><div id="siloq-fix-progress-bar" style="height:100%;background:#059669;border-radius:999px;width:0%;transition:width 0.3s;"></div></div>' +
+      '<div style="font-size:11px;color:#9ca3af;margin-top:4px;" id="siloq-fix-progress-pct">0%</div>'
+    ).show();
+    $btn.text('Running...').prop('disabled', true);
+
+    siloqPollJob(jobId,
+      function(job) { // onProgress
+        var pct = job.progress_pct || 0;
+        var msg = job.progress_message || 'Processing...';
+        $('#siloq-fix-progress-bar').css('width', pct + '%');
+        $('#siloq-fix-progress-pct').text(pct + '%');
+        $('#siloq-fix-progress-msg').text(msg);
+      },
+      function(job) { // onComplete
+        var count = (job.result && job.result.pages_optimized) || 0;
+        $btn.text('✓ ' + count + ' Pages Optimized').prop('disabled', false).css('background', '#16a34a');
+        $('#siloq-fix-progress-msg').text('Complete — ' + count + ' pages now have Siloq-managed meta. AIOSEO is suppressed for these pages.');
+        $('#siloq-fix-progress-bar').css('width', '100%');
+        $('#siloq-fix-progress-pct').text('100%');
+        $('#siloq-fix-all-summary')
+          .html('<strong>' + count + ' pages optimized</strong>')
+          .css({'background': '#f0fdf4', 'color': '#166534', 'border': '1px solid #86efac', 'border-radius': '8px', 'padding': '12px 16px'})
+          .show();
+        setTimeout(function() { if (typeof loadPlanData === 'function') loadPlanData(); }, 2000);
+      },
+      function(err) { // onError
+        $btn.text('Error — Retry').prop('disabled', false).css('background', '#dc2626');
+        $('#siloq-fix-progress-msg').text('Error: ' + err);
+      }
+    );
+  }
+
+  // ── Internal Link Audit ───────────────────────────────────────────────
+  $(document).on('click', '#siloq-audit-links-btn', function() {
+    var $btn = $(this);
+    if (!cfg.siteId) { alert('Site not connected.'); return; }
+
+    $btn.text('Auditing...').prop('disabled', true);
+    $('#siloq-link-audit-results').html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">Auditing internal link structure...</div>');
+
+    siloqCreateJob('audit_links', function(jobId) {
+      pollLinkAudit(jobId, $btn);
+    }, function(err) {
+      $btn.text('Run Link Audit').prop('disabled', false);
+      $('#siloq-link-audit-results').html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + escHtml(err) + '</div>');
+    });
+  });
+
+  function pollLinkAudit(jobId, $btn) {
+    siloqPollJob(jobId,
+      function(job) { // onProgress
+        $('#siloq-link-audit-results').html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">' + escHtml(job.progress_message || 'Auditing...') + '</div>');
+      },
+      function(job) { // onComplete
+        $btn.text('Re-run Audit').prop('disabled', false);
+        renderLinkFindings(job.result);
+      },
+      function(err) { // onError
+        $btn.text('Run Link Audit').prop('disabled', false);
+        $('#siloq-link-audit-results').html('<div style="color:#dc2626;font-size:13px;padding:8px;">Audit failed: ' + escHtml(err) + '</div>');
+      }
+    );
+  }
+
+  // ── Run Full Audit (Dashboard tab) ────────────────────────────────────
+  $(document).on('click', '#siloq-full-audit-btn', function() {
+    var $btn = $(this);
+    if (!cfg.siteId) { alert('Site not connected.'); return; }
+
+    $btn.text('Starting Full Audit...').prop('disabled', true);
+    var $status = $('#siloq-full-audit-status');
+    $status.html('<div style="color:#6b7280;font-size:12px;padding:6px 0;">Starting full site audit...</div>').show();
+
+    siloqCreateJob('full_audit', function(jobId, alreadyRunning) {
+      if (alreadyRunning) {
+        $status.html('<div style="color:#d97706;font-size:12px;padding:6px 0;">Audit already running — polling for results...</div>');
+      }
+      siloqPollJob(jobId,
+        function(job) {
+          var pct = job.progress_pct || 0;
+          var msg = job.progress_message || 'Auditing...';
+          $status.html('<div style="color:#6b7280;font-size:12px;padding:6px 0;">' + escHtml(msg) + ' (' + pct + '%)</div>');
+        },
+        function(job) {
+          $btn.text('Re-run Full Audit').prop('disabled', false);
+          var score = (job.result && job.result.site_score) || '--';
+          $status.html('<div style="color:#16a34a;font-size:12px;font-weight:600;padding:6px 0;">✓ Audit complete — Site Score: ' + escHtml(String(score)) + '</div>');
+          setTimeout(function() { location.reload(); }, 3000);
+        },
+        function(err) {
+          $btn.text('Run Full Audit').prop('disabled', false);
+          $status.html('<div style="color:#dc2626;font-size:12px;padding:6px 0;">Audit failed: ' + escHtml(err) + '</div>');
+        }
+      );
+    }, function(err) {
+      $btn.text('Run Full Audit').prop('disabled', false);
+      $status.html('<div style="color:#dc2626;font-size:12px;padding:6px 0;">' + escHtml(err) + '</div>');
+    });
+  });
+
+  function renderLinkFindings(result) {
+    if (!result) return;
+    var findings = (result.critical || []).concat(result.high || []);
+    var $wrap = $('#siloq-link-audit-results');
+
+    if (!findings.length) {
+      $wrap.html('<div style="color:#16a34a;font-size:13px;padding:12px;">✓ No internal link issues found. Reverse silo structure looks good.</div>');
       return;
     }
 
-    $btn.prop('disabled', true).text('Fixing...');
-    $('#siloq-fix-all-progress').show();
-    var applied = [], failed = [], total = postIds.length, done = 0;
+    var criticalCount = (result.critical || []).length;
+    var highCount = (result.high || []).length;
 
-    // Fetch page titles for progress display
-    var pageTitles = {};
-    $('#siloq-actions-content .siloq-action-apply-btn').each(function() {
-      var id = $(this).data('post-id');
-      var headline = $(this).closest('.siloq-action-card').find('p').first().text();
-      if (id) pageTitles[id] = headline || ('Page ' + id);
+    var html = '<div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">';
+    if (criticalCount) html += '<span style="background:#fee2e2;color:#dc2626;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">' + criticalCount + ' Critical</span>';
+    if (highCount) html += '<span style="background:#fef3c7;color:#d97706;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;">' + highCount + ' High</span>';
+    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+
+    findings.slice(0, 20).forEach(function(f) {
+      var isCritical = f.severity === 'critical';
+      var borderColor = isCritical ? '#dc2626' : '#d97706';
+      var badgeColor = isCritical ? '#fee2e2' : '#fef3c7';
+      var badgeText = isCritical ? '#dc2626' : '#d97706';
+
+      html += '<div style="border-left:3px solid ' + borderColor + ';padding:8px 12px;background:#fafafa;border-radius:0 6px 6px 0;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">';
+      html += '<div>';
+      html += '<span style="background:' + badgeColor + ';color:' + badgeText + ';font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600;margin-right:6px;">' + (isCritical ? 'CRITICAL' : 'HIGH') + '</span>';
+      html += '<span style="font-size:13px;color:#111827;">' + escHtml(f.message || '') + '</span>';
+      html += '</div>';
+      if (f.fix_type === 'add_internal_link' && f.source_page_id && f.target_page_id) {
+        html += '<button class="siloq-btn siloq-btn--primary siloq-btn--sm siloq-fix-link-btn" ' +
+          'data-source="' + f.source_page_id + '" ' +
+          'data-target="' + f.target_page_id + '" ' +
+          'data-anchor="' + escHtml(f.suggested_anchor || '') + '" ' +
+          'style="font-size:10px;padding:3px 8px;white-space:nowrap;">Add Link</button>';
+      }
+      html += '</div>';
+      if (f.suggested_anchor) {
+        html += '<div style="font-size:11px;color:#6b7280;margin-top:4px;">Suggested anchor: <em>"' + escHtml(f.suggested_anchor) + '"</em></div>';
+      }
+      html += '</div>';
     });
 
-    function applyNext() {
-      if (!postIds.length) {
-        $('#siloq-fix-all-progress').hide();
-        $btn.prop('disabled', false).text('Fix All Missing Titles & Descriptions');
-        var summaryHtml = '<strong>' + applied.length + ' pages updated</strong>';
-        if (applied.length) {
-          summaryHtml += '<ul style="margin:8px 0 0;padding:0 0 0 16px;font-size:12px;">';
-          applied.forEach(function(a) { summaryHtml += '<li>' + escHtml(a.title) + (a.seo_title ? ' — Title: "' + escHtml(a.seo_title.substring(0, 40)) + '..."' : '') + '</li>'; });
-          summaryHtml += '</ul>';
-        }
-        if (failed.length) summaryHtml += '<div style="color:#dc2626;margin-top:6px;font-size:12px;">' + failed.length + ' failed: ' + failed.map(function(f){ return escHtml(f.title); }).join(', ') + '</div>';
-
-        $('#siloq-fix-all-summary')
-          .html(summaryHtml)
-          .css({'background': failed.length ? '#fef2f2' : '#f0fdf4', 'color': failed.length ? '#991b1b' : '#166534', 'border': '1px solid ' + (failed.length ? '#fca5a5' : '#86efac'), 'border-radius': '8px', 'padding': '12px 16px'})
-          .show();
-        if (!failed.length) $('#siloq-fix-all-bar').hide();
-        return;
-      }
-
-      var postId = postIds.shift();
-      done++;
-      var pct = Math.round((done / total) * 100);
-      $('#siloq-fix-all-pbar').css('width', pct + '%');
-      $('#siloq-fix-all-msg').text('Applying to ' + (pageTitles[postId] || 'Page ' + postId) + '... (' + done + ' of ' + total + ')');
-
-      $.post(cfg.ajaxUrl, { action: 'siloq_fix_all_seo', nonce: cfg.nonce, post_id: postId }, function(res) {
-        if (res.success) {
-          applied.push({ title: res.data.title || ('Page ' + postId), seo_title: res.data.applied && res.data.applied.title });
-        } else {
-          failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
-        }
-        setTimeout(applyNext, 600);
-      }).fail(function() {
-        failed.push({ title: pageTitles[postId] || ('Page ' + postId) });
-        setTimeout(applyNext, 600);
-      });
+    html += '</div>';
+    if (findings.length > 20) {
+      html += '<div style="font-size:11px;color:#9ca3af;margin-top:8px;text-align:center;">Showing 20 of ' + findings.length + ' issues</div>';
     }
-    applyNext();
+
+    $wrap.html(html);
+    if (criticalCount + highCount > 0) {
+      $('#siloq-fix-all-links-btn').show();
+    }
+  }
+
+  // "Add Link" button — fire fix-link job
+  $(document).on('click', '.siloq-fix-link-btn', function() {
+    var $btn = $(this);
+    var sourceId = $btn.data('source');
+    var targetId = $btn.data('target');
+    var anchor = $btn.data('anchor');
+    var siteId = cfg.siteId;
+
+    $btn.text('Adding...').prop('disabled', true);
+
+    $.ajax({
+      url: cfg.apiBase + '/sites/' + siteId + '/jobs/fix-link/',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ source_page_id: sourceId, target_page_id: targetId, anchor_text: anchor }),
+      headers: { 'Authorization': 'Bearer ' + cfg.apiToken },
+      success: function(resp) {
+        if (resp && resp.job_id) {
+          pollFixLink(resp.job_id, $btn);
+        }
+      },
+      error: function() {
+        $btn.text('Error').prop('disabled', false);
+      }
+    });
+  });
+
+  function pollFixLink(jobId, $btn) {
+    var pollInterval = setInterval(function() {
+      $.ajax({
+        url: cfg.apiBase + '/jobs/' + jobId + '/',
+        headers: { 'Authorization': 'Bearer ' + cfg.apiToken },
+        success: function(job) {
+          if (job.status === 'complete') {
+            clearInterval(pollInterval);
+            $btn.closest('div[style*="border-left"]').css('opacity', '0.5');
+            $btn.text('✓ Done').css('background', '#16a34a');
+          } else if (job.status === 'failed') {
+            clearInterval(pollInterval);
+            $btn.text('Error').prop('disabled', false);
+          } else {
+            $btn.text(job.progress_message || 'Working...');
+          }
+        }
+      });
+    }, 3000);
+  }
+
+  // "Fix All Critical Links"
+  $(document).on('click', '#siloq-fix-all-links-btn', function() {
+    var $allBtns = $('.siloq-fix-link-btn:not([disabled])');
+    if (!$allBtns.length) return;
+    var i = 0;
+    function next() {
+      if (i >= $allBtns.length) return;
+      $allBtns.eq(i).trigger('click');
+      i++;
+      setTimeout(next, 8000);
+    }
+    next();
+    $(this).text('Fixing ' + $allBtns.length + ' links...').prop('disabled', true);
   });
 
   /* ─── Roadmap Checkbox Persistence ───────────── */

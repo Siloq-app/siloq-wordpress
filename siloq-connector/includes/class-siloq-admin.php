@@ -2950,10 +2950,14 @@ $audit_fresh = !empty($audit_results);
         <?php endif; ?>
       </div>
     </div>
-    <button class="siloq-btn siloq-btn--primary siloq-run-audit-btn" style="font-size:11px;padding:6px 14px" onclick="siloqRunAudit(this)">
-      <?php echo $audit_fresh ? 'Re-run Audit' : 'Run Audit'; ?>
-    </button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="siloq-btn siloq-btn--primary siloq-run-audit-btn" style="font-size:11px;padding:6px 14px" onclick="siloqRunAudit(this)">
+        <?php echo $audit_fresh ? 'Re-run Audit' : 'Run Audit'; ?>
+      </button>
+      <button id="siloq-full-audit-btn" class="siloq-btn siloq-btn--outline" style="font-size:11px;padding:6px 14px">Run Full Audit</button>
+    </div>
   </div>
+  <div id="siloq-full-audit-status" style="display:none;margin-bottom:10px;"></div>
 
   <?php if ($audit_fresh && isset($audit_results['site_score'])): ?>
   <?php
@@ -4052,6 +4056,23 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         <div id="siloq-roadmap-content">
                             <p class="siloq-empty" style="color:#9ca3af;font-size:13px;">Generate your plan to see your roadmap.</p>
                         </div>
+                    </div>
+
+                    <!-- Section 7: Internal Link Structure -->
+                    <div class="siloq-card" id="siloq-link-audit-card" style="margin-top:16px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                            <h3 style="font-size:15px;font-weight:700;margin:0;">Internal Link Structure</h3>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" id="siloq-audit-links-btn" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Run Link Audit</button>
+                                <button type="button" id="siloq-fix-all-links-btn" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;display:none;">Fix All Critical Links</button>
+                            </div>
+                        </div>
+                        <div id="siloq-link-audit-results" style="padding:12px 0;">
+                            <div style="color:#6b7280;font-size:13px;text-align:center;padding:20px;">
+                                Run a link audit to find orphan pages, missing hub&harr;spoke links, and blogs with no service links.
+                            </div>
+                        </div>
+                        <div id="siloq-link-audit-progress" style="display:none;padding:8px 0;"></div>
                     </div>
 
                 </div>
@@ -10609,6 +10630,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
     }
 
     // =========================================================================
+<<<<<<< HEAD
     // AJAX: Content tab — Publish a draft post
     // =========================================================================
 
@@ -10656,5 +10678,74 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             'post_id'   => $post_id,
             'permalink' => $permalink,
         ) );
+=======
+    // AJAX: Start a background job (wrapper around API job endpoints)
+    // =========================================================================
+
+    public static function ajax_start_job() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $job_type = sanitize_key( $_POST['job_type'] ?? '' );
+        $site_id  = get_option( 'siloq_site_id', '' );
+
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'Site not connected.' ) );
+        }
+
+        $endpoint_map = array(
+            'full_audit'      => '/sites/' . $site_id . '/jobs/full-audit/',
+            'meta_generation' => '/sites/' . $site_id . '/jobs/generate-meta/',
+            'audit_links'     => '/sites/' . $site_id . '/jobs/audit-links/',
+        );
+
+        if ( ! isset( $endpoint_map[ $job_type ] ) ) {
+            wp_send_json_error( array( 'message' => 'Unknown job type: ' . $job_type ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->post( $endpoint_map[ $job_type ], array() );
+
+        if ( ! empty( $result['success'] ) && isset( $result['data']['job_id'] ) ) {
+            wp_send_json_success( array(
+                'job_id'          => $result['data']['job_id'],
+                'status'          => $result['data']['status'] ?? 'queued',
+                'already_running' => $result['data']['already_running'] ?? false,
+            ) );
+        } else {
+            wp_send_json_error( array(
+                'message' => $result['message'] ?? 'Failed to start job.',
+            ) );
+        }
+    }
+
+    // =========================================================================
+    // AJAX: Poll job status
+    // =========================================================================
+
+    public static function ajax_job_status() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $job_id = intval( $_POST['job_id'] ?? 0 );
+        if ( ! $job_id ) {
+            wp_send_json_error( array( 'message' => 'Missing job_id.' ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/jobs/' . $job_id . '/' );
+
+        if ( ! empty( $result['success'] ) && is_array( $result['data'] ) ) {
+            wp_send_json_success( $result['data'] );
+        } else {
+            wp_send_json_error( array(
+                'message' => $result['message'] ?? 'Failed to get job status.',
+            ) );
+        }
+>>>>>>> origin/fix/nav-content-tab-fixes
     }
 }
