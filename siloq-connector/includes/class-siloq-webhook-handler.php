@@ -401,7 +401,7 @@ class Siloq_Webhook_Handler {
             'post_title' => sanitize_text_field($data['title']),
             'post_content' => wp_kses_post($data['content']),
             'post_status' => 'draft',
-            'post_type' => isset($data['post_type']) ? sanitize_text_field($data['post_type']) : 'page',
+            'post_type' => isset($data['post_type']) ? sanitize_text_field($data['post_type']) : 'post',
             'post_author' => isset($data['author_id']) ? intval($data['author_id']) : get_current_user_id()
         );
         

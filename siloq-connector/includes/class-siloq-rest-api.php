@@ -131,27 +131,39 @@ class Siloq_REST_API {
 
     public static function get_content_jobs( $request ) {
         $site_id = get_option( 'siloq_site_id', '' );
+
+        // No site connected — return clean empty state, not an error
         if ( empty( $site_id ) ) {
-            // Return empty state — site not connected, not an error
             return new WP_REST_Response( array(
                 'jobs'      => array(),
-                'message'   => 'Connect your site to Siloq to enable the content pipeline.',
+                'total'     => 0,
                 'connected' => false,
+                'notice'    => 'Connect your site to Siloq to enable the content pipeline.',
             ), 200 );
         }
 
         $api    = new Siloq_API_Client();
-        $result = $api->get( '/sites/' . $site_id . '/content/jobs/' );
+        $raw    = $api->get( '/sites/' . intval( $site_id ) . '/content/jobs/' );
 
-        // Normalize response — API may return array directly or wrapped object
-        if ( is_array( $result ) && isset( $result[0] ) ) {
-            return new WP_REST_Response( array( 'jobs' => $result, 'connected' => true ), 200 );
+        // Normalize whatever shape the API returns
+        $jobs = array();
+        if ( is_array( $raw ) ) {
+            if ( isset( $raw[0] ) ) {
+                $jobs = $raw; // direct array
+            } elseif ( isset( $raw['jobs'] ) ) {
+                $jobs = $raw['jobs'];
+            } elseif ( isset( $raw['data'] ) && is_array( $raw['data'] ) ) {
+                $jobs = $raw['data'];
+            } elseif ( isset( $raw['results'] ) ) {
+                $jobs = $raw['results'];
+            }
         }
-        if ( is_array( $result ) && isset( $result['data'] ) ) {
-            return new WP_REST_Response( array( 'jobs' => $result['data'], 'connected' => true ), 200 );
-        }
-        // Empty or no jobs
-        return new WP_REST_Response( array( 'jobs' => array(), 'connected' => true ), 200 );
+
+        return new WP_REST_Response( array(
+            'jobs'      => array_values( $jobs ),
+            'total'     => count( $jobs ),
+            'connected' => true,
+        ), 200 );
     }
 
     // ── Suggest Spoke ─────────────────────────────────────────────────────────

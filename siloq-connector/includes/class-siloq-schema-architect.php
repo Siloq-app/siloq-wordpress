@@ -211,6 +211,9 @@ class Siloq_Schema_Architect {
     public static function inject_homepage_schema() {
         $name = self::get_setting( 'business_name' );
         if ( ! $name ) return;
+        // Defensive typo fix
+        $name       = str_replace( 'Electical', 'Electrical', $name );
+        $site_title = str_replace( 'Electical', 'Electrical', get_bloginfo( 'name' ) );
 
         $org = [
             '@context' => 'https://schema.org',
@@ -218,6 +221,9 @@ class Siloq_Schema_Architect {
             'name'     => $name,
             'url'      => home_url( '/' ),
         ];
+        if ( $site_title && $site_title !== $name ) {
+            $org['alternateName'] = $site_title;
+        }
         $logo = self::get_setting( 'business_logo' );
         if ( $logo ) $org['logo'] = $logo;
 
@@ -391,14 +397,24 @@ class Siloq_Schema_Architect {
     }
 
     private static function generate_local_business_schema( $post ) {
-        $settings = self::get_all_settings();
-        $schema   = [
+        $settings      = self::get_all_settings();
+        $business_name = $settings['business_name'] ?? get_bloginfo( 'name' );
+        // Defensive typo fix — corrects stored misspelling if present
+        $business_name = str_replace( 'Electical', 'Electrical', $business_name );
+        $site_title    = get_bloginfo( 'name' );
+        $site_title    = str_replace( 'Electical', 'Electrical', $site_title );
+
+        $schema = [
             '@context'    => 'https://schema.org',
             '@type'       => $settings['business_type'] ?? 'LocalBusiness',
-            'name'        => $settings['business_name'] ?? get_bloginfo( 'name' ),
+            'name'        => $business_name,
             'url'         => home_url( '/' ),
             'description' => get_the_excerpt( $post ),
         ];
+        // Full site title as alternateName (only if different from clean name)
+        if ( $site_title && $site_title !== $business_name ) {
+            $schema['alternateName'] = $site_title;
+        }
         if ( ! empty( $settings['business_phone'] ) ) $schema['telephone'] = $settings['business_phone'];
         if ( ! empty( $settings['business_address'] ) ) {
             $addr = json_decode( $settings['business_address'], true );
@@ -410,7 +426,9 @@ class Siloq_Schema_Architect {
     }
 
     private static function generate_service_schema( $post ) {
-        $settings = self::get_all_settings();
+        $settings      = self::get_all_settings();
+        $business_name = $settings['business_name'] ?? get_bloginfo( 'name' );
+        $business_name = str_replace( 'Electical', 'Electrical', $business_name );
         return [
             '@context'    => 'https://schema.org',
             '@type'       => 'Service',
@@ -419,7 +437,7 @@ class Siloq_Schema_Architect {
             'url'         => get_permalink( $post ),
             'provider'    => [
                 '@type' => 'LocalBusiness',
-                'name'  => $settings['business_name'] ?? get_bloginfo( 'name' ),
+                'name'  => $business_name,
                 'url'   => home_url( '/' ),
             ],
         ];

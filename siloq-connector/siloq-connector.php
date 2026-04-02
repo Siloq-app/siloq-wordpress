@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.287
+ * Version: 1.5.288
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -1932,7 +1932,7 @@ class Siloq_Connector {
             'post_title'   => $title,
             'post_content' => $content,
             'post_status'  => $post_status,
-            'post_type'    => 'page',
+            'post_type'    => 'post',
         );
         // Set parent page if provided (creates proper URL structure /parent/child/)
         if ( $parent_id > 0 && get_post_status( $parent_id ) ) {

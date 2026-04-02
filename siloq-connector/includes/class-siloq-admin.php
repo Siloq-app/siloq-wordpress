@@ -3750,9 +3750,20 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
             if ( strpos( $page_path, $_plan_sa_hub_path ) === 0 ) {
                 continue;
             }
+            // Already under /services/ — correctly structured, skip
+            if ( strpos( $page_path, '/services/' ) !== false ) {
+                continue;
+            }
             // Child of a non-SA hub (e.g. /services/) — correctly placed, skip
             if ( $_ps->post_parent > 0 && in_array( (int) $_ps->post_parent, $_non_sa_hub_ids, true ) ) {
                 continue;
+            }
+            // Already has a redirect applied — skip
+            if ( class_exists( 'Siloq_Redirect_Manager' ) ) {
+                $rm = Siloq_Redirect_Manager::get_instance();
+                if ( method_exists( $rm, 'has_redirect' ) && $rm->has_redirect( $page_path ) ) {
+                    continue;
+                }
             }
             $_plan_sa_spokes_count++;
         }
@@ -5869,9 +5880,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     function loadAuthors() {
                         var $wrap = $('#siloq-content-authors');
                         var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
-                        // Fallback: construct from wpApiSettings if localization failed
                         if (!restUrl && typeof wpApiSettings !== 'undefined') {
-                            restUrl = wpApiSettings.root.replace(/\/$/, '') + '/siloq/v1';
+                            restUrl = wpApiSettings.root.replace(/\/$/, '').replace(/\/wp-json$/, '') + '/wp-json/siloq/v1';
                         }
                         var restNonce = cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
 
@@ -5916,70 +5926,46 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     function loadContentJobs() {
                         var $wrap = $('#siloq-content-jobs');
                         var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
-                        var restNonce = cfg.restNonce || '';
-
-                        if (!restUrl) {
-                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">Siloq not fully loaded. Refresh the page.</div>');
-                            return;
+                        if (!restUrl && typeof wpApiSettings !== 'undefined') {
+                            restUrl = wpApiSettings.root.replace(/\/$/, '').replace(/\/wp-json$/, '') + '/wp-json/siloq/v1';
                         }
+                        var restNonce = cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
+
+                        $wrap.html('<div style="color:#6b7280;font-size:13px;padding:16px;text-align:center;">Loading...</div>');
 
                         $.ajax({
                             url: restUrl + '/content-jobs',
                             method: 'GET',
                             headers: { 'X-WP-Nonce': restNonce },
+                            timeout: 15000,
                             success: function(resp) {
-                                // Handle both shapes: wrapped {jobs:[...]} or raw array
-                                var jobs = resp.jobs || (Array.isArray(resp) ? resp : (resp.results || resp.data || []));
+                                var jobs = resp.jobs || (Array.isArray(resp) ? resp : []);
                                 var connected = resp.connected !== false;
-
                                 if (!connected) {
                                     $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">Connect your site to Siloq to enable the blog pipeline.</div>');
                                     return;
                                 }
-
-                                var actionable = jobs.filter(function(j) {
-                                    return j.status === 'pending_approval' || j.status === 'draft';
-                                });
-                                if (!actionable.length) {
-                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No content jobs yet. Click <strong>Generate Content Plan</strong> to create your first blog topics.</div>');
+                                if (!jobs.length) {
+                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No content jobs yet. Use <strong>Find Supporting Page Ideas</strong> to generate your first piece of content.</div>');
                                     return;
                                 }
-                                var tierColors = { 1: '#D39938', 2: '#b45309', 3: '#6b7280' };
-                                var html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button type="button" id="siloq-bulk-approve" class="siloq-btn siloq-btn--primary siloq-btn--sm" style="font-size:11px;display:none;">Approve Selected</button></div>';
-                                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-                                actionable.forEach(function(j) {
-                                    var tier = j.tier || j.content_tier || 1;
-                                    var jobId = j.id || j.job_id;
-                                    var title = j.title || j.topic || 'Untitled';
-                                    var kw = j.primary_keyword || j.keyword || '';
-                                    var vol = j.search_volume || j.volume || '';
-                                    var angle = j.angle || j.service_page || j.supporting || '';
-                                    html += '<div class="siloq-topic-card" data-job-id="' + jobId + '" style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">';
-                                    html += '<div style="display:flex;align-items:flex-start;gap:10px;">';
-                                    html += '<input type="checkbox" class="siloq-topic-check" data-job-id="' + jobId + '" style="margin-top:3px;cursor:pointer;">';
-                                    html += '<div style="flex:1;min-width:0;">';
-                                    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">';
-                                    html += '<span style="background:' + (tierColors[tier] || '#6b7280') + ';color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600;">Tier ' + tier + '</span>';
-                                    html += '<div style="font-weight:700;font-size:13px;color:#111827;">' + $('<span>').text(title).html() + '</div>';
-                                    html += '</div>';
-                                    if (kw) {
-                                        html += '<div style="font-size:11px;color:#6b7280;margin-bottom:2px;">Keyword: <strong>' + $('<span>').text(kw).html() + '</strong>';
-                                        if (vol) html += ' &middot; Vol: ' + $('<span>').text(vol).html();
-                                        html += '</div>';
-                                    }
-                                    if (angle) html += '<div style="font-size:11px;color:#9ca3af;">Supports: ' + $('<span>').text(angle).html() + '</div>';
-                                    html += '</div>';
-                                    html += '<button type="button" class="siloq-btn siloq-btn--primary siloq-btn--sm siloq-approve-job" data-job-id="' + jobId + '" data-title="' + $('<span>').text(title).html() + '" style="font-size:11px;white-space:nowrap;">Approve &amp; Write</button>';
-                                    html += '</div>';
-                                    html += '</div>';
+                                var statusColors = {completed:'#16a34a', failed:'#dc2626', running:'#d97706', queued:'#6b7280', pending_approval:'#7c3aed'};
+                                var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+                                jobs.slice(0, 15).forEach(function(j) {
+                                    var color = statusColors[j.status] || '#6b7280';
+                                    html += '<div style="padding:10px 14px;background:#f9fafb;border-radius:6px;border-left:3px solid ' + color + ';">';
+                                    html += '<div style="font-weight:600;font-size:13px;">' + $('<span>').text(j.topic || j.title || j.job_type || 'Content Job').html() + '</div>';
+                                    html += '<div style="font-size:11px;color:#6b7280;margin-top:3px;">' + (j.status || 'pending');
+                                    if (j.message || j.progress_message) html += ' — ' + $('<span>').text(j.message || j.progress_message).html();
+                                    html += '</div></div>';
                                 });
                                 html += '</div>';
                                 $wrap.html(html);
                             },
                             error: function(xhr) {
                                 var msg = xhr.status === 403
-                                    ? 'REST API blocked. Whitelist /wp-json/ in your security plugin.'
-                                    : 'Could not load pipeline (HTTP ' + xhr.status + ').';
+                                    ? 'REST API blocked. Whitelist /wp-json/ in your security plugin settings.'
+                                    : 'Could not load content pipeline. Check your API connection.';
                                 $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + msg + '</div>');
                                 $('#siloq-generate-content-plan').text('Generate Content Plan').prop('disabled', false);
                             }
@@ -6152,7 +6138,10 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         var credentials = $('#siloq-author-credentials').val().split(',').map(function(s) { return s.trim(); }).filter(Boolean);
 
                         var restUrl = (cfg.restUrl || '').replace(/\/$/, '');
-                        var restNonce = cfg.restNonce || '';
+                        if (!restUrl && typeof wpApiSettings !== 'undefined') {
+                            restUrl = wpApiSettings.root.replace(/\/$/, '').replace(/\/wp-json$/, '') + '/wp-json/siloq/v1';
+                        }
+                        var restNonce = cfg.restNonce || (typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '');
 
                         $.ajax({
                             url: restUrl + '/authors',
@@ -6332,7 +6321,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                                 + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
                                 + 'style="background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
                                 + 'Edit Page →</a>';
-                            btn.parentNode.replaceChild(wrap, btn);
+                            if (btn.parentNode) { btn.parentNode.replaceChild(wrap, btn); } else { btn.textContent = '✓ Created'; btn.disabled = false; }
                         } else if (r && r.data && r.data.cannibal) {
                             // Page already exists — show link to existing page
                             var existUrl = r.data.edit_url || '';
@@ -6342,7 +6331,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                                 + (existUrl ? '<a href="' + existUrl + '" target="_blank" rel="noopener" '
                                 + 'style="background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
                                 + 'View Page →</a>' : '');
-                            btn.parentNode.replaceChild(wrap2, btn);
+                            if (btn.parentNode) { btn.parentNode.replaceChild(wrap2, btn); } else { btn.textContent = '⚠ Already exists'; btn.disabled = false; }
                         } else {
                             var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
                             btn.textContent = msg;

@@ -1247,18 +1247,34 @@
       var $msg      = $('#siloq-schema-bulk-msg');
       var $summary  = $('#siloq-schema-bulk-summary');
 
-      // Collect all page IDs that have no schema (class siloq-schema-none-badge or data attribute)
+      // Collect all page IDs that have no schema — read from the rendered DOM
       var pageIds = [];
-      $('#siloq-schema-pages-list tr[data-post-id]').each(function () {
+      $('#siloq-schema-pages-list .siloq-schema-page-row[data-post-id]').each(function () {
         var hasSchema = $(this).data('has-schema');
         if (!hasSchema || hasSchema === 'false' || hasSchema === false || hasSchema === '0') {
           pageIds.push($(this).data('post-id'));
         }
       });
-      // Fallback: if no schema list rendered yet, ask user to refresh first
+      // Also check tr-based rows (alternate rendering)
       if (!pageIds.length) {
-        $summary.text('No pages without schema found. Click Refresh first to load the list, then try again.')
-                .css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fcd34d'}).show();
+        $('#siloq-schema-pages-list tr[data-post-id]').each(function () {
+          var hasSchema = $(this).data('has-schema');
+          if (!hasSchema || hasSchema === 'false' || hasSchema === false || hasSchema === '0') {
+            pageIds.push($(this).data('post-id'));
+          }
+        });
+      }
+      // Fallback: if no schema list rendered yet, trigger a refresh then retry
+      if (!pageIds.length) {
+        if (!schemaLoaded) {
+          $summary.text('Loading schema list — please wait, then click Apply again.')
+                  .css({'background':'#fef3c7','color':'#92400e','border':'1px solid #fcd34d'}).show();
+          schemaLoaded = false;
+          loadSchemaStatus();
+        } else {
+          $summary.text('All pages already have schema applied.')
+                  .css({'background':'#f0fdf4','color':'#166534','border':'1px solid #86efac'}).show();
+        }
         return;
       }
 
