@@ -83,16 +83,18 @@ class Siloq_Agent_Executor {
         $updated = array();
 
         // Meta title
-        if (!empty($params['meta_title'])) {
-            $title = sanitize_text_field($params['meta_title']);
+        if (!empty($params['meta_title']) || !empty($params['siloq_meta_title'])) {
+            $title = sanitize_text_field($params['meta_title'] ?? $params['siloq_meta_title']);
+            update_post_meta($post_id, '_siloq_meta_title', $title);
             update_post_meta($post_id, '_aioseo_title', $title);
             update_post_meta($post_id, '_yoast_wpseo_title', $title);
             $updated[] = 'meta_title';
         }
 
         // Meta description
-        if (!empty($params['meta_description'])) {
-            $desc = sanitize_text_field($params['meta_description']);
+        if (!empty($params['meta_description']) || !empty($params['siloq_meta_desc'])) {
+            $desc = sanitize_text_field($params['meta_description'] ?? $params['siloq_meta_desc']);
+            update_post_meta($post_id, '_siloq_meta_description', $desc);
             update_post_meta($post_id, '_aioseo_description', $desc);
             update_post_meta($post_id, '_yoast_wpseo_metadesc', $desc);
             $updated[] = 'meta_description';
