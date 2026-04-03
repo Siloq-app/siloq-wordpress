@@ -3694,8 +3694,8 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
 
 <script>
 (function($) {
-    var restUrl = (siloqDash && siloqDash.restUrl || '').replace(/\/$/,'');
-    var restNonce = (siloqDash && siloqDash.restNonce) || '';
+    var restUrl = (typeof siloqDash !== 'undefined' && siloqDash.restUrl ? siloqDash.restUrl : '').replace(/\/$/,'');
+    var restNonce = (typeof siloqDash !== 'undefined' && siloqDash.restNonce ? siloqDash.restNonce : '');
     var caseStudyMarkdown = '';
 
     function loadProgress() {
@@ -9061,6 +9061,10 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
         }
+        // Auto-detect SEO plugin if stored value is empty or siloq_native
+        if ( empty( $plugin ) || $plugin === 'siloq_native' ) {
+            $plugin = self::auto_detect_seo_plugin();
+        }
         switch ( $plugin ) {
             case 'yoast':
                 update_post_meta( $post_id, '_yoast_wpseo_title', $title );
@@ -9092,6 +9096,10 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         if ( ! $plugin ) {
             $plugin = get_option( 'siloq_active_seo_plugin', 'siloq_native' );
+        }
+        // Auto-detect SEO plugin if stored value is empty or siloq_native
+        if ( empty( $plugin ) || $plugin === 'siloq_native' ) {
+            $plugin = self::auto_detect_seo_plugin();
         }
         switch ( $plugin ) {
             case 'yoast':
@@ -9128,6 +9136,30 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         } else {
             $wpdb->insert( $table, array_merge( [ 'post_id' => $post_id ], $data ) );
         }
+    }
+
+    /**
+     * Auto-detect the active SEO plugin by checking for known classes/tables.
+     */
+    private static function auto_detect_seo_plugin() {
+        // AIOSEO 4.x
+        if ( class_exists( 'AIOSEO\\Plugin\\AIOSEO' ) ) {
+            return 'aioseo';
+        }
+        global $wpdb;
+        $aioseo_table = $wpdb->prefix . 'aioseo_posts';
+        if ( $wpdb->get_var( "SHOW TABLES LIKE '{$aioseo_table}'" ) ) {
+            return 'aioseo';
+        }
+        // Yoast
+        if ( class_exists( 'WPSEO_Meta' ) ) {
+            return 'yoast';
+        }
+        // RankMath
+        if ( class_exists( 'RankMath\\Post\\Post' ) ) {
+            return 'rankmath';
+        }
+        return 'siloq_native';
     }
 
     /**

@@ -666,72 +666,30 @@
   // ── Unified Job Helpers (direct API → WP AJAX fallback) ──────────────
 
   function siloqCreateJob(jobType, onJobId, onError) {
-    var siteId = cfg.siteId;
-    var apiBase = cfg.apiBase;
-    var apiToken = cfg.apiToken;
-
-    var endpointMap = {
-      'full_audit':      apiBase + '/sites/' + siteId + '/jobs/full-audit/',
-      'meta_generation': apiBase + '/sites/' + siteId + '/jobs/generate-meta/',
-      'audit_links':     apiBase + '/sites/' + siteId + '/jobs/audit-links/'
-    };
-    var endpoint = endpointMap[jobType];
-    if (!endpoint) { if (onError) onError('Unknown job type'); return; }
-
-    // Try direct API first
-    $.ajax({
-      url: endpoint,
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiToken },
-      success: function(resp) {
-        if (resp && resp.job_id) {
-          onJobId(resp.job_id, resp.already_running || false);
-        } else if (onError) {
-          onError('No job_id in response');
-        }
-      },
-      error: function() {
-        // Fallback to WP AJAX proxy
-        $.post(cfg.ajaxUrl, {
-          action: 'siloq_start_job',
-          nonce: cfg.nonce,
-          job_type: jobType
-        }, function(resp) {
-          if (resp.success && resp.data && resp.data.job_id) {
-            onJobId(resp.data.job_id, resp.data.already_running || false);
-          } else if (onError) {
-            onError((resp.data && resp.data.message) || 'Failed to start job');
-          }
-        }).fail(function() {
-          if (onError) onError('Both API and WP AJAX failed');
-        });
+    $.post(cfg.ajaxUrl, {
+      action: 'siloq_start_job',
+      nonce: cfg.nonce,
+      job_type: jobType
+    }, function(resp) {
+      if (resp.success && resp.data && resp.data.job_id) {
+        onJobId(resp.data.job_id, resp.data.already_running || false);
+      } else if (onError) {
+        onError((resp.data && resp.data.message) || 'Failed to start job');
       }
+    }).fail(function() {
+      if (onError) onError('WP AJAX request failed');
     });
   }
 
   function siloqPollJob(jobId, onProgress, onComplete, onError) {
-    var apiBase = cfg.apiBase;
-    var apiToken = cfg.apiToken;
-
     var pollInterval = setInterval(function() {
-      // Try direct API first
-      $.ajax({
-        url: apiBase + '/jobs/' + jobId + '/',
-        headers: { 'Authorization': 'Bearer ' + apiToken },
-        success: function(job) {
-          handleJobPoll(job);
-        },
-        error: function() {
-          // WP AJAX fallback
-          $.post(cfg.ajaxUrl, {
-            action: 'siloq_job_status',
-            nonce: cfg.nonce,
-            job_id: jobId
-          }, function(resp) {
-            if (resp.success && resp.data) {
-              handleJobPoll(resp.data);
-            }
-          });
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_job_status',
+        nonce: cfg.nonce,
+        job_id: jobId
+      }, function(resp) {
+        if (resp.success && resp.data) {
+          handleJobPoll(resp.data);
         }
       });
     }, 5000);
@@ -1498,7 +1456,7 @@
 
       // Collect all page IDs that have no schema (class siloq-schema-none-badge or data attribute)
       var pageIds = [];
-      $('#siloq-schema-pages-list tr[data-post-id]').each(function () {
+      $('#siloq-schema-pages-list [data-post-id]').each(function () {
         var hasSchema = $(this).data('has-schema');
         if (!hasSchema || hasSchema === 'false' || hasSchema === false || hasSchema === '0') {
           pageIds.push($(this).data('post-id'));
