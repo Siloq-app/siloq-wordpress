@@ -65,3 +65,37 @@ siloq-connector/
 4. Create GitHub Release with zip asset named `siloq-connector-vX.X.XXX.zip`
 5. Update EDD download on siloq.ai for all 5 tiers
 6. Send download link to Kyle via WhatsApp (+16366677247)
+
+## ⚠️ MANDATORY: Pre-Release JS Safety Checks
+**Every release MUST pass these checks before the zip is built. No exceptions.**
+
+### 1. No bare object references in inline `<script>` blocks
+Any `<script>` block rendered directly in PHP (not an enqueued JS file) MUST use safe access:
+```js
+// ❌ WRONG — crashes if object not yet loaded:
+nonce: siloqDash.nonce
+
+// ✅ CORRECT — always safe:
+nonce: (typeof siloqDash !== 'undefined' ? siloqDash.nonce : (typeof siloqAdminData !== 'undefined' ? siloqAdminData.ajax_nonce : ''))
+```
+Run this grep before every release — it must return zero results:
+```bash
+grep -n "nonce: siloqDash\.nonce\|nonce: siloqAdminData\.nonce" includes/class-siloq-admin.php
+```
+
+### 2. All JS must degrade gracefully on page builders
+Cornerstone, Elementor, Divi, and WPBakery change script load order.
+- Test Save Goals, Run Analysis, and Sync buttons on at least one page-builder site before shipping
+- `ERR_CONNECTION_CLOSED` on admin-ajax = JS crash upstream, not a PHP error
+
+### 3. Enqueued scripts need guards before using localized objects
+```js
+// ❌ WRONG:
+function updateDashboardStats() {
+    $.ajax({ data: { nonce: siloqAdminData.nonce } })
+
+// ✅ CORRECT:
+function updateDashboardStats() {
+    if (typeof siloqAdminData === 'undefined') return;
+    $.ajax({ data: { nonce: siloqAdminData.nonce } })
+```
