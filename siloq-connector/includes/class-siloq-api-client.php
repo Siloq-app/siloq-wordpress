@@ -292,4 +292,54 @@ class Siloq_API_Client {
             'active_wp_post_ids' => array_values(array_map('intval', $active_wp_post_ids)),
         ));
     }
+
+    /**
+     * Get agent recommendations for a site.
+     *
+     * @param  int    $site_id  Siloq site ID
+     * @param  string $status   Recommendation status ('pending', 'applied', 'dismissed')
+     * @param  int    $limit    Max number of recommendations to return
+     * @return array            API response
+     */
+    public function get_recommendations( $site_id, $status = 'pending', $limit = 10 ) {
+        $endpoint = add_query_arg(
+            array( 'status' => $status, 'limit' => $limit ),
+            "sites/{$site_id}/recommendations/"
+        );
+        return $this->make_request( $endpoint, 'GET' );
+    }
+
+    /**
+     * Apply a 301 redirect recommendation.
+     *
+     * @param  int    $site_id   Siloq site ID
+     * @param  string $from_url  Source URL to redirect from
+     * @param  string $to_url    Destination URL to redirect to
+     * @return array             API response
+     */
+    public function apply_redirect( $site_id, $from_url, $to_url ) {
+        return $this->make_request(
+            "sites/{$site_id}/recommendations/apply-redirect/",
+            'POST',
+            array(
+                'from_url' => $from_url,
+                'to_url'   => $to_url,
+            )
+        );
+    }
+
+    /**
+     * Dismiss a specific recommendation.
+     *
+     * @param  int $site_id  Siloq site ID
+     * @param  int $rec_id   Recommendation ID
+     * @return array         API response
+     */
+    public function dismiss_recommendation( $site_id, $rec_id ) {
+        return $this->make_request(
+            "sites/{$site_id}/recommendations/{$rec_id}/dismiss/",
+            'POST',
+            array()
+        );
+    }
 }

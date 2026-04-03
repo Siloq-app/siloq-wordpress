@@ -4046,8 +4046,252 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         </div>
                     </div>
 
+                    <!-- Agent Recommendations -->
+                    <div id="siloq-agent-recommendations" style="margin-top:24px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                            <div>
+                                <h2 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 4px;">Agent Recommendations</h2>
+                                <p style="font-size:12px;color:rgba(255,255,255,0.5);margin:0;">AI-generated findings from your weekly analysis. Each recommendation is backed by real data.</p>
+                            </div>
+                            <button onclick="siloqRunAnalysisNow()" class="siloq-btn siloq-btn--outline" style="font-size:12px;">Run Analysis Now</button>
+                        </div>
+                        <div id="siloq-recommendations-container">
+                            <div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);font-size:13px;">Loading recommendations...</div>
+                        </div>
+                    </div>
+
                 </div>
             </div><!-- /plan tab -->
+
+<script type="text/javascript">
+// ── Agent Recommendations ────────────────────────────────────────────────
+
+// Stubs for siloqShowToast and siloqPollJob in case they are not yet defined
+if (typeof siloqShowToast === 'undefined') {
+    function siloqShowToast(msg, type) {
+        console.log('[Siloq Toast][' + (type || 'info') + '] ' + msg);
+    }
+}
+if (typeof siloqPollJob === 'undefined') {
+    function siloqPollJob(jobId, callback) {
+        console.log('[Siloq] Polling job ' + jobId + ' (stub — polling not yet implemented)');
+        if (typeof callback === 'function') {
+            setTimeout(callback, 3000);
+        }
+    }
+}
+
+function siloqEscape(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function siloqLoadRecommendations() {
+    var siteId = siloqDash.siteId;
+    var container = document.getElementById('siloq-recommendations-container');
+    if (!container) return;
+
+    fetch(siloqDash.restUrl + 'sites/' + siteId + '/recommendations/', {
+        headers: { 'X-WP-Nonce': siloqDash.restNonce }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        var recs = (resp.data && resp.data.recommendations) ? resp.data.recommendations : [];
+        if (recs.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.4);font-size:13px;">No recommendations yet. Run analysis to generate findings.</div>';
+            return;
+        }
+        siloqRenderRecommendations(recs);
+    })
+    .catch(function(err) {
+        console.error('Recommendations load error:', err);
+        if (container) {
+            container.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);font-size:13px;">Could not load recommendations.</div>';
+        }
+    });
+}
+
+function siloqRenderRecommendations(recs) {
+    var container = document.getElementById('siloq-recommendations-container');
+    if (!container) return;
+
+    var urgent  = recs.filter(function(r) { return r.priority_score >= 70; });
+    var high    = recs.filter(function(r) { return r.priority_score >= 40 && r.priority_score < 70; });
+    var monitor = recs.filter(function(r) { return r.priority_score < 40; });
+
+    var html = '';
+
+    if (urgent.length > 0) {
+        html += '<div class="siloq-rec-group">';
+        html += '<h3 style="font-size:13px;font-weight:700;color:#ef4444;margin:0 0 12px;">URGENT</h3>';
+        urgent.forEach(function(r) { html += siloqBuildRecCard(r); });
+        html += '</div>';
+    }
+
+    if (high.length > 0) {
+        html += '<div class="siloq-rec-group" style="margin-top:20px;">';
+        html += '<h3 style="font-size:13px;font-weight:700;color:#f59e0b;margin:0 0 12px;">HIGH PRIORITY</h3>';
+        high.forEach(function(r) { html += siloqBuildRecCard(r); });
+        html += '</div>';
+    }
+
+    if (monitor.length > 0) {
+        html += '<details style="margin-top:20px;">';
+        html += '<summary style="cursor:pointer;font-size:13px;font-weight:600;color:rgba(255,255,255,0.5);">' + monitor.length + ' items to monitor</summary>';
+        monitor.forEach(function(r) { html += siloqBuildRecCard(r); });
+        html += '</details>';
+    }
+
+    container.innerHTML = html;
+}
+
+function siloqBuildRecCard(rec) {
+    var typeColors = {
+        'merge_pages':     '#ef4444',
+        'redirect':        '#f97316',
+        'url_restructure': '#f59e0b',
+        'content_gap':     '#3b82f6',
+        'internal_link':   '#D39938',
+        'schema_fix':      '#14b8a6',
+        'meta_fix':        '#64748b',
+        'content_decay':   '#8b5cf6',
+        'content_refresh': '#22c55e',
+    };
+    var typeLabels = {
+        'merge_pages':     'CANNIBALIZATION',
+        'redirect':        '301 REDIRECT',
+        'url_restructure': 'URL STRUCTURE',
+        'content_gap':     'CONTENT GAP',
+        'internal_link':   'INTERNAL LINK',
+        'schema_fix':      'SCHEMA',
+        'meta_fix':        'META',
+        'content_decay':   'CONTENT DECAY',
+        'content_refresh': 'CONTENT REFRESH',
+    };
+
+    var color = typeColors[rec.rec_type] || '#64748b';
+    var label = typeLabels[rec.rec_type] || rec.rec_type.toUpperCase();
+    var actionData = rec.action_data || {};
+
+    return '<div class="siloq-rec-card" data-rec-id="' + rec.id + '" style="background:#161B22;border:1px solid #30363D;border-left:3px solid ' + color + ';border-radius:8px;padding:16px;margin-bottom:12px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        +   '<span style="font-size:10px;font-weight:700;color:' + color + ';letter-spacing:0.5px;">' + siloqEscape(label) + '</span>'
+        +   '<span style="font-size:11px;color:rgba(255,255,255,0.4);">Priority: ' + rec.priority_score + '/100</span>'
+        +   '<span style="font-size:11px;color:rgba(255,255,255,0.4);">' + siloqEscape(rec.confidence) + ' confidence</span>'
+        + '</div>'
+        + '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:6px;">' + siloqEscape(rec.title) + '</div>'
+        + '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px;line-height:1.5;">' + siloqEscape(rec.evidence) + '</div>'
+        + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">' + siloqEscape(rec.reasoning) + '</div>'
+        + '<div style="font-size:12px;font-weight:600;color:#D39938;margin-bottom:12px;">&rarr; ' + siloqEscape(rec.recommended_action) + '</div>'
+        + siloqBuildRecButtons(rec, actionData)
+        + '</div>';
+}
+
+function siloqBuildRecButtons(rec, actionData) {
+    var buttons = '';
+
+    if (rec.rec_type === 'merge_pages' || rec.rec_type === 'redirect') {
+        var fromUrl = actionData.from_url || '';
+        var toUrl   = actionData.to_url   || '';
+        buttons += '<button onclick="siloqApplyRedirect(\'' + siloqEscape(fromUrl) + '\',\'' + siloqEscape(toUrl) + '\',' + rec.id + ')" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;margin-right:8px;">Apply 301 Redirect</button>';
+    }
+
+    buttons += '<button onclick="siloqDismissRecommendation(' + rec.id + ')" style="font-size:11px;padding:6px 12px;background:transparent;border:1px solid #30363D;border-radius:6px;color:rgba(255,255,255,0.5);cursor:pointer;">Defer</button>';
+
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + buttons + '</div>';
+}
+
+function siloqApplyRedirect(fromUrl, toUrl, recId) {
+    if (!confirm('Apply 301 redirect?\n\nFROM: ' + fromUrl + '\nTO: ' + toUrl + '\n\nThe old URL will redirect permanently. Make sure you have moved any unique content first.')) {
+        return;
+    }
+
+    var btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+
+    fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/apply-redirect/', {
+        method: 'POST',
+        headers: {
+            'X-WP-Nonce': siloqDash.restNonce,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from_url: fromUrl, to_url: toUrl, rec_id: recId }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp.status === 'success') {
+            var card = document.querySelector('[data-rec-id="' + recId + '"]');
+            if (card) {
+                card.style.opacity = '0.5';
+                card.innerHTML += '<div style="color:#22c55e;font-size:12px;margin-top:8px;">\u2713 Redirect applied. Check Redirects tab to verify.</div>';
+            }
+            siloqShowToast('Redirect applied. Siloq will verify it is working within 24 hours.', 'success');
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Apply 301 Redirect';
+            siloqShowToast('Redirect failed: ' + (resp.message || 'Unknown error'), 'error');
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Apply 301 Redirect';
+        siloqShowToast('Network error. Try again.', 'error');
+    });
+}
+
+function siloqDismissRecommendation(recId) {
+    fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/' + recId + '/dismiss/', {
+        method: 'POST',
+        headers: { 'X-WP-Nonce': siloqDash.restNonce }
+    })
+    .then(function() {
+        var card = document.querySelector('[data-rec-id="' + recId + '"]');
+        if (card) card.remove();
+    });
+}
+
+function siloqRunAnalysisNow() {
+    var btn = document.querySelector('button[onclick="siloqRunAnalysisNow()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
+
+    fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/agent/run-now/', {
+        method: 'POST',
+        headers: { 'X-WP-Nonce': siloqDash.restNonce }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+        if (resp.data && resp.data.job_id) {
+            siloqPollJob(resp.data.job_id, function() {
+                siloqLoadRecommendations();
+                if (btn) { btn.disabled = false; btn.textContent = 'Run Analysis Now'; }
+            });
+        } else {
+            if (btn) { btn.disabled = false; btn.textContent = 'Run Analysis Now'; }
+        }
+    })
+    .catch(function() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Run Analysis Now'; }
+    });
+}
+
+// Load recommendations when SEO Plan tab becomes active
+(function() {
+    var planTab = document.querySelector('[aria-controls="siloq-tab-plan"]');
+    if (planTab) {
+        planTab.addEventListener('click', siloqLoadRecommendations);
+    }
+    // Also load immediately if SEO Plan is the active tab on page load
+    if (window.location.hash === '#siloq-tab-plan') {
+        siloqLoadRecommendations();
+    }
+})();
+</script>
 
             <!-- ═══════ PAGES TAB ═══════ -->
             <div id="siloq-tab-pages" class="siloq-tab-panel" role="tabpanel" aria-hidden="true">
