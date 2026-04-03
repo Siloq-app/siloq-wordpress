@@ -4051,12 +4051,34 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                             <div>
                                 <h2 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 4px;">Agent Recommendations</h2>
-                                <p style="font-size:12px;color:rgba(255,255,255,0.5);margin:0;">AI-generated findings from your weekly analysis. Each recommendation is backed by real data.</p>
+                                <p style="font-size:12px;color:rgba(255,255,255,0.5);margin:0;">Siloq reviews your site weekly and flags what needs attention. Each card is backed by real data.</p>
                             </div>
                             <button onclick="siloqRunAnalysisNow()" class="siloq-btn siloq-btn--outline" style="font-size:12px;">Run Analysis Now</button>
                         </div>
                         <div id="siloq-recommendations-container">
                             <div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);font-size:13px;">Loading recommendations...</div>
+                        </div>
+                    </div>
+
+                    <!-- Strengthen Silo Modal -->
+                    <div id="siloq-apply-redirect-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+                        <div style="background:#0D1117;border:1px solid #30363D;border-radius:12px;padding:28px;max-width:440px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+                            <h3 style="font-size:18px;font-weight:700;color:#fff;margin:0 0 12px;">Strengthen This Silo?</h3>
+                            <p id="siloq-modal-subtitle" style="font-size:13px;color:rgba(255,255,255,0.7);margin:0 0 16px;line-height:1.6;"></p>
+                            <div style="background:rgba(211,153,56,0.1);border:1px solid rgba(211,153,56,0.3);border-radius:8px;padding:14px;margin-bottom:16px;">
+                                <div style="font-size:12px;font-weight:600;color:#FDD96A;margin-bottom:8px;">What Siloq will do:</div>
+                                <ul style="margin:0;padding-left:16px;font-size:12px;color:rgba(255,255,255,0.7);line-height:1.9;">
+                                    <li>Redirect the old page to the stronger one</li>
+                                    <li>Preserve all existing search traffic</li>
+                                    <li>Update internal links automatically</li>
+                                    <li>Verify everything is working within 24 hours</li>
+                                </ul>
+                            </div>
+                            <p style="font-size:11px;color:rgba(255,255,255,0.4);margin:0 0 20px;line-height:1.5;">Move any unique content from the old page to the new page before clicking confirm.</p>
+                            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                <button onclick="siloqCloseRedirectModal()" style="background:transparent;border:1px solid #30363D;color:rgba(255,255,255,0.6);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;">Not Yet</button>
+                                <button onclick="siloqConfirmRedirect()" class="siloq-btn siloq-btn--primary" style="font-size:13px;">Strengthen This Silo &rarr;</button>
+                            </div>
                         </div>
                     </div>
 
@@ -4074,45 +4096,78 @@ if (typeof siloqShowToast === 'undefined') {
 }
 if (typeof siloqPollJob === 'undefined') {
     function siloqPollJob(jobId, callback) {
-        console.log('[Siloq] Polling job ' + jobId + ' (stub — polling not yet implemented)');
-        if (typeof callback === 'function') {
-            setTimeout(callback, 3000);
-        }
+        console.log('[Siloq] Polling job ' + jobId + ' (stub)');
+        if (typeof callback === 'function') { setTimeout(callback, 3000); }
     }
 }
+
+// ── Redirect modal state ─────────────────────────────────────────────────
+var _siloqRedirectPending = { fromUrl: '', toUrl: '', recId: null, btn: null, siloName: '' };
 
 function siloqEscape(str) {
     if (!str) return '';
     return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+// ── localStorage result card helpers ────────────────────────────────────
+var SILOQ_RESULT_KEY = 'siloq_completed_recs_' + (siloqDash.siteId || '');
+var SILOQ_RESULT_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function siloqSaveResultCard(recId, dominantTitle, siloName) {
+    try {
+        var stored = JSON.parse(localStorage.getItem(SILOQ_RESULT_KEY) || '{}');
+        stored[recId] = { dominantTitle: dominantTitle, siloName: siloName, ts: Date.now() };
+        localStorage.setItem(SILOQ_RESULT_KEY, JSON.stringify(stored));
+    } catch(e) {}
+}
+
+function siloqGetResultCards() {
+    try {
+        var stored = JSON.parse(localStorage.getItem(SILOQ_RESULT_KEY) || '{}');
+        var now = Date.now();
+        var valid = {};
+        Object.keys(stored).forEach(function(id) {
+            if (now - stored[id].ts < SILOQ_RESULT_TTL) valid[id] = stored[id];
+        });
+        if (Object.keys(valid).length !== Object.keys(stored).length) {
+            localStorage.setItem(SILOQ_RESULT_KEY, JSON.stringify(valid));
+        }
+        return valid;
+    } catch(e) { return {}; }
+}
+
+function siloqBuildResultCard(recId, data) {
+    return '<div class="siloq-rec-card" data-result-id="' + recId + '" '
+        + 'style="background:#0D2818;border:1px solid rgba(34,197,94,0.3);border-left:3px solid #22c55e;border-radius:8px;padding:16px;margin-bottom:12px;">'
+        + '<div style="font-size:14px;font-weight:700;color:#22c55e;margin-bottom:8px;">\u2713 Silo Strengthened</div>'
+        + '<div style="font-size:13px;color:rgba(255,255,255,0.8);line-height:1.6;margin-bottom:8px;">'
+        +   'Redirect applied. Siloq will verify it is working and report back in 30 days.'
+        + '</div>'
+        + (data.dominantTitle ? '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px;">'
+        +   '<strong style="color:rgba(255,255,255,0.8);">' + siloqEscape(data.dominantTitle) + '</strong> is now the authority page for this silo.'
+        + '</div>' : '')
+        + '<div style="font-size:11px;color:rgba(255,255,255,0.4);">Internal links being cleaned up in the background.</div>'
+        + '</div>';
+}
+
+// ── Load & render ────────────────────────────────────────────────────────
 function siloqLoadRecommendations() {
-    var siteId = siloqDash.siteId;
     var container = document.getElementById('siloq-recommendations-container');
     if (!container) return;
 
-    fetch(siloqDash.restUrl + 'sites/' + siteId + '/recommendations/', {
+    fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/', {
         headers: { 'X-WP-Nonce': siloqDash.restNonce }
     })
     .then(function(r) { return r.json(); })
     .then(function(resp) {
         var recs = (resp.data && resp.data.recommendations) ? resp.data.recommendations : [];
-        if (recs.length === 0) {
-            container.innerHTML = '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.4);font-size:13px;">No recommendations yet. Run analysis to generate findings.</div>';
-            return;
-        }
         siloqRenderRecommendations(recs);
     })
     .catch(function(err) {
         console.error('Recommendations load error:', err);
-        if (container) {
-            container.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);font-size:13px;">Could not load recommendations.</div>';
-        }
+        if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:rgba(255,255,255,0.4);font-size:13px;">Could not load recommendations.</div>';
     });
 }
 
@@ -4120,11 +4175,26 @@ function siloqRenderRecommendations(recs) {
     var container = document.getElementById('siloq-recommendations-container');
     if (!container) return;
 
+    // Filter out any recs that have a result card stored
+    var completedIds = Object.keys(siloqGetResultCards());
+    recs = recs.filter(function(r) { return completedIds.indexOf(String(r.id)) === -1; });
+
     var urgent  = recs.filter(function(r) { return r.priority_score >= 70; });
     var high    = recs.filter(function(r) { return r.priority_score >= 40 && r.priority_score < 70; });
     var monitor = recs.filter(function(r) { return r.priority_score < 40; });
 
     var html = '';
+
+    // Show result cards for completed actions (7-day window)
+    var resultCards = siloqGetResultCards();
+    Object.keys(resultCards).forEach(function(id) {
+        html += siloqBuildResultCard(id, resultCards[id]);
+    });
+
+    if (urgent.length === 0 && high.length === 0 && monitor.length === 0 && html === '') {
+        container.innerHTML = '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.4);font-size:13px;">No recommendations yet. Run analysis to generate findings.</div>';
+        return;
+    }
 
     if (urgent.length > 0) {
         html += '<div class="siloq-rec-group">';
@@ -4132,14 +4202,12 @@ function siloqRenderRecommendations(recs) {
         urgent.forEach(function(r) { html += siloqBuildRecCard(r); });
         html += '</div>';
     }
-
     if (high.length > 0) {
         html += '<div class="siloq-rec-group" style="margin-top:20px;">';
         html += '<h3 style="font-size:13px;font-weight:700;color:#f59e0b;margin:0 0 12px;">HIGH PRIORITY</h3>';
         high.forEach(function(r) { html += siloqBuildRecCard(r); });
         html += '</div>';
     }
-
     if (monitor.length > 0) {
         html += '<details style="margin-top:20px;">';
         html += '<summary style="cursor:pointer;font-size:13px;font-weight:600;color:rgba(255,255,255,0.5);">' + monitor.length + ' items to monitor</summary>';
@@ -4152,95 +4220,119 @@ function siloqRenderRecommendations(recs) {
 
 function siloqBuildRecCard(rec) {
     var typeColors = {
-        'merge_pages':     '#ef4444',
-        'redirect':        '#f97316',
-        'url_restructure': '#f59e0b',
-        'content_gap':     '#3b82f6',
-        'internal_link':   '#D39938',
-        'schema_fix':      '#14b8a6',
-        'meta_fix':        '#64748b',
-        'content_decay':   '#8b5cf6',
-        'content_refresh': '#22c55e',
+        'merge_pages': '#ef4444', 'redirect': '#f97316', 'url_restructure': '#f59e0b',
+        'content_gap': '#3b82f6', 'internal_link': '#D39938', 'schema_fix': '#14b8a6',
+        'meta_fix': '#64748b', 'content_decay': '#8b5cf6', 'content_refresh': '#22c55e',
     };
+    // User-facing labels — no technical jargon
     var typeLabels = {
-        'merge_pages':     'CANNIBALIZATION',
-        'redirect':        '301 REDIRECT',
+        'merge_pages':     'AUTHORITY CONFLICT',
+        'redirect':        'PAGE REDIRECT',
         'url_restructure': 'URL STRUCTURE',
         'content_gap':     'CONTENT GAP',
         'internal_link':   'INTERNAL LINK',
-        'schema_fix':      'SCHEMA',
-        'meta_fix':        'META',
+        'schema_fix':      'SEARCH ENGINE SIGNALS',
+        'meta_fix':        'PAGE DESCRIPTION',
         'content_decay':   'CONTENT DECAY',
         'content_refresh': 'CONTENT REFRESH',
     };
 
     var color = typeColors[rec.rec_type] || '#64748b';
-    var label = typeLabels[rec.rec_type] || rec.rec_type.toUpperCase();
+    var label = typeLabels[rec.rec_type] || rec.rec_type.replace(/_/g,' ').toUpperCase();
     var actionData = rec.action_data || {};
 
-    return '<div class="siloq-rec-card" data-rec-id="' + rec.id + '" style="background:#161B22;border:1px solid #30363D;border-left:3px solid ' + color + ';border-radius:8px;padding:16px;margin-bottom:12px;">'
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+    return '<div class="siloq-rec-card" data-rec-id="' + rec.id + '" '
+        + 'style="background:#161B22;border:1px solid #30363D;border-left:3px solid ' + color + ';border-radius:8px;padding:16px;margin-bottom:12px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
         +   '<span style="font-size:10px;font-weight:700;color:' + color + ';letter-spacing:0.5px;">' + siloqEscape(label) + '</span>'
-        +   '<span style="font-size:11px;color:rgba(255,255,255,0.4);">Priority: ' + rec.priority_score + '/100</span>'
-        +   '<span style="font-size:11px;color:rgba(255,255,255,0.4);">' + siloqEscape(rec.confidence) + ' confidence</span>'
         + '</div>'
-        + '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:6px;">' + siloqEscape(rec.title) + '</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:8px;line-height:1.5;">' + siloqEscape(rec.evidence) + '</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:12px;line-height:1.5;">' + siloqEscape(rec.reasoning) + '</div>'
-        + '<div style="font-size:12px;font-weight:600;color:#D39938;margin-bottom:12px;">&rarr; ' + siloqEscape(rec.recommended_action) + '</div>'
+        + '<div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:8px;line-height:1.4;">' + siloqEscape(rec.title) + '</div>'
+        + '<div style="font-size:12px;color:rgba(255,255,255,0.65);margin-bottom:8px;line-height:1.6;">' + siloqEscape(rec.evidence) + '</div>'
+        + '<div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:14px;line-height:1.6;">' + siloqEscape(rec.reasoning) + '</div>'
+        + '<div style="font-size:12px;font-weight:600;color:#D39938;margin-bottom:14px;">&rarr; ' + siloqEscape(rec.recommended_action) + '</div>'
         + siloqBuildRecButtons(rec, actionData)
         + '</div>';
 }
 
 function siloqBuildRecButtons(rec, actionData) {
     var buttons = '';
-
     if (rec.rec_type === 'merge_pages' || rec.rec_type === 'redirect') {
-        var fromUrl = actionData.from_url || '';
-        var toUrl   = actionData.to_url   || '';
-        buttons += '<button onclick="siloqApplyRedirect(\'' + siloqEscape(fromUrl) + '\',\'' + siloqEscape(toUrl) + '\',' + rec.id + ')" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 12px;margin-right:8px;">Apply 301 Redirect</button>';
+        var fromUrl  = actionData.from_url  || '';
+        var toUrl    = actionData.to_url    || '';
+        var siloName = actionData.silo      || rec.silo || '';
+        var domTitle = actionData.dominant_title || '';
+        buttons += '<button onclick="siloqOpenRedirectModal('
+            + '\'' + siloqEscape(fromUrl) + '\','
+            + '\'' + siloqEscape(toUrl) + '\','
+            + rec.id + ','
+            + '\'' + siloqEscape(siloName) + '\','
+            + '\'' + siloqEscape(domTitle) + '\''
+            + ')" class="siloq-btn siloq-btn--primary" style="font-size:11px;padding:6px 14px;">Strengthen This Silo &rarr;</button>';
     }
-
-    buttons += '<button onclick="siloqDismissRecommendation(' + rec.id + ')" style="font-size:11px;padding:6px 12px;background:transparent;border:1px solid #30363D;border-radius:6px;color:rgba(255,255,255,0.5);cursor:pointer;">Defer</button>';
-
+    buttons += '<button onclick="siloqDismissRecommendation(' + rec.id + ')" '
+        + 'style="font-size:11px;padding:6px 12px;background:transparent;border:1px solid #30363D;'
+        + 'border-radius:6px;color:rgba(255,255,255,0.5);cursor:pointer;">Not Now</button>';
     return '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + buttons + '</div>';
 }
 
-function siloqApplyRedirect(fromUrl, toUrl, recId) {
-    if (!confirm('Apply 301 redirect?\n\nFROM: ' + fromUrl + '\nTO: ' + toUrl + '\n\nThe old URL will redirect permanently. Make sure you have moved any unique content first.')) {
-        return;
+// ── Modal handlers ───────────────────────────────────────────────────────
+function siloqOpenRedirectModal(fromUrl, toUrl, recId, siloName, domTitle) {
+    _siloqRedirectPending = { fromUrl: fromUrl, toUrl: toUrl, recId: recId, siloName: siloName, domTitle: domTitle, btn: event.target };
+    var subtitle = document.getElementById('siloq-modal-subtitle');
+    if (subtitle) {
+        var silo = siloName ? 'your <strong style="color:#FDD96A;">' + siloqEscape(siloName) + '</strong>' : 'your';
+        subtitle.innerHTML = 'Siloq will consolidate ' + silo + ' authority into one stronger page.';
     }
+    var modal = document.getElementById('siloq-apply-redirect-modal');
+    if (modal) { modal.style.display = 'flex'; }
+}
 
-    var btn = event.target;
-    btn.disabled = true;
-    btn.textContent = 'Applying...';
+function siloqCloseRedirectModal() {
+    var modal = document.getElementById('siloq-apply-redirect-modal');
+    if (modal) { modal.style.display = 'none'; }
+    _siloqRedirectPending = { fromUrl: '', toUrl: '', recId: null, btn: null, siloName: '', domTitle: '' };
+}
+
+function siloqConfirmRedirect() {
+    var p = _siloqRedirectPending;
+    if (!p.recId) return;
+
+    siloqCloseRedirectModal();
+
+    // Grey out the card immediately
+    var card = document.querySelector('[data-rec-id="' + p.recId + '"]');
+    if (card) { card.style.opacity = '0.4'; card.style.pointerEvents = 'none'; }
 
     fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/apply-redirect/', {
         method: 'POST',
-        headers: {
-            'X-WP-Nonce': siloqDash.restNonce,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ from_url: fromUrl, to_url: toUrl, rec_id: recId }),
+        headers: { 'X-WP-Nonce': siloqDash.restNonce, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_url: p.fromUrl, to_url: p.toUrl, rec_id: p.recId }),
     })
     .then(function(r) { return r.json(); })
     .then(function(resp) {
         if (resp.status === 'success') {
-            var card = document.querySelector('[data-rec-id="' + recId + '"]');
+            // 1. Dismiss the rec in the DB immediately (mark as executed)
+            fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/' + p.recId + '/dismiss/', {
+                method: 'POST',
+                headers: { 'X-WP-Nonce': siloqDash.restNonce }
+            }).catch(function() {});
+
+            // 2. Store result card in localStorage (visible for 7 days)
+            siloqSaveResultCard(p.recId, p.domTitle, p.siloName);
+
+            // 3. Replace card with result card immediately
             if (card) {
-                card.style.opacity = '0.5';
-                card.innerHTML += '<div style="color:#22c55e;font-size:12px;margin-top:8px;">\u2713 Redirect applied. Check Redirects tab to verify.</div>';
+                card.outerHTML = siloqBuildResultCard(p.recId, { dominantTitle: p.domTitle, siloName: p.siloName });
             }
-            siloqShowToast('Redirect applied. Siloq will verify it is working within 24 hours.', 'success');
+
+            siloqShowToast('Silo strengthened. Siloq is cleaning up internal links in the background.', 'success');
         } else {
-            btn.disabled = false;
-            btn.textContent = 'Apply 301 Redirect';
-            siloqShowToast('Redirect failed: ' + (resp.message || 'Unknown error'), 'error');
+            if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; }
+            siloqShowToast('Could not apply redirect: ' + (resp.message || 'Unknown error'), 'error');
         }
     })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.textContent = 'Apply 301 Redirect';
+    .catch(function() {
+        if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; }
         siloqShowToast('Network error. Try again.', 'error');
     });
 }
@@ -4249,17 +4341,14 @@ function siloqDismissRecommendation(recId) {
     fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/recommendations/' + recId + '/dismiss/', {
         method: 'POST',
         headers: { 'X-WP-Nonce': siloqDash.restNonce }
-    })
-    .then(function() {
-        var card = document.querySelector('[data-rec-id="' + recId + '"]');
-        if (card) card.remove();
-    });
+    }).catch(function() {});
+    var card = document.querySelector('[data-rec-id="' + recId + '"]');
+    if (card) card.remove();
 }
 
 function siloqRunAnalysisNow() {
     var btn = document.querySelector('button[onclick="siloqRunAnalysisNow()"]');
     if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
-
     fetch(siloqDash.restUrl + 'sites/' + siloqDash.siteId + '/agent/run-now/', {
         method: 'POST',
         headers: { 'X-WP-Nonce': siloqDash.restNonce }
@@ -4280,16 +4369,11 @@ function siloqRunAnalysisNow() {
     });
 }
 
-// Load recommendations when SEO Plan tab becomes active
+// ── Tab wiring ───────────────────────────────────────────────────────────
 (function() {
     var planTab = document.querySelector('[aria-controls="siloq-tab-plan"]');
-    if (planTab) {
-        planTab.addEventListener('click', siloqLoadRecommendations);
-    }
-    // Also load immediately if SEO Plan is the active tab on page load
-    if (window.location.hash === '#siloq-tab-plan') {
-        siloqLoadRecommendations();
-    }
+    if (planTab) { planTab.addEventListener('click', siloqLoadRecommendations); }
+    if (window.location.hash === '#siloq-tab-plan') { siloqLoadRecommendations(); }
 })();
 </script>
 
