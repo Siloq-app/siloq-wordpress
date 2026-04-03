@@ -2471,34 +2471,38 @@ foreach ($true_orphan_posts as $oid) {
     if ($parent_id && get_post_status($parent_id) === 'publish') {
         $expected = $parent_id;
     }
-    // 2. Find most relevant hub page by title similarity
+    // 2. Same-silo hub only — never cross-silo fallback
     if (!$expected && !empty($hub_data)) {
         $spoke_title = strtolower(get_the_title($oid));
-        $best_score = 0;
+        $spoke_silo  = strtolower(get_post_meta($oid, '_siloq_silo', true) ?: get_post_meta($oid, '_siloq_silo_name', true) ?: '');
+        $best_score  = 0;
         foreach ($hub_data as $h) {
             $role = get_post_meta($h['id'], '_siloq_page_role', true);
             if (!in_array($role, array('hub', 'apex_hub', 'pillar', ''), true) && $role !== false) continue;
+
+            // Silo isolation: skip if this hub belongs to a different silo
+            if (!empty($spoke_silo)) {
+                $hub_silo = strtolower(get_post_meta($h['id'], '_siloq_silo', true) ?: get_post_meta($h['id'], '_siloq_silo_name', true) ?: '');
+                if (!empty($hub_silo) && $hub_silo !== $spoke_silo) continue;
+            }
+
             $hub_title = strtolower($h['title']);
             $hub_kw    = strtolower($h['keyword']);
             $score = 0;
-            // Check keyword match
             if ($hub_kw && strpos($spoke_title, $hub_kw) !== false) {
                 $score += 10;
             }
-            // Check title word overlap
             $hub_words = array_filter(explode(' ', preg_replace('/[^a-z0-9 ]/', '', $hub_title)));
             foreach ($hub_words as $w) {
-                if (strlen($w) > 2 && strpos($spoke_title, $w) !== false) $score += 2;
+                if (strlen($w) > 3 && strpos($spoke_title, $w) !== false) $score += 2;
             }
-            if ($score > $best_score) {
+            // Require meaningful match — never fall back to first hub alphabetically
+            if ($score >= 4 && $score > $best_score) {
                 $best_score = $score;
-                $expected = $h['id'];
+                $expected   = $h['id'];
             }
         }
-        // If no keyword/title match, use first hub as fallback
-        if (!$expected) {
-            $expected = $hub_data[0]['id'];
-        }
+        // No fallback to $hub_data[0] — cross-silo links are worse than no suggestion
     }
     if ($expected) {
         update_post_meta($oid, '_siloq_expected_linker_id', $expected);
@@ -3057,7 +3061,7 @@ function siloqExcludePage(btn) {
     btn.textContent = '…';
     jQuery.post(ajaxurl, {
         action: 'siloq_exclude_page',
-        nonce: siloqDash.nonce,
+        nonce: (typeof siloqDash !== 'undefined' ? siloqDash.nonce : (typeof siloqAdminData !== 'undefined' ? siloqAdminData.ajax_nonce : '')),
         post_id: postId
     }, function(resp) {
         if (resp.success) {
@@ -3085,7 +3089,7 @@ function siloqRunAudit(btn) {
 
     jQuery.post(ajaxurl, {
         action: 'siloq_run_audit',
-        nonce: siloqDash.nonce
+        nonce: (typeof siloqDash !== 'undefined' ? siloqDash.nonce : (typeof siloqAdminData !== 'undefined' ? siloqAdminData.ajax_nonce : ''))
     }, function(resp) {
         if (resp.success) {
             location.reload();
@@ -3122,7 +3126,7 @@ jQuery(document).on('click', '.siloq-fix-btn', function() {
         method: 'POST',
         data: {
             action: 'siloq_dashboard_fix',
-            nonce: siloqDash.nonce,
+            nonce: (typeof siloqDash !== 'undefined' ? siloqDash.nonce : (typeof siloqAdminData !== 'undefined' ? siloqAdminData.ajax_nonce : '')),
             fix_action: action,
             post_id: postId,
             fix_type: type
@@ -4003,6 +4007,10 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
         }
 
         foreach ( $_plan_spokes as $_ps ) {
+            // Blog posts (post_type=post) are NEVER restructure candidates — skip entirely
+            if ( get_post_type( $_ps->ID ) === 'post' ) {
+                continue;
+            }
             $page_url  = trailingslashit( get_permalink( $_ps->ID ) );
             $page_path = trailingslashit( '/' . ltrim( parse_url( $page_url, PHP_URL_PATH ), '/' ) );
 
@@ -5058,6 +5066,10 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         'meta_query'  => [['key'=>'_siloq_page_role','value'=>'spoke','compare'=>'=']],
                     ]);
                     foreach ( $_synced_posts as $_sp ) {
+                        // Blog posts are never URL restructure candidates
+                        if ( get_post_type( $_sp->ID ) === 'post' ) {
+                            continue;
+                        }
                         $slug = get_page_uri($_sp);
                         if ( strpos($slug, 'service-area') === false ) {
                             $_sa_spokes[] = ['id'=>$_sp->ID,'title'=>$_sp->post_title,'slug'=>$slug,'url'=>get_permalink($_sp->ID)];
@@ -6096,73 +6108,94 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
                 <script>
                 (function($) {
+                    // Always use siloqDash nonce — never fall back to undefined variables
                     var cfg = window.siloqDash || {};
-                    if (!cfg.ajaxUrl) cfg.ajaxUrl = (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
-                    if (!cfg.nonce) cfg.nonce = (typeof siloq_ajax_nonce !== 'undefined' ? siloq_ajax_nonce : '');
-                    if (!cfg.nonce && typeof wpData !== 'undefined') { cfg.ajaxUrl = wpData.ajax_url; cfg.nonce = wpData.nonce; }
+                    cfg.ajaxUrl = cfg.ajaxUrl || (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+                    cfg.nonce   = cfg.nonce   || '';
+
+                    function siloqRefreshNonce(callback) {
+                        $.post(cfg.ajaxUrl, { action: 'siloq_refresh_nonce' }, function(r) {
+                            if (r && r.success && r.data && r.data.nonce) {
+                                cfg.nonce = r.data.nonce;
+                                if (window.siloqDash) window.siloqDash.nonce = r.data.nonce;
+                            }
+                            callback();
+                        }).fail(function() { callback(); });
+                    }
+
+                    function renderAuthors(authors) {
+                        var $wrap = $('#siloq-content-authors');
+                        if (!authors.length) {
+                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;"><p style="margin:0 0 10px;">No authors yet. Add your first author to build E-E-A-T signals.</p></div>');
+                            return;
+                        }
+                        var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+                        authors.forEach(function(a) {
+                            var name = a.full_name || a.name || 'Unknown';
+                            var title = a.job_title || a.title || '';
+                            var creds = a.credentials || [];
+                            var linkedin = a.linkedin_url || a.linkedin || '';
+                            html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f9fafb;border-radius:6px;">';
+                            html += '<div style="font-weight:600;font-size:13px;min-width:120px;">' + $('<span>').text(name).html() + '</div>';
+                            if (title) html += '<div style="font-size:12px;color:#6b7280;">' + $('<span>').text(title).html() + '</div>';
+                            if (Array.isArray(creds) && creds.length) {
+                                creds.slice(0,3).forEach(function(c) {
+                                    html += '<span style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:2px 6px;border-radius:4px;">' + $('<span>').text(c).html() + '</span>';
+                                });
+                            }
+                            html += '<div style="margin-left:auto;font-size:11px;">' + (linkedin ? '<span style="color:#16a34a;">&#x2714; LinkedIn</span>' : '<span style="color:#dc2626;">&#x2718; LinkedIn</span>') + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                        $wrap.html(html);
+                    }
 
                     function loadAuthors() {
                         var $wrap = $('#siloq-content-authors');
-                        var siteId = (typeof siloqDash !== 'undefined' && siloqDash.siteId) || '';
-                        var apiKey = (typeof siloqDash !== 'undefined' && siloqDash.apiToken) || '';
-                        var apiBase = (typeof siloqDash !== 'undefined' && siloqDash.apiBase) || '';
-
-                        if (!siteId || !apiBase) {
-                            $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;">No authors yet. Add your first author to build E-E-A-T signals.</div>');
-                            return;
-                        }
-
-                        $.ajax({
-                            url: apiBase + '/authors/',
-                            method: 'GET',
-                            headers: { 'Authorization': 'Bearer ' + apiKey },
-                            timeout: 15000,
-                            success: function(resp) {
-                                var authors = resp.authors || (Array.isArray(resp) ? resp : []);
-                                if (!authors.length) {
-                                    $wrap.html('<div style="color:#6b7280;font-size:13px;padding:20px;text-align:center;"><p style="margin:0 0 10px;">No authors yet. Add your first author to build E-E-A-T signals.</p></div>');
+                        $wrap.html('<div style="color:#9ca3af;font-size:13px;padding:8px;">Loading authors...</div>');
+                        // Always refresh nonce first to handle long-open pages
+                        siloqRefreshNonce(function() {
+                            $.post(cfg.ajaxUrl, { action: 'siloq_get_authors', nonce: cfg.nonce }, function(resp) {
+                                if (!resp.success || !resp.data) {
+                                    var msg = (resp.data && resp.data.message) ? resp.data.message : 'Could not load authors.';
+                                    $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + msg + '</div>');
                                     return;
                                 }
-                                var html = '<div style="display:flex;flex-direction:column;gap:8px;">';
-                                authors.forEach(function(a) {
-                                    var name = a.full_name || a.name || 'Unknown';
-                                    var title = a.job_title || a.title || '';
-                                    var creds = a.credentials || [];
-                                    var linkedin = a.linkedin_url || a.linkedin || '';
-                                    html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f9fafb;border-radius:6px;">';
-                                    html += '<div style="font-weight:600;font-size:13px;min-width:120px;">' + $('<span>').text(name).html() + '</div>';
-                                    if (title) html += '<div style="font-size:12px;color:#6b7280;">' + $('<span>').text(title).html() + '</div>';
-                                    if (Array.isArray(creds) && creds.length) {
-                                        creds.slice(0,3).forEach(function(c) {
-                                            html += '<span style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:2px 6px;border-radius:4px;">' + $('<span>').text(c).html() + '</span>';
-                                        });
-                                    }
-                                    html += '<div style="margin-left:auto;font-size:11px;">' + (linkedin ? '<span style="color:#16a34a;">&#x2714; LinkedIn</span>' : '<span style="color:#dc2626;">&#x2718; LinkedIn</span>') + '</div>';
-                                    html += '</div>';
-                                });
-                                html += '</div>';
-                                $wrap.html(html);
-                            },
-                            error: function(xhr) {
-                                var msg = xhr.status === 401 ? 'API authentication failed. Check Settings.' : 'Could not load authors.';
+                                var authors = resp.data.authors || (Array.isArray(resp.data) ? resp.data : []);
+                                renderAuthors(authors);
+                            }).fail(function(xhr) {
+                                var msg = xhr.status === 403 ? 'Authentication failed — please reload the page.' : 'Could not load authors (HTTP ' + xhr.status + ').';
                                 $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + msg + '</div>');
-                            }
+                            });
                         });
                     }
 
                     function loadContentJobs() {
+                        siloqRefreshNonce(function() {
                         $.post(cfg.ajaxUrl, { action: 'siloq_get_content_jobs', nonce: cfg.nonce }, function(resp) {
                             var $wrap = $('#siloq-content-jobs');
-                            if (!resp.success || !resp.data) {
-                                $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">Could not load content jobs. ' + (resp.data && resp.data.message ? resp.data.message : '') + '</div>');
+                            if (!resp.success) {
+                                var errMsg = (resp.data && resp.data.message) ? resp.data.message : 'Could not load content jobs.';
+                                $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">' + errMsg + '</div>');
                                 return;
                             }
-                            var jobs = Array.isArray(resp.data) ? resp.data : (resp.data.results || resp.data.jobs || []);
+                            // Handle both flat array and nested {jobs:[...]} shapes
+                            var rawData = resp.data;
+                            var jobs = [];
+                            if (Array.isArray(rawData)) {
+                                jobs = rawData;
+                            } else if (rawData && Array.isArray(rawData.jobs)) {
+                                jobs = rawData.jobs;
+                            } else if (rawData && Array.isArray(rawData.results)) {
+                                jobs = rawData.results;
+                            } else if (rawData && rawData.data && Array.isArray(rawData.data.jobs)) {
+                                jobs = rawData.data.jobs;
+                            }
                             var actionable = jobs.filter(function(j) {
                                 return j.status === 'pending_approval' || j.status === 'draft';
                             });
                             if (!actionable.length) {
-                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:8px;">No pending content. Click "Generate Content Plan" to create blog topics based on your SEO gaps.</div>');
+                                $wrap.html('<div style="color:#6b7280;font-size:13px;padding:16px;text-align:center;">No content jobs yet. Click <strong>Generate Content Plan</strong> to create blog topics based on your SEO gaps.</div>');
                                 return;
                             }
                             var tierColors = { 1: '#D39938', 2: '#b45309', 3: '#6b7280' };
@@ -6196,7 +6229,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             });
                             html += '</div>';
                             $wrap.html(html);
+                        }).fail(function(xhr) {
+                            var $wrap = $('#siloq-content-jobs');
+                            $wrap.html('<div style="color:#dc2626;font-size:13px;padding:8px;">Could not load content pipeline (HTTP ' + xhr.status + '). Please reload the page.</div>');
                         });
+                        }); // end siloqRefreshNonce
                     }
 
                     // Toggle bulk approve button visibility
@@ -6353,40 +6390,33 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         $btn.text('Saving...').prop('disabled', true);
                         $('#siloq-author-modal-error').hide();
                         var creds = $('#siloq-author-credentials').val().split(',').map(function(s){ return s.trim(); }).filter(Boolean);
-                        var siteId = (typeof siloqDash !== 'undefined' && siloqDash.siteId) || '';
-                        var apiKey = (typeof siloqDash !== 'undefined' && siloqDash.apiToken) || '';
-                        var apiBase = (typeof siloqDash !== 'undefined' && siloqDash.apiBase) || '';
 
-                        if (!siteId || !apiBase) {
-                            $('#siloq-author-modal-error').text('Site not connected to Siloq. Check Settings.').show();
-                            $btn.text('Save Author').prop('disabled', false);
-                            return;
-                        }
-
-                        $.ajax({
-                            url: apiBase + '/authors/',
-                            method: 'POST',
-                            headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-                            data: JSON.stringify({
-                                full_name: name, job_title: title,
-                                short_bio: $('#siloq-author-bio').val().trim(),
-                                credentials: creds,
-                            }),
-                            success: function(resp) {
+                        // Refresh nonce first, then save — handles long-open pages
+                        siloqRefreshNonce(function() {});
+                        $.post(cfg.ajaxUrl, {
+                            action:      'siloq_save_author',
+                            nonce:       cfg.nonce,
+                            full_name:   name,
+                            job_title:   title,
+                            short_bio:   $('#siloq-author-bio').val().trim(),
+                            credentials: creds.join(','),
+                        }, function(resp) {
+                            if (resp.success) {
                                 $('#siloq-author-modal').hide();
                                 var $wrap = $('#siloq-content-authors');
                                 var $toast = $('<div style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:8px;">✓ Author added successfully.</div>');
                                 $wrap.prepend($toast);
                                 setTimeout(function(){ $toast.fadeOut(300, function(){ $(this).remove(); }); }, 3000);
                                 if (typeof loadAuthors === 'function') loadAuthors();
-                            },
-                            error: function(xhr) {
-                                var msg = 'Could not save author.';
-                                try { var d = JSON.parse(xhr.responseText); msg = d.error || d.message || msg; } catch(e){}
-                                if (xhr.status === 401) msg = 'API authentication failed. Check your API key in Settings.';
+                            } else {
+                                var msg = (resp.data && resp.data.message) ? resp.data.message : 'Could not save author.';
                                 $('#siloq-author-modal-error').text(msg).show();
                                 $btn.text('Save Author').prop('disabled', false);
                             }
+                        }).fail(function(xhr) {
+                            var msg = xhr.status === 403 ? 'Session expired — please reload the page.' : 'Could not save author.';
+                            $('#siloq-author-modal-error').text(msg).show();
+                            $btn.text('Save Author').prop('disabled', false);
                         });
                     });
                 })(jQuery);
@@ -6509,51 +6539,121 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     });
                 });
 
-                // Shared page-creation handler — reads title/type from data attributes
-                // to avoid inline JS quote/apostrophe issues.
+                // Shared page-creation handler — reads title/type/category from data attributes.
+                // Shows a confirmation step BEFORE creating so the user knows exactly
+                // what type of content is being created and where it will live.
                 function siloqDoCreatePage(btn) {
-                    var title     = btn.getAttribute('data-title');
-                    var draftType = btn.getAttribute('data-type') || 'generic';
-                    var parentId  = parseInt(btn.getAttribute('data-parent-id') || 0);
+                    var title        = btn.getAttribute('data-title');
+                    var draftType    = btn.getAttribute('data-type') || 'generic';
+                    var parentId     = parseInt(btn.getAttribute('data-parent-id') || 0);
+                    var siloCategory = btn.getAttribute('data-silo-category') || '';
+                    var parentTitle  = btn.getAttribute('data-parent-title') || '';
                     if (!title) { btn.textContent = 'No title'; return; }
-                    btn.textContent = 'Creating...';
-                    btn.disabled = true;
-                    jQuery.post(ajaxurl, {
-                        action:     'siloq_create_draft_page',
-                        nonce:      '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
-                        title:      title,
-                        draft_type: draftType,
-                        parent_id:  parentId
-                    }, function(r) {
-                        if (r && r.success && r.data && r.data.edit_url) {
-                            // Replace button with a success message + clickable Edit link
-                            // (window.open is blocked by browsers in AJAX callbacks)
-                            var editUrl = r.data.edit_url;
-                            var wrap = document.createElement('span');
-                            wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
-                            wrap.innerHTML = '<span style="color:#16a34a;font-weight:600;">✓ Created</span>'
-                                + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
-                                + 'style="background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
-                                + 'Edit Page →</a>';
-                            btn.parentNode.replaceChild(wrap, btn);
-                        } else if (r && r.data && r.data.cannibal) {
-                            // Page already exists — show link to existing page
-                            var existUrl = r.data.edit_url || '';
-                            var wrap2 = document.createElement('span');
-                            wrap2.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
-                            wrap2.innerHTML = '<span style="color:#92400e;font-weight:600;">⚠ Already exists</span>'
-                                + (existUrl ? '<a href="' + existUrl + '" target="_blank" rel="noopener" '
-                                + 'style="background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
-                                + 'View Page →</a>' : '');
-                            btn.parentNode.replaceChild(wrap2, btn);
-                        } else {
-                            var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
-                            btn.textContent = msg;
-                            btn.disabled = false;
+
+                    // ── Classify type client-side for the confirmation label ──
+                    var titleLower = title.toLowerCase();
+                    // Blog signals — checked first, any match = Blog Post
+                    var blogSignals = [
+                        'how to ', 'how do ', 'why ', 'when ', 'what is', 'what are',
+                        'signs your', 'signs of', 'signs ', 'guide to', 'guide for',
+                        ' tips', 'tips for', 'tips on', ' faq', 'questions about',
+                        'checklist', 'the difference', 'should you', 'do you need',
+                        'is it', 'are there', 'causes of', 'cost of', 'benefits of',
+                        'types of', 'top ', 'best ', 'common ', 'prevent', 'avoid',
+                        'fix your', 'repair your', 'understanding ', 'explained',
+                        ' vs ', ' vs.', 'versus', 'complete guide', 'warning signs',
+                        'hidden ', 'leak', 'damage'
+                    ];
+                    var isPost = false;
+                    if (['blog','how_to','faq','comparison','supporting_article'].indexOf(draftType) !== -1) {
+                        isPost = true;
+                    } else if (['city','service','service-areas'].indexOf(draftType) !== -1) {
+                        isPost = false;
+                    } else {
+                        // Blog signals take priority — check FIRST before anything else
+                        for (var i = 0; i < blogSignals.length; i++) {
+                            if (titleLower.indexOf(blogSignals[i]) !== -1) { isPost = true; break; }
                         }
-                    }).fail(function(xhr) {
-                        btn.textContent = 'Error ' + xhr.status + ' — retry';
-                        btn.disabled = false;
+                    }
+                    var typeLabel    = isPost ? 'Blog Post' : 'Service Page';
+                    var locationLine = isPost
+                        ? (siloCategory ? 'Category: <strong>' + siloCategory + '</strong>' : '')
+                        : (parentTitle  ? 'Child of: <strong>' + parentTitle + '</strong>'  : '');
+
+                    // ── Confirmation modal ──────────────────────────────────────
+                    jQuery('#siloq-confirm-create-modal').remove();
+                    var $confirm = jQuery(
+                        '<div id="siloq-confirm-create-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;'
+                        + 'background:rgba(0,0,0,0.55);z-index:999998;display:flex;align-items:center;justify-content:center;">'
+                        + '<div style="background:#fff;border-radius:12px;padding:28px;width:420px;max-width:92vw;'
+                        + 'box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+                        + '<h3 style="margin:0 0 12px;font-size:15px;font-weight:700;color:#111827;">Confirm Content Creation</h3>'
+                        + '<p style="font-size:13px;color:#374151;margin:0 0 8px;">We\'ll create this as a <strong>' + typeLabel + '</strong> titled:</p>'
+                        + '<p style="font-size:14px;font-weight:700;color:#111827;background:#f9fafb;padding:10px 12px;'
+                        + 'border-radius:6px;margin:0 0 8px;border-left:3px solid #D39938;">' + jQuery('<span>').text(title).html() + '</p>'
+                        + (locationLine ? '<p style="font-size:12px;color:#6b7280;margin:0 0 16px;">' + locationLine + '</p>' : '<p style="margin:0 0 16px;"></p>')
+                        + '<p style="font-size:12px;color:#9ca3af;margin:0 0 20px;">The WordPress editor will open immediately after creation so you can review, add images, and publish when ready.</p>'
+                        + '<div style="display:flex;gap:10px;justify-content:flex-end;">'
+                        + '<button id="siloq-confirm-cancel" style="padding:8px 16px;background:#f3f4f6;border:none;border-radius:6px;cursor:pointer;font-size:13px;color:#374151;">Cancel</button>'
+                        + '<button id="siloq-confirm-go" style="padding:8px 18px;background:linear-gradient(135deg,#FDD96A 0%,#D39938 50%);border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;color:#0D1117;">Confirm &amp; Create</button>'
+                        + '</div></div></div>'
+                    );
+                    jQuery('body').append($confirm);
+
+                    $confirm.on('click', '#siloq-confirm-cancel', function() { $confirm.remove(); });
+
+                    $confirm.on('click', '#siloq-confirm-go', function() {
+                        $confirm.remove();
+                        // ── Actually create ───────────────────────────────────
+                        var origParent = btn.parentNode;
+                        var placeholder = document.createElement('span');
+                        placeholder.style.cssText = 'font-size:12px;color:#6b7280;';
+                        placeholder.textContent = 'Creating…';
+                        if (origParent) { origParent.replaceChild(placeholder, btn); }
+
+                        jQuery.post(ajaxurl, {
+                            action:               'siloq_create_draft_page',
+                            nonce:                '<?php echo esc_js(wp_create_nonce("siloq_ajax_nonce")); ?>',
+                            title:                title,
+                            draft_type:           draftType,
+                            parent_id:            parentId,
+                            silo_category:        siloCategory,
+                            confirmed_post_type:  isPost ? 'post' : 'page',
+                        }, function(r) {
+                            if (r && r.success && r.data && r.data.edit_url) {
+                                var editUrl  = r.data.edit_url;
+                                var typeInfo = r.data.type_label || typeLabel;
+                                var catInfo  = r.data.category   || siloCategory;
+                                var wrap = document.createElement('span');
+                                wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;';
+                                wrap.innerHTML = '<span style="color:#16a34a;font-weight:600;font-size:12px;">✓ ' + typeInfo + ' created'
+                                    + (catInfo ? ' in <em>' + catInfo + '</em>' : '') + '</span>'
+                                    + '<a href="' + editUrl + '" target="_blank" rel="noopener" '
+                                    + 'style="background:#D39938;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
+                                    + 'Edit Now →</a>';
+                                if (placeholder.parentNode) { placeholder.parentNode.replaceChild(wrap, placeholder); }
+                                // Open editor immediately in new tab
+                                window.open(editUrl, '_blank');
+                            } else if (r && r.data && r.data.cannibal) {
+                                var existUrl = r.data.edit_url || '';
+                                var wrap2 = document.createElement('span');
+                                wrap2.style.cssText = 'display:inline-flex;align-items:center;gap:8px;';
+                                wrap2.innerHTML = '<span style="color:#92400e;font-weight:600;font-size:12px;">⚠ Already exists</span>'
+                                    + (existUrl ? '<a href="' + existUrl + '" target="_blank" rel="noopener" '
+                                    + 'style="background:#d97706;color:#fff;padding:4px 12px;border-radius:4px;font-size:12px;text-decoration:none;white-space:nowrap;">'
+                                    + 'View Existing →</a>' : '');
+                                if (placeholder.parentNode) { placeholder.parentNode.replaceChild(wrap2, placeholder); }
+                            } else {
+                                var msg = (r && r.data && r.data.message) ? r.data.message : 'Failed — try again';
+                                if (placeholder.parentNode) { placeholder.parentNode.replaceChild(btn, placeholder); }
+                                btn.textContent = msg;
+                                btn.disabled = false;
+                            }
+                        }).fail(function(xhr) {
+                            if (placeholder.parentNode) { placeholder.parentNode.replaceChild(btn, placeholder); }
+                            btn.textContent = 'Error ' + xhr.status + ' — retry';
+                            btn.disabled = false;
+                        });
                     });
                 }
 
@@ -6628,11 +6728,17 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         $('#siloq-spoke-suggestions').html(html);
 
                         $('#siloq-spoke-suggestions').on('click', '.siloq-spoke-suggestion', function() {
-                            var title = $(this).data('title');
+                            var title       = $(this).data('title');
+                            var siloName    = $(this).data('silo-category') || '';
+                            var hubTitle    = $(this).data('hub-title') || '';
+                            var hubId       = $(this).data('hub-id') || 0;
                             $modal.remove();
                             var btn = document.createElement('button');
                             btn.setAttribute('data-title', title);
                             btn.setAttribute('data-type', 'service');
+                            btn.setAttribute('data-silo-category', siloName);
+                            btn.setAttribute('data-parent-title', hubTitle);
+                            btn.setAttribute('data-parent-id', hubId);
                             siloqDoCreatePage(btn);
                         });
 
@@ -10079,9 +10185,14 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 $hub_id = $parent_id;
             }
 
-            // 2. Search for most relevant hub by keyword/title match
+            // 2. Same-silo hub match ONLY — never cross silos
             if ( ! $hub_id ) {
                 $spoke_title_lower = strtolower( get_the_title( $spoke_id ) );
+                // Get the spoke's silo from its meta
+                $spoke_silo = get_post_meta( $spoke_id, '_siloq_silo', true )
+                           ?: get_post_meta( $spoke_id, '_siloq_silo_name', true )
+                           ?: '';
+
                 $hub_posts = get_posts( array(
                     'post_type'   => array( 'page', 'post' ),
                     'post_status' => 'publish',
@@ -10096,23 +10207,31 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
                 $best_score = 0;
                 foreach ( $hub_posts as $hp ) {
+                    // Enforce silo isolation: only consider hubs in the same silo
+                    if ( ! empty( $spoke_silo ) ) {
+                        $hub_silo = get_post_meta( $hp->ID, '_siloq_silo', true )
+                                 ?: get_post_meta( $hp->ID, '_siloq_silo_name', true )
+                                 ?: '';
+                        // Skip hubs from a different silo entirely
+                        if ( ! empty( $hub_silo ) && strtolower( $hub_silo ) !== strtolower( $spoke_silo ) ) {
+                            continue;
+                        }
+                    }
+
                     $hub_title_lower = strtolower( $hp->post_title );
                     $hub_words = array_filter( explode( ' ', preg_replace( '/[^a-z0-9 ]/', '', $hub_title_lower ) ) );
                     $score = 0;
                     foreach ( $hub_words as $w ) {
-                        if ( strlen( $w ) > 2 && strpos( $spoke_title_lower, $w ) !== false ) {
+                        if ( strlen( $w ) > 3 && strpos( $spoke_title_lower, $w ) !== false ) {
                             $score += 2;
                         }
                     }
-                    if ( $score > $best_score ) {
+                    // Require meaningful match (score >= 4 = at least 2 words matching)
+                    // NEVER fall back to a random hub — that causes cross-silo links
+                    if ( $score >= 4 && $score > $best_score ) {
                         $best_score = $score;
                         $hub_id     = $hp->ID;
                     }
-                }
-
-                // Fallback: use first hub found
-                if ( ! $hub_id && ! empty( $hub_posts ) ) {
-                    $hub_id = $hub_posts[0]->ID;
                 }
             }
 
@@ -10124,7 +10243,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         if ( ! $hub_id ) {
             wp_send_json_success( array(
                 'hub_id'     => 0,
-                'suggestion' => 'We could not automatically determine which page should link here. Manually add a link from your most relevant hub page.',
+                'suggestion' => 'No matching hub page found in the same silo. Manually add a link from the most relevant hub page for this topic.',
             ) );
             return;
         }
@@ -10819,6 +10938,21 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
     // AJAX: Content tab — Authors
     // =========================================================================
 
+    // =========================================================================
+    // AJAX: Refresh nonce — called before any API request on long-open pages
+    // =========================================================================
+
+    public static function ajax_refresh_nonce() {
+        // No nonce check needed — this generates a fresh one
+        if ( ! is_user_logged_in() ) {
+            wp_send_json_error( array( 'message' => 'Not logged in.' ) );
+        }
+        wp_send_json_success( array(
+            'nonce' => wp_create_nonce( 'siloq_ajax_nonce' ),
+        ) );
+    }
+
+    // =========================================================================
     public static function ajax_get_authors() {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
         if ( ! current_user_can( 'manage_options' ) ) {
@@ -10830,13 +10964,57 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => 'No site connected.' ) );
         }
 
-        $api = new Siloq_API_Client();
+        $api    = new Siloq_API_Client();
         $result = $api->get( '/sites/' . $site_id . '/authors/' );
 
         if ( isset( $result['success'] ) && $result['success'] === false ) {
             wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : 'Failed to fetch authors.' ) );
         }
 
+        wp_send_json_success( $result );
+    }
+
+    // =========================================================================
+    // AJAX: Save Author — proxied through WP AJAX to avoid CORS
+    // =========================================================================
+
+    public static function ajax_save_author() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( empty( $site_id ) ) {
+            wp_send_json_error( array( 'message' => 'No site connected.' ) );
+        }
+
+        $full_name = sanitize_text_field( $_POST['full_name'] ?? '' );
+        $job_title = sanitize_text_field( $_POST['job_title'] ?? '' );
+        $short_bio = sanitize_textarea_field( $_POST['short_bio'] ?? '' );
+
+        // Credentials come as comma-separated string from JS
+        $creds_raw   = sanitize_text_field( $_POST['credentials'] ?? '' );
+        $credentials = array_values( array_filter( array_map( 'trim', explode( ',', $creds_raw ) ) ) );
+
+        if ( empty( $full_name ) || empty( $job_title ) ) {
+            wp_send_json_error( array( 'message' => 'Full Name and Job Title are required.' ) );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->post( '/sites/' . $site_id . '/authors/', array(
+            'full_name'   => $full_name,
+            'job_title'   => $job_title,
+            'short_bio'   => $short_bio,
+            'credentials' => $credentials,
+        ) );
+
+        if ( isset( $result['success'] ) && $result['success'] === false ) {
+            wp_send_json_error( array( 'message' => $result['message'] ?? 'Failed to save author.' ) );
+            return;
+        }
+
+        // Success — $result is the serialized author object
         wp_send_json_success( $result );
     }
 
@@ -10992,7 +11170,6 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
     }
 
     // =========================================================================
-<<<<<<< HEAD
     // AJAX: Content tab — Publish a draft post
     // =========================================================================
 
@@ -11040,7 +11217,9 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             'post_id'   => $post_id,
             'permalink' => $permalink,
         ) );
-=======
+    }
+
+    // =========================================================================
     // AJAX: Start a background job (wrapper around API job endpoints)
     // =========================================================================
 
@@ -11108,6 +11287,5 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 'message' => $result['message'] ?? 'Failed to get job status.',
             ) );
         }
->>>>>>> origin/fix/nav-content-tab-fixes
     }
 }

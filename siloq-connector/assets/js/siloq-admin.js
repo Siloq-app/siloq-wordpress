@@ -249,6 +249,7 @@
 
     function updateDashboardStats() {
         // Get real statistics from WordPress
+        if (typeof siloqAdminData === 'undefined') return;
         $.ajax({
             url: ajaxurl,
             type: 'POST',
