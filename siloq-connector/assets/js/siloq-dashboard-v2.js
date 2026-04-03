@@ -6,6 +6,51 @@
   'use strict';
 
   var cfg = window.siloqDash || {};
+
+  // ── System Health Check ─────────────────────────────────────────────────
+  // Runs on dashboard load. If Celery/Redis offline, greys out job buttons.
+  var siloqSystemHealthy = true;
+
+  function checkSystemHealth() {
+    var $bar  = $('#siloq-system-status-bar');
+    var $dot  = $('#siloq-status-dot');
+    var $text = $('#siloq-status-text');
+    $bar.show();
+
+    var apiBase = cfg.apiBase || 'https://api.siloq.ai/api/v1';
+    $.post(cfg.ajaxUrl, { action: 'siloq_health_check', nonce: cfg.nonce }, function(resp) {
+      var h = (resp.success && resp.data) ? resp.data : {};
+      var celery = h.celery || 'unknown';
+      var redis  = h.redis  || 'unknown';
+      var ok = (celery === 'ok' && (redis === 'ok' || redis === 'not_configured'));
+
+      siloqSystemHealthy = ok;
+
+      if (ok) {
+        $dot.css('background', '#16a34a');
+        $text.text('✓ Siloq engine connected — all systems ready');
+        $bar.css({'background':'#f0fdf4','border':'1px solid #86efac','color':'#166534'});
+        // Fade out after 4s if all good
+        setTimeout(function(){ $bar.fadeOut(600); }, 4000);
+      } else if (celery === 'offline') {
+        $dot.css('background', '#d97706');
+        $text.text('⚠ Siloq analysis engine is warming up — background jobs paused. Try again in a minute.');
+        $bar.css({'background':'#fffbeb','border':'1px solid #fcd34d','color':'#92400e'});
+        // Grey out job buttons
+        $('#siloq-fix-all-btn, #siloq-audit-links-btn, #siloq-full-audit-btn').prop('disabled', true).css('opacity','0.5').attr('title','Siloq engine warming up — try again in a minute');
+      } else {
+        $dot.css('background', '#16a34a');
+        $text.text('✓ API connected');
+        $bar.css({'background':'#f0fdf4','border':'1px solid #86efac','color':'#166534'});
+        setTimeout(function(){ $bar.fadeOut(600); }, 3000);
+      }
+    }).fail(function() {
+      siloqSystemHealthy = false;
+      $dot.css('background', '#dc2626');
+      $text.text('✗ Cannot reach Siloq API — check your API key in Settings');
+      $bar.css({'background':'#fef2f2','border':'1px solid #fca5a5','color':'#991b1b'});
+    });
+  }
   // Seed Quick Wins completed state from PHP (persisted across sessions)
   window.siloqQwCompleted = cfg.qwCompleted || {};
 
@@ -1763,6 +1808,7 @@
   /* ─── Init ───────────────────────────────────── */
   $(document).ready(function () {
     if (!$('.siloq-dash-wrap').length) return;
+    checkSystemHealth();
     initTabs();
     initScoreRing();
     initAccordions();

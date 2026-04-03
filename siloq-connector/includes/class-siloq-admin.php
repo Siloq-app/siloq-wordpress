@@ -3944,6 +3944,12 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
                         </div>
                     </div>
 
+                    <!-- System Status Bar — health check before job buttons fire -->
+                    <div id="siloq-system-status-bar" style="display:none;border-radius:8px;padding:10px 16px;margin-bottom:12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
+                        <span id="siloq-status-dot" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#9ca3af;flex-shrink:0;"></span>
+                        <span id="siloq-status-text">Checking system status...</span>
+                    </div>
+
                     <!-- Fix All banner (shown by JS when missing titles/descs exist) -->
                     <div id="siloq-fix-all-bar" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
