@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.297
+ * Version: 1.5.298
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.297');
+define('SILOQ_VERSION', '1.5.298');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -3948,6 +3948,22 @@ if (!has_action('wp_ajax_siloq_get_dashboard_stats')) {
 
 if (!has_action('wp_ajax_siloq_health_check')) {
     add_action('wp_ajax_siloq_health_check', 'siloq_health_check');
+}
+
+// Register previously-missing handlers
+$missing_actions = [
+    'siloq_get_plan_data'        => ['Siloq_Admin', 'ajax_get_plan_data'],
+    'siloq_get_pages_list'       => ['Siloq_Admin', 'ajax_get_pages_list'],
+    'siloq_set_page_role'        => ['Siloq_Admin', 'ajax_set_page_role'],
+    'siloq_get_schema_graph'     => ['Siloq_Admin', 'ajax_get_schema_graph'],
+    'siloq_repair_elementor_meta'=> ['Siloq_Admin', 'ajax_repair_elementor_meta'],
+    'siloq_add_internal_link'    => ['Siloq_Admin', 'ajax_add_internal_link'],
+];
+foreach ($missing_actions as $action => $callback) {
+    if (!has_action('wp_ajax_' . $action)) {
+        add_action('wp_ajax_' . $action, $callback);
+    }
+if (true) {
 }
 
 function siloq_health_check() {

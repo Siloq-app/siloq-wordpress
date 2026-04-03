@@ -436,7 +436,7 @@ class Siloq_Admin {
                         </div>
                         <p style="color:#555;margin-bottom:12px;"><?php _e('Connect Google Search Console to see which pages get traffic and need the most attention first.', 'siloq-connector'); ?></p>
                         <?php if (get_option('siloq_gsc_needs_property_selection') === 'yes'): ?>
-                        <div id="siloq-gsc-property-picker" style="background:#f0f7ff;border:1px solid #2271b1;border-radius:6px;padding:16px;margin-bottom:12px;">
+                        <div id="siloq-gsc-property-picker-2" style="background:#f0f7ff;border:1px solid #2271b1;border-radius:6px;padding:16px;margin-bottom:12px;">
                             <h3 style="margin:0 0 8px;color:#1d2327;">✅ Google account connected — choose your property</h3>
                             <p style="color:#555;margin:0 0 12px;">Select which Search Console property to use for <strong><?php echo esc_html(home_url()); ?></strong>:</p>
                             <div id="siloq-property-list" style="margin-bottom:12px;"><em>Loading properties...</em></div>
@@ -451,7 +451,7 @@ class Siloq_Admin {
                             </button>
                             &nbsp;
                             <button type="button" id="siloq-gsc-check-btn" class="button"><?php _e('Check Connection', 'siloq-connector'); ?></button>
-                            <span id="siloq-gsc-status-msg" style="margin-left:10px;font-size:13px;color:#666;"></span>
+                            <span id="siloq-gsc-status-msg-2" style="margin-left:10px;font-size:13px;color:#666;"></span>
                         </p>
                         <p style="margin-top:8px;color:#888;font-size:12px;"><?php _e('A Google sign-in window will open. Complete authorization, then return here.', 'siloq-connector'); ?></p>
                         <?php endif; ?>
@@ -3426,7 +3426,7 @@ $_audit_cache  = get_option( Siloq_Agent_Ready::OPTION_AUDIT_CACHE, [] );
           ⚡ Generate Agent Files
         </button>
       <?php else : ?>
-        <button type="button" id="siloq-generate-agent-files" class="siloq-btn siloq-btn--outline siloq-btn--sm">
+        <button type="button" id="siloq-generate-agent-files-2" class="siloq-btn siloq-btn--outline siloq-btn--sm">
           🔄 Regenerate Files
         </button>
       <?php endif; ?>
@@ -6885,7 +6885,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                     <p><?php _e('Monitor and manage the synchronization status of your pages.', 'siloq-connector'); ?></p>
                     
                     <div class="siloq-sync-actions">
-                        <button type="button" id="siloq-sync-all" class="siloq-button siloq-button-primary">
+                        <button type="button" id="siloq-sync-all-2" class="siloq-button siloq-button-primary">
                             <span class="dashicons dashicons-update"></span>
                             <?php _e('Sync All Pages', 'siloq-connector'); ?>
                         </button>
@@ -6943,7 +6943,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 $pages_needing_resync = $sync_engine->get_pages_needing_resync();
                 if (!empty($pages_needing_resync)) {
                     ?>
-                    <button type="button" id="siloq-sync-outdated" class="button button-primary" aria-label="Sync outdated pages">
+                    <button type="button" id="siloq-sync-outdated-2" class="button button-primary" aria-label="Sync outdated pages">
                         <span class="dashicons dashicons-update" aria-hidden="true"></span>
                         <span><?php printf(__('Sync %d Outdated Pages', 'siloq-connector'), count($pages_needing_resync)); ?></span>
                     </button>
@@ -11149,7 +11149,8 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             wp_send_json_error( array( 'message' => isset( $result['message'] ) ? $result['message'] : 'Failed to generate content.' ) );
         }
 
-        wp_send_json_success( $result );
+        // Return the inner data so JS can read resp.data.title, resp.data.content, resp.data.post_id directly
+        wp_send_json_success( $result['data'] ?? $result );
     }
 
     // =========================================================================
@@ -11326,4 +11327,228 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             ) );
         }
     }
+
+    // =========================================================================
+    // AJAX: SEO Plan tab — load plan data from API
+    // Contract: returns {issues:[], actions:[], score:int, pages_analyzed:int}
+    // =========================================================================
+    public static function ajax_get_plan_data() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( ! $site_id ) {
+            wp_send_json_error( [ 'message' => 'No site connected. Add your API key in Settings.' ] );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/sites/' . intval( $site_id ) . '/plan/' );
+
+        if ( ! $result['success'] ) {
+            wp_send_json_error( [ 'message' => $result['message'] ?? 'Failed to load plan data.' ] );
+        }
+
+        wp_send_json_success( $result['data'] );
+    }
+
+    // =========================================================================
+    // AJAX: Pages tab — list synced pages with pagination
+    // Contract: returns {pages:[{id,title,url,score,type,edit_url,...}], offset:int, has_more:bool}
+    // =========================================================================
+    public static function ajax_get_pages_list() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( ! $site_id ) {
+            wp_send_json_error( [ 'message' => 'No site connected.' ] );
+        }
+
+        $offset = intval( $_POST['offset'] ?? 0 );
+        $filter = sanitize_key( $_POST['filter'] ?? 'all' );
+        $limit  = 20;
+
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/sites/' . intval( $site_id ) . '/pages/?limit=' . $limit . '&offset=' . $offset . ( $filter !== 'all' ? '&filter=' . $filter : '' ) );
+
+        if ( ! $result['success'] ) {
+            // Fallback: build page list from local WP data
+            $posts = get_posts( [
+                'post_type'      => [ 'page', 'post' ],
+                'post_status'    => 'publish',
+                'numberposts'    => $limit,
+                'offset'         => $offset,
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+            ] );
+
+            $pages = [];
+            foreach ( $posts as $post ) {
+                $pages[] = [
+                    'id'       => $post->ID,
+                    'title'    => $post->post_title,
+                    'url'      => get_permalink( $post->ID ),
+                    'edit_url' => get_edit_post_link( $post->ID ),
+                    'type'     => get_post_meta( $post->ID, '_siloq_page_role', true ) ?: 'unknown',
+                    'score'    => null,
+                ];
+            }
+            wp_send_json_success( [ 'pages' => $pages, 'offset' => $offset + count($pages), 'has_more' => count($posts) >= $limit ] );
+            return;
+        }
+
+        // Normalize API response — ensure pages array exists
+        $data = $result['data'];
+        if ( isset( $data['results'] ) ) {
+            // DRF paginated response
+            $pages = [];
+            foreach ( $data['results'] as $p ) {
+                $wp_id    = (int) ( $p['wp_post_id'] ?? 0 );
+                $pages[] = [
+                    'id'             => $wp_id,
+                    'siloq_page_id'  => $p['id'] ?? null,
+                    'title'          => $p['title'] ?? '',
+                    'url'            => $p['url'] ?? '',
+                    'edit_url'       => $wp_id ? get_edit_post_link( $wp_id ) : '',
+                    'type'           => $p['page_type_classification'] ?? $p['page_type'] ?? 'supporting',
+                    'score'          => $p['seo_score'] ?? null,
+                    'analyzed'       => ! empty( $p['last_analyzed'] ),
+                    'page_builder'   => $p['page_builder'] ?? '',
+                ];
+            }
+            $new_offset = $offset + count( $pages );
+            $has_more   = ! empty( $data['next'] );
+            wp_send_json_success( [ 'pages' => $pages, 'offset' => $new_offset, 'has_more' => $has_more ] );
+        } else {
+            wp_send_json_success( [ 'pages' => [], 'offset' => 0, 'has_more' => false ] );
+        }
+    }
+
+    // =========================================================================
+    // AJAX: Pages tab — set page role (hub/spoke/supporting/orphan)
+    // Contract: returns {success:true, message:string}
+    // =========================================================================
+    public static function ajax_set_page_role() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $post_id = intval( $_POST['post_id'] ?? 0 );
+        $role    = sanitize_key( $_POST['role'] ?? '' );
+        $valid   = [ 'hub', 'spoke', 'supporting', 'orphan', 'blog' ];
+
+        if ( ! $post_id || ! in_array( $role, $valid, true ) ) {
+            wp_send_json_error( [ 'message' => 'Invalid post_id or role.' ] );
+        }
+
+        update_post_meta( $post_id, '_siloq_page_role', $role );
+
+        // Sync to API if site connected
+        $site_id       = get_option( 'siloq_site_id', '' );
+        $siloq_page_id = get_post_meta( $post_id, '_siloq_page_id', true );
+        if ( $site_id && $siloq_page_id ) {
+            $api = new Siloq_API_Client();
+            $api->post( '/sites/' . intval( $site_id ) . '/pages/' . intval( $siloq_page_id ) . '/set-role/', [ 'role' => $role ] );
+        }
+
+        wp_send_json_success( [ 'message' => 'Role updated to ' . $role ] );
+    }
+
+    // =========================================================================
+    // AJAX: Schema tab — get schema graph data
+    // Contract: returns {nodes:[{id,label,type}], edges:[{from,to}]}
+    // =========================================================================
+    public static function ajax_get_schema_graph() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $site_id = get_option( 'siloq_site_id', '' );
+        if ( ! $site_id ) {
+            wp_send_json_error( [ 'message' => 'No site connected.' ] );
+        }
+
+        $api    = new Siloq_API_Client();
+        $result = $api->get( '/sites/' . intval( $site_id ) . '/schema/graph/' );
+
+        if ( ! $result['success'] ) {
+            wp_send_json_error( [ 'message' => $result['message'] ?? 'Failed to load schema graph.' ] );
+        }
+
+        wp_send_json_success( $result['data'] );
+    }
+
+    // =========================================================================
+    // AJAX: Schema tab — repair Elementor post meta (fix missing _elementor_edit_mode)
+    // Contract: returns {message:string, repaired:int}
+    // =========================================================================
+    public static function ajax_repair_elementor_meta() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        global $wpdb;
+        // Find pages with Elementor content but missing the edit mode meta
+        $posts = $wpdb->get_col(
+            "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm
+             WHERE pm.meta_key = '_elementor_data'
+             AND pm.post_id NOT IN (
+                 SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_elementor_edit_mode'
+             )"
+        );
+
+        $repaired = 0;
+        foreach ( $posts as $post_id ) {
+            update_post_meta( (int) $post_id, '_elementor_edit_mode', 'builder' );
+            $repaired++;
+        }
+
+        wp_send_json_success( [ 'message' => 'Repaired ' . $repaired . ' page(s).', 'repaired' => $repaired ] );
+    }
+
+    // =========================================================================
+    // AJAX: SEO Plan — add internal link between two pages
+    // Contract: returns {message:string, link_added:bool}
+    // =========================================================================
+    public static function ajax_add_internal_link() {
+        check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Unauthorized' ] );
+        }
+
+        $from_post_id = intval( $_POST['from_post_id'] ?? 0 );
+        $to_post_id   = intval( $_POST['to_post_id']   ?? 0 );
+        $anchor_text  = sanitize_text_field( $_POST['anchor_text'] ?? '' );
+
+        if ( ! $from_post_id || ! $to_post_id ) {
+            wp_send_json_error( [ 'message' => 'Missing from_post_id or to_post_id.' ] );
+        }
+
+        $site_id          = get_option( 'siloq_site_id', '' );
+        $from_siloq_id    = get_post_meta( $from_post_id, '_siloq_page_id', true );
+        $to_siloq_id      = get_post_meta( $to_post_id,   '_siloq_page_id', true );
+
+        if ( $site_id && $from_siloq_id && $to_siloq_id ) {
+            $api    = new Siloq_API_Client();
+            $result = $api->post( '/sites/' . intval( $site_id ) . '/internal-links/', [
+                'from_page' => $from_siloq_id,
+                'to_page'   => $to_siloq_id,
+                'anchor'    => $anchor_text,
+            ] );
+            if ( ! $result['success'] ) {
+                wp_send_json_error( [ 'message' => $result['message'] ?? 'Failed to add link.' ] );
+            }
+        }
+
+        wp_send_json_success( [ 'message' => 'Internal link added.', 'link_added' => true ] );
+    }
+
+
 }
