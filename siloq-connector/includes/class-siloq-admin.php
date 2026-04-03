@@ -4979,13 +4979,13 @@ if ( ! empty( $_rename_with_city ) ) : ?>
                         </div>
 
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-                            <button type="button" id="siloq-goals-save-btn" class="siloq-btn siloq-btn--primary"><?php _e( 'Save & Sync Goals', 'siloq-connector' ); ?></button>
+                            <button type="button" id="siloq-goals-save-btn-wizard" class="siloq-btn siloq-btn--primary"><?php _e( 'Save & Sync Goals', 'siloq-connector' ); ?></button>
                         </div>
                         <span id="siloq-goals-msg" style="display:none;margin-top:8px;font-size:13px;color:#16a34a;font-weight:500;"></span>
 
                         <script>
                         (function(){
-                            document.getElementById('siloq-goals-save-btn').addEventListener('click', function() {
+                            document.getElementById('siloq-goals-save-btn-wizard').addEventListener('click', function() {
                                 var btn = this;
                                 btn.disabled = true;
                                 btn.textContent = '<?php echo esc_js( __( 'Saving...', 'siloq-connector' ) ); ?>';

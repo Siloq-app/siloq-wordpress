@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.295
+ * Version: 1.5.296
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.295');
+define('SILOQ_VERSION', '1.5.296');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -197,6 +197,10 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-goals.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-pages.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-author-bio.php';
+        if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-rest-api.php' ) ) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-rest-api.php';
+            Siloq_REST_API::init();
+        }
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
