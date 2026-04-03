@@ -1435,7 +1435,7 @@
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Click Analyze This Page to classify."' : '') + (page.page_type === 'pending' ? ' title="Click Analyze This Page to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml(page.page_type.toUpperCase()))) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Click Analyze This Page to classify."' : '') + (page.page_type === 'pending' ? ' title="Click Analyze This Page to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml((page.page_type || page.ai_page_role || 'page').toUpperCase()))) + '</span>'
       + roleSelect
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'

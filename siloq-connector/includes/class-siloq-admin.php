@@ -6291,8 +6291,13 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             }
                         }, 4000);
 
-                        $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
-                            clearInterval(stageTimer);
+                        // Refresh nonce first — nonces expire while reading suggestions
+                        $.post(cfg.ajaxUrl, { action: 'siloq_refresh_nonce', nonce: cfg.nonce }, function(nonceResp) {
+                            if (nonceResp && nonceResp.data && nonceResp.data.nonce) {
+                                cfg.nonce = nonceResp.data.nonce;
+                            }
+                            $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
+                                clearInterval(stageTimer);
                             $btn.data('loading', false).prop('disabled', false);
                             if (resp.success) {
                                 $btn.text('✓ Done! Preview ready').css('background', '#16a34a');
@@ -6343,6 +6348,23 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         }).fail(function() {
                             clearInterval(stageTimer);
                             $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                        });
+                        }).fail(function() {
+                            // Nonce refresh failed — proceed anyway with existing nonce
+                            $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
+                                clearInterval(stageTimer);
+                                $btn.data('loading', false).prop('disabled', false);
+                                if (resp.success) {
+                                    var d = resp.data || {};
+                                    $btn.text('✓ Done!').css('background', '#16a34a');
+                                    loadContentJobs();
+                                } else {
+                                    $btn.text('Error — Retry').css('background', '#dc2626');
+                                }
+                            }).fail(function() {
+                                clearInterval(stageTimer);
+                                $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                            });
                         });
                     });
 
@@ -6568,7 +6590,10 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         'types of', 'top ', 'best ', 'common ', 'prevent', 'avoid',
                         'fix your', 'repair your', 'understanding ', 'explained',
                         ' vs ', ' vs.', 'versus', 'complete guide', 'warning signs',
-                        'hidden ', 'leak', 'damage'
+                        'hidden ', 'leak', 'damage',
+                        'maintenance', 'grease trap', 'grease', 'drain ',
+                        'inspection', 'lifespan', 'save money', 'hiring', 'choosing',
+                        'questions to ask', 'mistakes', 'myth'
                     ];
                     var isPost = false;
                     if (['blog','how_to','faq','comparison','supporting_article'].indexOf(draftType) !== -1) {
@@ -6582,9 +6607,13 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         }
                     }
                     var typeLabel    = isPost ? 'Blog Post' : 'Service Page';
+                    var parentUrl    = btn.getAttribute('data-parent-url') || '';
                     var locationLine = isPost
                         ? (siloCategory ? 'Category: <strong>' + siloCategory + '</strong>' : '')
-                        : (parentTitle  ? 'Child of: <strong>' + parentTitle + '</strong>'  : '');
+                        : (parentTitle
+                            ? 'Hub page this will link to: <strong>' + jQuery('<span>').text(parentTitle).html() + '</strong>'
+                              + (parentUrl ? ' <span style="color:#9ca3af;font-size:11px;">(' + jQuery('<span>').text(parentUrl).html() + ')</span>' : '')
+                            : '');
 
                     // ── Confirmation modal ──────────────────────────────────────
                     jQuery('#siloq-confirm-create-modal').remove();
@@ -6729,7 +6758,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             html += '<div style="font-size:11px;color:#6b7280;">' + $('<span>').text(s.why_it_helps || s.content_angle || '').html() + '</div>';
                             html += '</div>';
                         });
-                        html += '<p style="font-size:11px;color:#9ca3af;margin-top:4px;">Click a suggestion to create a draft page.</p>';
+                        html += '<p style="font-size:11px;color:#9ca3af;margin-top:4px;">Click a suggestion to create a draft blog post linked to <strong>' + $('<span>').text(hubTitle).html() + '</strong>.</p>';
                         html += '</div>';
                         $('#siloq-spoke-suggestions').html(html);
 
@@ -6745,6 +6774,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                             btn.setAttribute('data-silo-category', siloName);
                             btn.setAttribute('data-parent-title', hubTitle);
                             btn.setAttribute('data-parent-id', hubId);
+                            btn.setAttribute('data-parent-url', hubUrl || '');
                             siloqDoCreatePage(btn);
                         });
 

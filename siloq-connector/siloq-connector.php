@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.299
+ * Version: 1.5.300
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.299');
+define('SILOQ_VERSION', '1.5.300');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -2049,6 +2049,9 @@ class Siloq_Connector {
             'fix your', 'repair your', 'understanding ', 'explained',
             ' vs ', ' vs.', 'versus', 'complete guide', 'warning signs',
             'hidden ', 'leak', 'damage',
+            'maintenance', 'grease trap', 'grease', 'drain ', 'clog',
+            'inspection', 'lifespan', 'save money', 'hiring', 'choosing',
+            'questions to ask', 'mistakes', 'myth',
         );
         foreach ( $blog_signals as $signal ) {
             if ( strpos( $title_lower, $signal ) !== false ) {
