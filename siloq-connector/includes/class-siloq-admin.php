@@ -6268,103 +6268,179 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         });
                     });
 
-                    // Approve & Write handler with 3-stage progress
+                    // ── Approve & Write — async polling flow ──────────────────────
+                    function siloqCreateDraftPost(data) {
+                        // Creates a WordPress Post draft with AI content, opens editor
+                        return fetch(ajaxurl, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: new URLSearchParams({
+                                action:    'siloq_create_draft',
+                                nonce:     cfg.nonce,
+                                title:     data.title || '',
+                                content:   data.content || '',
+                                post_type: 'post',
+                            })
+                        })
+                        .then(function(r){ return r.json(); })
+                        .then(function(resp) {
+                            if (resp.success && resp.data && resp.data.edit_url) {
+                                window.open(resp.data.edit_url, '_blank');
+                                if (typeof siloqShowToast === 'function') {
+                                    siloqShowToast('Draft created. Opening editor...', 'success');
+                                }
+                            } else {
+                                if (typeof siloqShowToast === 'function') {
+                                    siloqShowToast('Content generated but draft creation failed. Check Posts in WordPress.', 'error');
+                                }
+                            }
+                        });
+                    }
+
+                    function siloqPollJobStatus(jobId, $btn, topicTitle) {
+                        var failedPolls = 0;
+                        var apiBase = cfg.apiBase || '';
+                        var apiKey  = cfg.apiToken || '';
+
+                        var pollInterval = setInterval(function() {
+                            fetch(apiBase + '/jobs/' + jobId + '/', {
+                                headers: { 'Authorization': 'Bearer ' + apiKey }
+                            })
+                            .then(function(r){ return r.json(); })
+                            .then(function(resp) {
+                                var job = (resp.data) ? resp.data : resp;
+                                if (!job) return;
+                                failedPolls = 0;
+
+                                if (job.status === 'running' || job.status === 'queued') {
+                                    var msg = job.message || job.progress_message || 'Writing...';
+                                    var pct = job.progress || job.progress_pct || 0;
+                                    $btn.text(msg + ' (' + pct + '%)');
+                                }
+
+                                if (job.status === 'complete') {
+                                    clearInterval(pollInterval);
+                                    $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                                    siloqCreateDraftPost({
+                                        title:   job.title || topicTitle,
+                                        content: job.content || job.content_html || '',
+                                    });
+                                    loadContentJobs();
+                                }
+
+                                if (job.status === 'failed') {
+                                    clearInterval(pollInterval);
+                                    $btn.data('loading', false).prop('disabled', false).text('Error — Retry').css('background', '#dc2626');
+                                    if (typeof siloqShowToast === 'function') {
+                                        siloqShowToast('Generation failed: ' + (job.error || 'Unknown error'), 'error');
+                                    }
+                                }
+                            })
+                            .catch(function() {
+                                failedPolls++;
+                                if (failedPolls >= 20) {
+                                    clearInterval(pollInterval);
+                                    $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                                    if (typeof siloqShowToast === 'function') {
+                                        siloqShowToast('Lost connection during generation. Check Posts to see if draft was created.', 'error');
+                                    }
+                                }
+                            });
+                        }, 3000); // Poll every 3 seconds
+
+                        // Safety timeout: 5 minutes
+                        setTimeout(function() {
+                            clearInterval(pollInterval);
+                            $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                            if (typeof siloqShowToast === 'function') {
+                                siloqShowToast('Generation is taking longer than expected. Check back in a few minutes.', 'info');
+                            }
+                        }, 300000);
+                    }
+
+                    function siloqCheckForActiveJobs() {
+                        var apiBase = cfg.apiBase || '';
+                        var apiKey  = cfg.apiToken || '';
+                        var siteId  = cfg.siteId || '';
+                        if (!apiBase || !siteId) return;
+
+                        fetch(apiBase + '/sites/' + siteId + '/content/jobs/', {
+                            headers: { 'Authorization': 'Bearer ' + apiKey }
+                        })
+                        .then(function(r){ return r.json(); })
+                        .then(function(resp) {
+                            var jobs = (resp.jobs) ? resp.jobs : ((resp.results) ? resp.results : []);
+                            var activeJobs = jobs.filter(function(j) {
+                                return j.status === 'running' || j.status === 'queued';
+                            });
+                            activeJobs.forEach(function(job) {
+                                var topicTitle = (job.result && job.result.topic_title) ? job.result.topic_title : '';
+                                // Show banner for active jobs
+                                var banner = document.createElement('div');
+                                banner.style.cssText = 'background:rgba(211,153,56,0.15);border:1px solid rgba(211,153,56,0.4);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#FDD96A;';
+                                banner.innerHTML = '⟳ Content generation in progress: <strong>' + $('<span>').text(topicTitle || 'Article').html() + '</strong> — ' + (job.progress_message || 'Working...') + ' (' + (job.progress_pct || 0) + '%)';
+                                var container = document.getElementById('siloq-content-pipeline');
+                                if (container) container.prepend(banner);
+                            });
+                        })
+                        .catch(function(){});
+                    }
+
                     $(document).on('click', '.siloq-approve-job', function() {
                         var $btn = $(this);
-                        var jobId = $btn.data('job-id');
                         var topicTitle = $btn.data('title') || 'your content';
                         if ($btn.data('loading')) return;
-                        $btn.data('loading', true).prop('disabled', true);
+                        $btn.data('loading', true).prop('disabled', true).text('Queuing...');
 
-                        var businessName = (cfg.businessName || 'your business');
-                        var stages = [
-                            'Stage 1/3: Researching ' + businessName + '...',
-                            'Stage 2/3: Writing your blog post...',
-                            'Stage 3/3: Reviewing for quality...'
-                        ];
-                        var stageIdx = 0;
-                        $btn.text(stages[0]);
-                        var stageTimer = setInterval(function() {
-                            stageIdx++;
-                            if (stageIdx < stages.length) {
-                                $btn.text(stages[stageIdx]);
-                            }
-                        }, 4000);
+                        var apiBase = cfg.apiBase || '';
+                        var apiKey  = cfg.apiToken || '';
+                        var siteId  = cfg.siteId || '';
 
-                        // Refresh nonce first — nonces expire while reading suggestions
+                        // Step 1: Refresh nonce
                         $.post(cfg.ajaxUrl, { action: 'siloq_refresh_nonce', nonce: cfg.nonce }, function(nonceResp) {
-                            if (nonceResp && nonceResp.data && nonceResp.data.nonce) {
-                                cfg.nonce = nonceResp.data.nonce;
-                            }
-                            $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
-                                clearInterval(stageTimer);
-                            $btn.data('loading', false).prop('disabled', false);
-                            if (resp.success) {
-                                $btn.text('✓ Done! Preview ready').css('background', '#16a34a');
-                                var d = resp.data || {};
-                                var content = d.content || d.html || d.body || '';
-                                var blogTitle = d.title || topicTitle;
-                                var wordCount = d.word_count || (content ? content.split(/\s+/).length : 0);
-                                var postId = d.post_id || d.wp_post_id || '';
+                            if (nonceResp && nonceResp.nonce) { cfg.nonce = nonceResp.nonce; }
 
-                                // Show preview modal
-                                var $preview = $('<div class="siloq-modal-overlay active" id="siloq-preview-modal">' +
-                                    '<div class="siloq-modal" style="max-width:680px;background:#fff;border-radius:12px;padding:0;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);">' +
-                                    '<div style="padding:20px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">' +
-                                    '<div><h3 style="font-size:15px;font-weight:700;margin:0;color:#D39938;">' + $('<span>').text(blogTitle).html() + '</h3>' +
-                                    '<div style="font-size:11px;color:#6b7280;margin-top:4px;">' + wordCount + ' words</div></div>' +
-                                    '<button type="button" class="siloq-modal-close" style="background:none;border:none;cursor:pointer;font-size:18px;color:#6b7280;">\u2715</button>' +
-                                    '</div>' +
-                                    '<div style="padding:20px 24px;max-height:60vh;overflow-y:auto;font-size:13px;line-height:1.7;color:#374151;">' +
-                                    (content || '<p style="color:#6b7280;">Content was generated and saved. Open the post editor to view.</p>') +
-                                    '</div>' +
-                                    '<div style="padding:16px 24px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end;">' +
-                                    (postId ? '<a href="' + (cfg.adminUrl || '/wp-admin/') + 'post.php?post=' + postId + '&action=edit" target="_blank" class="siloq-btn siloq-btn--outline siloq-btn--sm" style="font-size:11px;">Edit in WordPress</a>' : '') +
-                                    '<button type="button" class="siloq-preview-publish siloq-btn siloq-btn--primary siloq-btn--sm" data-post-id="' + postId + '" style="font-size:11px;">' + (postId ? 'Publish to WordPress' : 'Close') + '</button>' +
-                                    '</div>' +
-                                    '</div></div>');
-                                $('body').append($preview);
-                                $preview.on('click', '.siloq-modal-close', function() { $preview.remove(); });
-                                $preview.on('click', function(e) { if ($(e.target).hasClass('siloq-modal-overlay')) $preview.remove(); });
-                                $preview.on('click', '.siloq-preview-publish', function() {
-                                    var pid = $(this).data('post-id');
-                                    if (!pid) { $preview.remove(); return; }
-                                    var $pbtn = $(this);
-                                    $pbtn.text('Publishing...').prop('disabled', true);
-                                    $.post(cfg.ajaxUrl, { action: 'siloq_publish_draft', nonce: cfg.nonce, post_id: pid }, function(r) {
-                                        if (r && r.success) {
-                                            $pbtn.text('✓ Published').css('background', '#16a34a');
-                                            setTimeout(function() { $preview.remove(); loadContentJobs(); }, 1500);
-                                        } else {
-                                            $pbtn.text('Publish failed').css('background', '#dc2626').prop('disabled', false);
-                                        }
-                                    }).fail(function() { $pbtn.text('Publish failed').prop('disabled', false); });
-                                });
-
-                                setTimeout(function() { loadContentJobs(); }, 2000);
-                            } else {
-                                $btn.text('Error — Retry').css('background', '#dc2626');
-                            }
-                        }).fail(function() {
-                            clearInterval(stageTimer);
-                            $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
-                        });
-                        }).fail(function() {
-                            // Nonce refresh failed — proceed anyway with existing nonce
-                            $.post(cfg.ajaxUrl, { action: 'siloq_approve_content_job', nonce: cfg.nonce, job_id: jobId }, function(resp) {
-                                clearInterval(stageTimer);
-                                $btn.data('loading', false).prop('disabled', false);
-                                if (resp.success) {
-                                    var d = resp.data || {};
-                                    $btn.text('✓ Done!').css('background', '#16a34a');
-                                    loadContentJobs();
-                                } else {
-                                    $btn.text('Error — Retry').css('background', '#dc2626');
+                            // Step 2: POST to generate-full — returns job_id immediately
+                            fetch(apiBase + '/content/generate-full/', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': 'Bearer ' + apiKey,
+                                    'Content-Type':  'application/json',
+                                },
+                                body: JSON.stringify({
+                                    topic_title: topicTitle,
+                                    hub_url:     $btn.data('hub-url') || '',
+                                    hub_title:   $btn.data('hub-title') || '',
+                                    site_id:     siteId,
+                                })
+                            })
+                            .then(function(r){ return r.json(); })
+                            .then(function(resp) {
+                                var jobId = resp.data && resp.data.job_id ? resp.data.job_id : null;
+                                if (!jobId) {
+                                    $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                                    if (typeof siloqShowToast === 'function') {
+                                        siloqShowToast('Could not start: ' + (resp.message || 'Unknown error'), 'error');
+                                    }
+                                    return;
                                 }
-                            }).fail(function() {
-                                clearInterval(stageTimer);
-                                $btn.data('loading', false).prop('disabled', false).text('Error — Retry');
+                                // Step 3: Show progress immediately
+                                $btn.text('Writing... (0%)');
+                                // Step 4: Start polling
+                                siloqPollJobStatus(jobId, $btn, topicTitle);
+                            })
+                            .catch(function() {
+                                $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                                if (typeof siloqShowToast === 'function') {
+                                    siloqShowToast('Network error. Try again.', 'error');
+                                }
                             });
+                        }).fail(function() {
+                            // Nonce refresh failed — proceed anyway
+                            $btn.data('loading', false).prop('disabled', false).text('Approve & Write');
+                            if (typeof siloqShowToast === 'function') {
+                                siloqShowToast('Network error. Try again.', 'error');
+                            }
                         });
                     });
 
@@ -6387,12 +6463,13 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         });
                     });
 
-                    // Load when Content tab is shown
+                    // Load when Content tab is shown + check for active jobs
                     var contentLoaded = false;
                     $(document).on('click', '[aria-controls="siloq-tab-content"]', function() {
                         if (!contentLoaded) { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+                        siloqCheckForActiveJobs();
                     });
-                    if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); }
+                    if (window.location.hash === '#siloq-tab-content') { contentLoaded = true; loadAuthors(); loadContentJobs(); siloqCheckForActiveJobs(); }
 
                     // Open Add Author modal
                     $(document).on('click', '#siloq-add-author-btn', function() {
