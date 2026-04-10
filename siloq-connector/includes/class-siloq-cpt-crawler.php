@@ -191,7 +191,7 @@ function get_siloq_crawlable_post_types() {
 function siloq_sync_all_public_pages( $site_id = null, $api_key = null ) {
     $site_id  = $site_id  ?? get_option( 'siloq_site_id' );
     $api_key  = $api_key  ?? get_option( 'siloq_api_key' );
-    $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+    $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
     $result = array(
         'indexed'    => 0,
@@ -237,7 +237,7 @@ function siloq_sync_all_public_pages( $site_id = null, $api_key = null ) {
         $pt_label  = $pt_object ? $pt_object->labels->singular_name : $post_type;
 
         $response = wp_remote_post(
-            $api_base . '/api/v1/sites/' . $site_id . '/pages/sync',
+            $api_base . '/sites/' . $site_id . '/pages/sync',
             array(
                 'timeout' => 15,
                 'headers' => array(
@@ -289,13 +289,13 @@ function siloq_on_save_post_sync( $post_id, $post ) {
 
     $site_id  = get_option( 'siloq_site_id' );
     $api_key  = get_option( 'siloq_api_key' );
-    $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+    $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
     if ( ! $site_id || ! $api_key ) return;
 
     // Non-blocking — fire and forget, no impact on save experience
     wp_remote_post(
-        $api_base . '/api/v1/sites/' . $site_id . '/pages/sync',
+        $api_base . '/sites/' . $site_id . '/pages/sync',
         array(
             'timeout'  => 10,
             'blocking' => false,

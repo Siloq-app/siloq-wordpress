@@ -771,11 +771,11 @@ class Siloq_Admin {
                                         </label>
                                     </th>
                                     <td>
-                                        <input 
-                                            type="url" 
-                                            id="siloq_api_url" 
-                                            name="siloq_api_url" 
-                                            value="<?php echo esc_attr($api_url); ?>" 
+                                        <input
+                                            type="url"
+                                            id="siloq_api_url"
+                                            name="siloq_api_url"
+                                            value="<?php echo esc_attr($api_url); ?>"
                                             class="regular-text"
                                             placeholder="<?php echo esc_attr(self::DEFAULT_API_URL); ?>"
                                         />
@@ -2324,7 +2324,7 @@ $all_cities = array_unique(array_merge($service_cities, $service_areas));
 
 // Clear stale reposition flags before re-evaluating — flags are only valid for current page load
 $_stale_flagged = get_posts(array(
-    'post_type'      => array('page', 'post'),
+    'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
     'post_status'    => 'publish',
     'posts_per_page' => 200,
     'meta_query'     => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS')),
@@ -2438,7 +2438,7 @@ foreach ($hub_data as $h) {
 // Build a set of permalink paths that appear as href targets in any published page content.
 // This prevents city pages linked inside hub body content from being falsely flagged as orphans.
 $content_linked_paths = array();
-$all_published = get_posts(array('post_type' => array('page', 'post'), 'post_status' => 'publish', 'posts_per_page' => 200, 'fields' => 'ids'));
+$all_published = get_posts(array('post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'), 'post_status' => 'publish', 'posts_per_page' => 200, 'fields' => 'ids'));
 foreach ($all_published as $_pid) {
     $_p = get_post($_pid);
     if (!$_p || empty($_p->post_content)) continue;
@@ -3970,7 +3970,7 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
         // Spoke detection: pages with explicit role OR pages whose URL already is under /services/ but not /service-areas/
         // If zero pages have _siloq_page_role=spoke in DB, skip entirely — no banner needed
         $_spoke_exists = get_posts( array(
-            'post_type'      => array( 'page', 'post' ),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status'    => 'publish',
             'posts_per_page' => 1,
             'fields'         => 'ids',
@@ -3993,7 +3993,7 @@ if ( in_array( $_plan_biz_type, array( 'local_service', 'local_service_multi' ),
         // Collect all non-SA hub post IDs so we can exclude their children
         $_non_sa_hub_ids = array();
         foreach ( get_posts( array(
-            'post_type'      => array( 'page', 'post' ),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status'    => 'publish',
             'posts_per_page' => -1,
             'fields'         => 'ids',
@@ -4123,7 +4123,7 @@ if ( $_plan_sa_hub && $_plan_sa_spokes_count > 0 ) :
 
 <!-- ── Reposition Recommendations ── -->
 <?php
-$_reposition_pages = get_posts(array('post_type' => array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS'))));
+$_reposition_pages = get_posts(array('post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_reposition_flag', 'compare' => 'EXISTS'))));
 if ( ! empty( $_reposition_pages ) ) : ?>
 <div class="siloq-card" style="margin-bottom:16px;border:2px solid #f97316;">
     <h3 style="font-size:15px;font-weight:700;margin:0 0 10px;color:#1e293b;">Location Pages Under Wrong Hub</h3>
@@ -4148,7 +4148,7 @@ if ( ! empty( $_reposition_pages ) ) : ?>
 
 <!-- ── Rename Recommendations ── -->
 <?php
-$_rename_pages = get_posts(array('post_type' => array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_rename_suggestion', 'compare' => 'EXISTS'))));
+$_rename_pages = get_posts(array('post_type' => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page','post'), 'post_status' => 'publish', 'numberposts' => 50, 'meta_query' => array(array('key' => '_siloq_rename_suggestion', 'compare' => 'EXISTS'))));
 $_rename_with_city = array();
 foreach ( $_rename_pages as $_rnp ) {
     $_rs = get_post_meta( $_rnp->ID, '_siloq_rename_suggestion', true );
@@ -9568,7 +9568,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         $old_url_variants = array_unique( array_filter( $old_url_variants ) );
 
         $all_posts = get_posts( array(
-            'post_type'      => array( 'page', 'post' ),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status'    => array( 'publish', 'draft' ),
             'posts_per_page' => -1,
             'fields'         => 'ids',
@@ -9836,7 +9836,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                 $local_orphans     = array();
 
                 $all_synced = get_posts( array(
-                    'post_type'      => array( 'page', 'post' ),
+                    'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
                     'post_status'    => 'publish',
                     'numberposts'    => 200,
                     'meta_key'       => '_siloq_synced',
@@ -9943,7 +9943,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
 
         // Fetch all synced published pages (titles are the match surface)
         $all_pages = get_posts( array(
-            'post_type'   => array( 'page', 'post' ),
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status' => 'publish',
             'numberposts' => 500,
             'meta_query'  => array( array( 'key' => '_siloq_synced', 'compare' => 'EXISTS' ) ),
@@ -10083,7 +10083,7 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
             if ( ! $hub_id ) {
                 $spoke_title_lower = strtolower( get_the_title( $spoke_id ) );
                 $hub_posts = get_posts( array(
-                    'post_type'   => array( 'page', 'post' ),
+                    'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
                     'post_status' => 'publish',
                     'numberposts' => 50,
                     'meta_query'  => array(

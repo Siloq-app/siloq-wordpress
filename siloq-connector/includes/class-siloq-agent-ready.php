@@ -359,7 +359,7 @@ class Siloq_Agent_Ready {
         // Compare hub pages on the site against the business profile services list.
         // Flag hub pages not mentioned in profile so user knows to add them.
         $hub_post_query = get_posts( array(
-            'post_type'   => array( 'page', 'post' ),
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status' => 'publish',
             'numberposts' => 50,
             'meta_query'  => array(
@@ -773,7 +773,7 @@ class Siloq_Agent_Ready {
         $skip_titles = array( 'Content area', 'Home Slider', 'Coming Soon', 'Search Results', 'Untitled', '' );
 
         $posts = get_posts( array(
-            'post_type'   => array( 'page', 'post' ),
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status' => 'publish',
             'numberposts' => 200,
             'orderby'     => 'menu_order title',

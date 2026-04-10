@@ -1218,7 +1218,7 @@ class Siloq_Schema_Intelligence {
         check_ajax_referer( 'siloq_ajax_nonce', 'nonce' );
 
         $synced_posts = get_posts( array(
-            'post_type'      => array( 'page', 'post' ),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status'    => 'publish',
             'posts_per_page' => 200,
             'meta_query'     => array(

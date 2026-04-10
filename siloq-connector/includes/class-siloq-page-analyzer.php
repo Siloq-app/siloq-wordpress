@@ -64,7 +64,7 @@ class Siloq_Page_Analyzer {
 
         $site_id  = get_option( 'siloq_site_id' );
         $api_key  = get_option( 'siloq_api_key' );
-        $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
         if ( ! $site_id || ! $api_key ) {
             wp_send_json_error( array( 'message' => 'Siloq not connected. Check plugin Settings.' ) );
@@ -75,7 +75,7 @@ class Siloq_Page_Analyzer {
         $permalink = get_permalink( $post_id );
 
         $response = wp_remote_post(
-            $api_base . '/api/v1/sites/' . $site_id . '/pages/analyze/',
+            $api_base . '/sites/' . $site_id . '/pages/analyze/',
             array(
                 'timeout' => 45,
                 'headers' => array(
@@ -138,7 +138,7 @@ class Siloq_Page_Analyzer {
 
         $site_id     = get_option( 'siloq_site_id' );
         $api_key     = get_option( 'siloq_api_key' );
-        $api_base    = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+        $api_base    = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
         $analysis_id = isset( $_POST['analysis_id'] ) ? sanitize_text_field( $_POST['analysis_id'] ) : '';
         $approved    = isset( $_POST['approved_ids'] ) ? (array) $_POST['approved_ids'] : array();
 
@@ -148,7 +148,7 @@ class Siloq_Page_Analyzer {
         }
 
         $response = wp_remote_post(
-            $api_base . '/api/v1/sites/' . $site_id . '/pages/analysis/' . $analysis_id . '/approve/',
+            $api_base . '/sites/' . $site_id . '/pages/analysis/' . $analysis_id . '/approve/',
             array(
                 'timeout' => 20,
                 'headers' => array(
@@ -188,7 +188,7 @@ class Siloq_Page_Analyzer {
 
         $site_id     = get_option( 'siloq_site_id' );
         $api_key     = get_option( 'siloq_api_key' );
-        $api_base    = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+        $api_base    = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
         $analysis_id = isset( $_POST['analysis_id'] ) ? sanitize_text_field( $_POST['analysis_id'] ) : '';
 
         if ( ! $analysis_id ) {
@@ -205,7 +205,7 @@ class Siloq_Page_Analyzer {
         }
 
         $response = wp_remote_post(
-            $api_base . '/api/v1/sites/' . $site_id . '/pages/analysis/' . $analysis_id . '/apply/',
+            $api_base . '/sites/' . $site_id . '/pages/analysis/' . $analysis_id . '/apply/',
             array(
                 'timeout' => 30,
                 'headers' => array(

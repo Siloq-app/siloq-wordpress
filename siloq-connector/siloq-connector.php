@@ -1993,7 +1993,7 @@ class Siloq_Connector {
 
         // Find all synced published pages
         $existing = get_posts(array(
-            'post_type'      => array('page', 'post'),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status'    => array('publish', 'draft'),
             'posts_per_page' => -1,
             'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
@@ -2082,7 +2082,7 @@ class Siloq_Connector {
         // Find service-area hub page
         $hub = null;
         $candidates = get_posts(array(
-            'post_type'      => array('page', 'post'),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status'    => 'any',
             'posts_per_page' => -1,
             'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
@@ -2280,7 +2280,7 @@ Include:
     private function get_city_page_url_map() {
         $map = array(); // 'Kansas City' => 'https://...'
         $posts = get_posts(array(
-            'post_type'      => array('page', 'post'),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status'    => 'publish',
             'posts_per_page' => 200,
             'meta_query'     => array(array('key' => '_siloq_synced', 'compare' => 'EXISTS')),
@@ -2958,11 +2958,11 @@ Before outputting, verify: city name heading count ÷ total heading count ≤ 30
         // 2. Delete from API
         $site_id = get_option('siloq_site_id');
         $api_key = get_option('siloq_api_key');
-        $api_base = defined('SILOQ_API_BASE') ? SILOQ_API_BASE : 'https://api.siloq.app';
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
         if ($site_id && $api_key) {
             // Try to find the API page ID by post_id
             $list_resp = wp_remote_get(
-                trailingslashit($api_base) . "api/v1/sites/{$site_id}/pages/?post_id={$post_id}",
+                $api_base . "/sites/{$site_id}/pages/?post_id={$post_id}",
                 array('headers' => array('X-API-Key' => $api_key, 'Accept' => 'application/json'), 'timeout' => 10)
             );
             if (!is_wp_error($list_resp)) {
@@ -2978,7 +2978,7 @@ Before outputting, verify: city name heading count ÷ total heading count ≤ 30
                 }
                 if ($api_page_id) {
                     wp_remote_request(
-                        trailingslashit($api_base) . "api/v1/sites/{$site_id}/pages/{$api_page_id}/",
+                        $api_base . "/sites/{$site_id}/pages/{$api_page_id}/",
                         array('method' => 'DELETE', 'headers' => array('X-API-Key' => $api_key), 'timeout' => 10)
                     );
                 }
@@ -3688,7 +3688,7 @@ Before outputting, verify: city name heading count ÷ total heading count ≤ 30
 
         // Find all published pages/posts that have Elementor data but no edit mode flag
         $args = array(
-            'post_type'   => array('page', 'post'),
+            'post_type'   => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array('page', 'post'),
             'post_status' => 'any',
             'numberposts' => -1,
             'meta_query'  => array(

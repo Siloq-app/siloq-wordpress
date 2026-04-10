@@ -458,7 +458,7 @@ class Siloq_Content_Editor {
 
         $site_id  = get_option( 'siloq_site_id' );
         $api_key  = get_option( 'siloq_api_key' );
-        $api_base = defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app';
+        $api_base = rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' );
 
         if ( ! $site_id || ! $api_key ) {
             wp_send_json_error( [ 'message' => 'Siloq not connected' ] );
@@ -476,7 +476,7 @@ class Siloq_Content_Editor {
         // Fetch related pages for link context (non-blocking on failure)
         $related_pages  = [];
         $links_response = wp_remote_get(
-            $api_base . "/api/v1/sites/{$site_id}/pages/{$post_id}/related-pages/",
+            $api_base . "/sites/{$site_id}/pages/{$post_id}/related-pages/",
             [
                 'timeout' => 5,
                 'headers' => [

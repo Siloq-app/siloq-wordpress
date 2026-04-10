@@ -198,7 +198,7 @@ class Siloq_Widget_Intelligence {
                 'nonce'   => wp_create_nonce( 'siloq_ajax_nonce' ),
                 'postId'  => isset( $_GET['post'] ) ? intval( $_GET['post'] ) : 0,
                 'siteId'  => get_option( 'siloq_site_id', '' ),
-                'apiBase' => defined( 'SILOQ_API_BASE' ) ? SILOQ_API_BASE : 'https://api.siloq.app',
+                'apiBase' => rtrim( get_option( 'siloq_api_url', 'https://api.siloq.ai/api/v1' ), '/' ),
             ]
         );
     }

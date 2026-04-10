@@ -29,7 +29,7 @@ class Siloq_Agent_Pages {
     /*  1. APPROVALS PAGE                                                  */
     /* ================================================================== */
     public static function render_approvals_page() {
-        $api_url = get_option('siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app');
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key', '');
         $site_id = get_option('siloq_site_id', '');
 
@@ -190,7 +190,7 @@ class Siloq_Agent_Pages {
     /*  2. CONTENT PLAN PAGE                                               */
     /* ================================================================== */
     public static function render_content_plan_page() {
-        $api_url = get_option('siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app');
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key', '');
         $site_id = get_option('siloq_site_id', '');
 
@@ -381,7 +381,7 @@ class Siloq_Agent_Pages {
 
         $action_id = intval($_POST['action_id']);
         $site_id   = sanitize_text_field($_POST['site_id']);
-        $api_url   = get_option('siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app');
+        $api_url   = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key   = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(
@@ -417,7 +417,7 @@ class Siloq_Agent_Pages {
 
         $action_id = intval($_POST['action_id']);
         $site_id   = sanitize_text_field($_POST['site_id']);
-        $api_url   = get_option('siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app');
+        $api_url   = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key   = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(
@@ -452,7 +452,7 @@ class Siloq_Agent_Pages {
         }
 
         $site_id = get_option('siloq_site_id', '');
-        $api_url = get_option('siloq_api_url', 'https://sea-lion-app-8rkgr.ondigitalocean.app');
+        $api_url = get_option('siloq_api_url', 'https://api.siloq.ai/api/v1');
         $api_key = get_option('siloq_api_key', '');
 
         $response = wp_remote_post(

@@ -99,9 +99,9 @@ class Siloq_Junk_Detector {
     public static function detect_junk_pages() {
         $findings = array();
 
-        // ── 1. Standard post types (page + post) ────────────────
+        // ── 1. Standard + custom post types (all crawlable content) ────────────────
         $posts = get_posts( array(
-            'post_type'      => array( 'page', 'post' ),
+            'post_type'      => function_exists('get_siloq_crawlable_post_types') ? get_siloq_crawlable_post_types() : array( 'page', 'post' ),
             'post_status'    => 'publish',
             'posts_per_page' => 500,
             'no_found_rows'  => true,

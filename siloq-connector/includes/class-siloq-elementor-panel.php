@@ -82,7 +82,7 @@ class Siloq_Elementor_Panel {
             'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'siloq_ajax_nonce' ),
             'postId'   => $post_id,
-            'apiBase'  => defined('SILOQ_API_BASE') ? SILOQ_API_BASE : 'https://api.siloq.app',
+            'apiBase'  => rtrim( get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/' ),
             'siteId'   => get_option('siloq_site_id', ''),
             'apiKey'   => get_option('siloq_api_key', ''),
         ] );
