@@ -788,6 +788,27 @@ class Siloq_Admin {
 
                                 <tr>
                                     <th scope="row">
+                                        <label for="siloq_webhook_secret">
+                                            <?php _e('Webhook Secret', 'siloq-connector'); ?>
+                                        </label>
+                                    </th>
+                                    <td>
+                                        <input
+                                            type="text"
+                                            id="siloq_webhook_secret"
+                                            value="<?php echo esc_attr( get_option( 'siloq_webhook_secret', '' ) ); ?>"
+                                            class="regular-text code"
+                                            readonly
+                                            onclick="this.select();"
+                                        />
+                                        <p class="description">
+                                            <?php _e( 'Auto-generated. Copy this value into your Siloq dashboard\'s webhook configuration. Incoming webhooks without a valid HMAC signature signed with this secret are rejected.', 'siloq-connector' ); ?>
+                                        </p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
                                         <label for="siloq_debug_mode">
                                             <?php _e('Debug Mode', 'siloq-connector'); ?>
                                         </label>

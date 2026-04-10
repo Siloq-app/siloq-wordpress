@@ -14,7 +14,26 @@ class Siloq_Webhook_Handler {
      * Initialize webhook handler
      */
     public static function init() {
+        self::ensure_secret();
         add_action('rest_api_init', array(__CLASS__, 'register_routes'));
+    }
+
+    /**
+     * Bootstrap a strong webhook secret on first run if one is not already set.
+     * Runs lazily on every request so existing installs receive a secret on the
+     * next page load after upgrade — not just on activation. The check is a
+     * single autoloaded option read, so the cost is negligible.
+     *
+     * The secret must then be copied into the Siloq dashboard's webhook
+     * configuration; see Settings → Webhook Secret.
+     */
+    public static function ensure_secret() {
+        if ( ! get_option( 'siloq_webhook_secret' ) ) {
+            update_option(
+                'siloq_webhook_secret',
+                wp_generate_password( 64, false, false )
+            );
+        }
     }
     
     /**
@@ -34,15 +53,20 @@ class Siloq_Webhook_Handler {
      * Handle incoming webhook
      */
     public static function handle_webhook($request) {
-        // Security: only enforce HMAC if a webhook secret has been configured.
-        // The Siloq API omits the signature header until a secret is set in
-        // both the API and the plugin — allow unauthenticated when no secret is set.
+        // Security: HMAC validation is mandatory. The plugin auto-generates a
+        // webhook secret on first load (see ensure_secret), so $secret is never
+        // empty in normal operation. An empty secret here means the option was
+        // manually deleted — in that case, fail closed.
         $secret    = get_option('siloq_webhook_secret', '');
         $signature = $request->get_header('X-Siloq-Signature');
-        if (!empty($secret)) {
-            if (empty($signature) || !hash_equals('sha256=' . hash_hmac('sha256', $request->get_body(), $secret), $signature)) {
-                return new WP_REST_Response(array('success' => false, 'message' => 'Invalid signature'), 401);
-            }
+        if ( empty( $secret ) || empty( $signature ) || ! hash_equals(
+            'sha256=' . hash_hmac( 'sha256', $request->get_body(), $secret ),
+            $signature
+        ) ) {
+            return new WP_REST_Response(
+                array( 'success' => false, 'message' => 'Invalid or missing signature' ),
+                401
+            );
         }
         
         $params = $request->get_json_params();
@@ -181,7 +205,6 @@ class Siloq_Webhook_Handler {
         $update_args = array(
             'ID'           => $post_id,
             'post_content' => wp_kses_post($content),
-            'post_content' => $new_content,
         );
         if (isset($data['title'])) {
             $update_args['post_title'] = sanitize_text_field($data['title']);
@@ -425,28 +448,50 @@ class Siloq_Webhook_Handler {
         
         // Update meta fields if provided
         if (isset($data['meta']) && is_array($data['meta'])) {
+            global $wpdb;
+            $aioseo_table  = $wpdb->prefix . 'aioseo_posts';
+            $aioseo_exists = $wpdb->get_var( "SHOW TABLES LIKE '$aioseo_table'" ) === $aioseo_table;
+
             foreach ($data['meta'] as $key => $value) {
                 if (is_string($value)) {
                     $value = sanitize_text_field($value);
                 }
-                
-                // Handle AIOSEO specific fields using wp_aioseo_posts table
-                if ($key === 'title') {
-                    global $wpdb;
-                    $table_name = $wpdb->prefix . 'aioseo_posts';
-                    $wpdb->query($wpdb->prepare(
-                        "UPDATE $table_name SET title = %s WHERE post_id = %d",
-                        $value, $post_id
-                    ));
-                } elseif ($key === 'description') {
-                    global $wpdb;
-                    $table_name = $wpdb->prefix . 'aioseo_posts';
-                    $wpdb->query($wpdb->prepare(
-                        "UPDATE $table_name SET description = %s WHERE post_id = %d",
-                        $value, $post_id
-                    ));
+
+                // AIOSEO title/description require an upsert: a freshly inserted
+                // draft has no row in wp_aioseo_posts yet, so a naked UPDATE
+                // would silently affect zero rows and lose the value.
+                if ( ( $key === 'title' || $key === 'description' ) && $aioseo_exists ) {
+                    $existing_id = $wpdb->get_var( $wpdb->prepare(
+                        "SELECT id FROM $aioseo_table WHERE post_id = %d LIMIT 1",
+                        $post_id
+                    ) );
+                    if ( $existing_id ) {
+                        $wpdb->update(
+                            $aioseo_table,
+                            array( $key => $value, 'updated' => current_time( 'mysql' ) ),
+                            array( 'post_id' => $post_id ),
+                            array( '%s', '%s' ),
+                            array( '%d' )
+                        );
+                    } else {
+                        $wpdb->insert(
+                            $aioseo_table,
+                            array(
+                                'post_id'        => $post_id,
+                                $key             => $value,
+                                'robots_default' => 1,
+                                'seo_score'      => 0,
+                                'created'        => current_time( 'mysql' ),
+                                'updated'        => current_time( 'mysql' ),
+                            ),
+                            array( '%d', '%s', '%d', '%d', '%s', '%s' )
+                        );
+                    }
+                    if ( function_exists( 'aioseo' ) && isset( aioseo()->meta ) ) {
+                        aioseo()->meta->flushCache( $post_id );
+                    }
                 } else {
-                    update_post_meta($post_id, $key, $value);
+                    update_post_meta( $post_id, $key, $value );
                 }
             }
         }
