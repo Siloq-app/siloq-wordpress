@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.291] — 2026-04-09
+
+### Fixed
+- **CRITICAL — Webhook content-wipe** — `handle_apply_content` had a duplicated `post_content` array key referencing an undefined `$new_content` variable. PHP silently dropped the sanitized content, so every successful `content.apply_content` webhook on a standard (non-builder) page wiped post bodies to empty while returning `success: true`. Backups captured one line earlier so data is recoverable.
+- **Custom post type propagation (BUG 1/2)** — `get_siloq_crawlable_post_types()` was already wired into the sync engine, but 18 downstream queries still hardcoded `array('page','post')` and ignored the indexed CPTs. Fixed: internal-link orphan detector (the BUG 2 root cause), junk detector, schema dashboard, keyword/page mapper, hub search, cannibalization check, service-hub candidate search, city→URL map, Elementor repair, reposition/rename lists, URL rewrite, local hub/spoke fallback, unlisted hub detection, authority manifest, and others.
+- **API base URL inconsistency** — Two broken patterns existed alongside the canonical `get_option('siloq_api_url', ...)`: (1) a `SILOQ_API_BASE` constant that was never defined anywhere, falling back to `api.siloq.app` (wrong host); (2) a stale DigitalOcean staging fallback `sea-lion-app-8rkgr.ondigitalocean.app` in `class-siloq-agent-pages.php`. All 14 sites unified on the canonical pattern. The cpt-crawler URL fix is required for the BUG 1/2 work to actually reach the correct sync endpoint.
+- **AIOSEO upsert race in `handle_create_draft`** — Naked `UPDATE` queries against `wp_aioseo_posts` for freshly inserted drafts silently affected zero rows because no AIOSEO row existed yet, losing the SEO title/description. Refactored to match the existing-row check pattern in `handle_meta_update`. Also added a `SHOW TABLES` guard so the code is safe on non-AIOSEO sites.
+
+### Security
+- **Mandatory webhook HMAC validation** — The `/wp-json/siloq/v1/webhook` endpoint previously accepted any unsigned POST when no webhook secret was configured. On a fresh install this allowed unauthenticated callers to create draft posts, overwrite content, update meta fields, and rewrite `siloq_site_id` to redirect the install to an attacker-controlled tenant. Fix: introduced `Siloq_Webhook_Handler::ensure_secret()` which auto-generates a 64-char `wp_generate_password` secret on first request if `siloq_webhook_secret` is empty. Existing installs receive the secret on the next page load after upgrade. HMAC validation is now unconditional: empty secret, missing signature, or mismatched HMAC all return 401.
+- **Webhook secret surfaced in Settings** — Added a new read-only "Webhook Secret" row to the Settings page right after the API URL field, with a description explaining that the value must be copied into the Siloq dashboard's webhook configuration.
+
+### Breaking
+- **Webhook secret coordination required.** After upgrading, the API side must be configured with the secret shown in Settings → Webhook Secret. If the API is still sending unsigned webhooks (or webhooks signed with a different secret), they will all 401. Coordinate the rollout: open the Siloq dashboard, copy the new auto-generated secret over, and verify webhooks before announcing.
+
 ## [1.5.190] — 2026-03-14
 
 ### Added
