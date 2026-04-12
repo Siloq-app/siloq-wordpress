@@ -90,6 +90,9 @@ class Siloq_Webhook_Handler {
             case 'content.create_draft':
                 return self::handle_create_draft($data);
                 
+            case 'content.create_redirect':
+                return self::handle_create_redirect($data);
+                
             default:
                 return new WP_REST_Response(array(
                     'success' => false,
@@ -98,6 +101,83 @@ class Siloq_Webhook_Handler {
         }
     }
     
+    /**
+     * Handle content.create_redirect event
+     * Automatically creates a 301 redirect using the Redirection plugin if installed,
+     * or adds it to a custom Siloq redirects option for fallback handling.
+     */
+    private static function handle_create_redirect($data) {
+        $source_url = isset($data['source_url']) ? esc_url_raw($data['source_url']) : '';
+        $target_url = isset($data['target_url']) ? esc_url_raw($data['target_url']) : '';
+        $redirect_type = isset($data['redirect_type']) ? intval($data['redirect_type']) : 301;
+        $reason = isset($data['reason']) ? sanitize_text_field($data['reason']) : '';
+
+        if (empty($source_url) || empty($target_url)) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Missing source_url or target_url'
+            ), 400);
+        }
+
+        // Strip domain to store relative paths (best practice for redirects)
+        $source_path = wp_parse_url($source_url, PHP_URL_PATH);
+        $target_path = wp_parse_url($target_url, PHP_URL_PATH);
+
+        if (!$source_path || !$target_path) {
+            return new WP_REST_Response(array(
+                'success' => false,
+                'message' => 'Invalid URLs provided'
+            ), 400);
+        }
+
+        $created = false;
+        $method = 'none';
+
+        // 1. Try Redirection plugin first (industry standard)
+        if (class_exists('Red_Item')) {
+            $redirect_data = array(
+                'url'         => $source_path,
+                'action_data' => array('url' => $target_path),
+                'match_type'  => 'url',
+                'action_type' => 'url',
+                'action_code' => $redirect_type,
+                'group_id'    => 1,
+                'title'       => 'Siloq: ' . $reason
+            );
+            
+            try {
+                $item = Red_Item::create($redirect_data);
+                if ($item && !is_wp_error($item)) {
+                    $created = true;
+                    $method = 'redirection_plugin';
+                }
+            } catch (Exception $e) {
+                // Fall back to native if plugin creation fails
+            }
+        }
+
+        // 2. Fallback: Store in Siloq native redirects option (handled by init hook)
+        if (!$created) {
+            $redirects = get_option('siloq_native_redirects', array());
+            $redirects[$source_path] = array(
+                'target' => $target_path,
+                'type'   => $redirect_type,
+                'time'   => time()
+            );
+            update_option('siloq_native_redirects', $redirects);
+            $created = true;
+            $method = 'siloq_native';
+        }
+
+        return new WP_REST_Response(array(
+            'success' => true,
+            'message' => 'Redirect created successfully',
+            'method'  => $method,
+            'source'  => $source_path,
+            'target'  => $target_path
+        ));
+    }
+
     /**
      * Handle content.apply_content event
      */
