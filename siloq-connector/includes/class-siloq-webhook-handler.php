@@ -447,6 +447,15 @@ class Siloq_Webhook_Handler {
             }
         }
         
+        // Fetch and append author E-E-A-T metadata if an author_id was supplied
+        if (isset($data['author_id']) && $data['author_id']) {
+            $author_id = intval($data['author_id']);
+            update_post_meta($post_id, '_siloq_author_name', get_the_author_meta('display_name', $author_id));
+            update_post_meta($post_id, '_siloq_author_title', get_user_meta($author_id, 'job_title', true) ?: '');
+            update_post_meta($post_id, '_siloq_author_short_bio', get_user_meta($author_id, 'description', true) ?: '');
+            update_post_meta($post_id, '_siloq_author_linkedin', get_user_meta($author_id, 'linkedin', true) ?: '');
+        }
+
         // Return post URL
         $post_url = get_permalink($post_id);
         

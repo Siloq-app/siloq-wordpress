@@ -195,6 +195,7 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-scanner-shortcode.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-goals.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-pages.php';
+        require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-author-bio.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -301,6 +302,12 @@ class Siloq_Connector {
         // Initialize Page Events — outbound webhook to Siloq API on save_post / trashed_post
         $page_events = new Siloq_Page_Events();
         $page_events->register_hooks();
+
+        // Author Bio block — E-E-A-T author attribution on single posts
+        if ( class_exists( 'Siloq_Author_Bio' ) ) {
+            new Siloq_Author_Bio();
+        }
+
 
         // [siloq_scanner] shortcode + AJAX (front-end scanner for scan.siloq.ai)
         add_action( 'init', array( 'Siloq_Scanner_Shortcode', 'init' ) );
