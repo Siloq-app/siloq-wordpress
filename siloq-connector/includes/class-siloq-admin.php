@@ -280,11 +280,17 @@ class Siloq_Admin {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
 
+        // Render React mount point for modern UI
+        echo '<div id="siloq-settings-root"></div>';
+        return;
+
+        // Legacy code below - kept for reference, React UI now handles this
+        /*
         // Handle form submission FIRST — so all get_option calls below reflect the saved values
         if (isset($_POST['siloq_save_settings']) && check_admin_referer('siloq_settings_nonce')) {
             self::save_settings();
         }
-        
+
         // Get current settings (read AFTER save so fields render saved values)
         $api_url = get_option('siloq_api_url', self::DEFAULT_API_URL);
         $api_key = get_option('siloq_api_key', '');
@@ -292,11 +298,10 @@ class Siloq_Admin {
         $signup_url = get_option('siloq_signup_url', '');
         $use_dummy_scan = get_option('siloq_use_dummy_scan', 'yes');
         $show_advanced = get_option('siloq_show_advanced', 'no');
-        
+
         // Check if connected
         $is_connected = !empty($api_key) && !empty($api_url);
         $connection_verified = get_transient('siloq_connection_verified');
-        
         ?>
         <div class="wrap siloq-admin-wrap">
             <?php self::render_setup_progress_bar(); ?>
@@ -2012,10 +2017,17 @@ class Siloq_Admin {
             return;
         }
 
+        // Ensure plugin URL constant is defined
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
 
+        // Render React mount point for modern UI
+        echo '<div id="siloq-dashboard-root"></div>';
+        return;
+
+        // Legacy code below - kept for reference, React UI now handles this
+        /*
         $site_score      = intval(get_option('siloq_site_score', 0));
         $plan_data       = get_transient('siloq_plan_data');
         $has_plan        = !empty($plan_data);
@@ -6981,10 +6993,11 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
                         });
                     })();
                     <?php endif; ?>
-                });
+                <?php endif; ?>
             </script>
         </div>
         <?php
+        */ // End of legacy code comment
     }
 
     /**
@@ -6995,48 +7008,10 @@ if (!is_array($_goals_target_keywords)) $_goals_target_keywords = array();
         if (!defined('SILOQ_PLUGIN_URL')) {
             define('SILOQ_PLUGIN_URL', plugin_dir_url(dirname(__FILE__) . '/../'));
         }
-        
-        ?>
-        <div class="wrap siloq-admin-wrap">
-            <?php self::render_setup_progress_bar(); ?>
-            <div class="siloq-header">
-                <h1>
-                    <img src="<?php echo esc_url(SILOQ_PLUGIN_URL . 'assets/logo-siloq.png'); ?>" alt="Siloq" class="siloq-logo" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 30%22><text y=%2222%22 font-size=%2218%22 fill=%22%23D39938%22 font-weight=%22bold%22>Siloq</text></svg>'">
-                    <?php _e('Page Sync', 'siloq-connector'); ?>
-                </h1>
-                <p class="siloq-tagline"><?php _e('Content Synchronization — Sync your WordPress pages with the Siloq platform.', 'siloq-connector'); ?></p>
-            </div>
-            
-            <div class="siloq-sync-container">
-                <div class="siloq-card">
-                    <h2><?php _e('Sync Status', 'siloq-connector'); ?></h2>
-                    <p><?php _e('Monitor and manage the synchronization status of your pages.', 'siloq-connector'); ?></p>
-                    
-                    <div class="siloq-sync-actions">
-                        <button type="button" id="siloq-sync-all-2" class="siloq-button siloq-button-primary">
-                            <span class="dashicons dashicons-update"></span>
-                            <?php _e('Sync All Pages', 'siloq-connector'); ?>
-                        </button>
-                        <button type="button" id="siloq-sync-outdated" class="siloq-button siloq-button-secondary">
-                            <span class="dashicons dashicons-clock"></span>
-                            <?php _e('Sync Outdated Pages', 'siloq-connector'); ?>
-                        </button>
-                    </div>
-                    
-                    <div id="siloq-sync-status" class="siloq-sync-status">
-                        <p><?php _e('Loading sync status...', 'siloq-connector'); ?></p>
-                    </div>
-                </div>
-                
-                <div class="siloq-card">
-                    <h2><?php _e('Page List', 'siloq-connector'); ?></h2>
-                    <div id="siloq-pages-list">
-                        <p><?php _e('Loading pages...', 'siloq-connector'); ?></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
+
+        // Render React mount point for modern UI
+        echo '<div id="siloq-sync-root"></div>';
+        return;
     }
     
     /**
