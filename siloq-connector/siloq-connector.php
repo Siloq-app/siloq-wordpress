@@ -3,7 +3,7 @@
  * Plugin Name: Siloq Connector
  * Plugin URI: https://github.com/Siloq-app/siloq-wordpress
  * Description: Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation
- * Version: 1.5.291
+ * Version: 1.5.302
  * Author: Siloq
  * Author URI: https://siloq.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define basic plugin constants
-define('SILOQ_VERSION', '1.5.291');
+define('SILOQ_VERSION', '1.5.302');
 
 if ( ! defined( "SILOQ_EXCLUDED_POST_TYPES" ) ) {
     define( "SILOQ_EXCLUDED_POST_TYPES", [
@@ -197,6 +197,10 @@ class Siloq_Connector {
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-goals.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-agent-pages.php';
         require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-author-bio.php';
+        if ( file_exists( SILOQ_PLUGIN_DIR . 'includes/class-siloq-rest-api.php' ) ) {
+            require_once SILOQ_PLUGIN_DIR . 'includes/class-siloq-rest-api.php';
+            Siloq_REST_API::init();
+        }
         require_once SILOQ_PLUGIN_DIR . 'includes/tali/class-siloq-tali.php';
 
         // Widget Intelligence — native Elementor panel controls
@@ -501,7 +505,9 @@ class Siloq_Connector {
         add_action('wp_ajax_siloq_generate_intelligence', array('Siloq_Admin', 'ajax_generate_intelligence'));
 
         // Content tab: Authors, Content Jobs, Content Plan
+        add_action('wp_ajax_siloq_refresh_nonce', array('Siloq_Admin', 'ajax_refresh_nonce'));
         add_action('wp_ajax_siloq_get_authors', array('Siloq_Admin', 'ajax_get_authors'));
+        add_action('wp_ajax_siloq_save_author', array('Siloq_Admin', 'ajax_save_author'));
         add_action('wp_ajax_siloq_get_content_jobs', array('Siloq_Admin', 'ajax_get_content_jobs'));
         add_action('wp_ajax_siloq_approve_content_job', array('Siloq_Admin', 'ajax_approve_content_job'));
         add_action('wp_ajax_siloq_generate_content_plan', array('Siloq_Admin', 'ajax_generate_content_plan'));
@@ -1927,6 +1933,19 @@ class Siloq_Connector {
             return;
         }
 
+        // ── Smart classification: Post vs Page ────────────────────────────────
+        // Informational content (blog posts, how-to, FAQ, etc.) → WordPress Post
+        // Service spokes / location variants → WordPress Page (child of hub)
+        $detected_type = $this->classify_content_type( $title, $draft_type );
+        $use_post_type = $detected_type['post_type']; // 'post' or 'page'
+        $silo_category = sanitize_text_field( $_POST['silo_category'] ?? '' );
+
+        // If the front-end already ran a confirmation step and told us the type, trust it
+        $confirmed_type = sanitize_text_field( $_POST['confirmed_post_type'] ?? '' );
+        if ( in_array( $confirmed_type, array( 'post', 'page' ), true ) ) {
+            $use_post_type = $confirmed_type;
+        }
+
         // Generate content based on draft type
         $content = $this->generate_draft_content($title, $draft_type);
 
@@ -1938,12 +1957,25 @@ class Siloq_Connector {
             'post_title'   => $title,
             'post_content' => $content,
             'post_status'  => $post_status,
-            'post_type'    => 'page',
+            'post_type'    => $use_post_type,
         );
-        // Set parent page if provided (creates proper URL structure /parent/child/)
-        if ( $parent_id > 0 && get_post_status( $parent_id ) ) {
+
+        // For Posts: assign to the correct WordPress category matching the silo
+        if ( $use_post_type === 'post' && ! empty( $silo_category ) ) {
+            $cat_id = get_cat_ID( $silo_category );
+            if ( ! $cat_id ) {
+                $cat_id = wp_create_category( $silo_category );
+            }
+            if ( $cat_id && ! is_wp_error( $cat_id ) ) {
+                $post_args['post_category'] = array( intval( $cat_id ) );
+            }
+        }
+
+        // For Pages: set parent so URL structure is /hub-page/child-page/
+        if ( $use_post_type === 'page' && $parent_id > 0 && get_post_status( $parent_id ) ) {
             $post_args['post_parent'] = $parent_id;
         }
+
         $post_id = wp_insert_post($post_args);
         if (is_wp_error($post_id)) {
             wp_send_json_error(array('message' => $post_id->get_error_message()));
@@ -1960,10 +1992,21 @@ class Siloq_Connector {
                 update_post_meta($post_id, '_elementor_data', '[]');
             }
         }
-        wp_send_json_success(array(
-            'post_id'  => $post_id,
-            'edit_url' => admin_url('post.php?post=' . $post_id . '&action=elementor'),
-        ));
+        // Standard WP editor URL — works for both posts and pages
+        $edit_url = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+
+        // Use Elementor editor URL if Elementor is active
+        if ( class_exists( '\Elementor\Plugin' ) ) {
+            $edit_url = admin_url( 'post.php?post=' . $post_id . '&action=elementor' );
+        }
+
+        wp_send_json_success( array(
+            'post_id'    => $post_id,
+            'post_type'  => $use_post_type,
+            'type_label' => $detected_type['label'],
+            'category'   => $silo_category,
+            'edit_url'   => $edit_url,
+        ) );
     }
 
     /**
@@ -1975,6 +2018,58 @@ class Siloq_Connector {
      *
      * @return array|null  null = safe to proceed. array = conflict found.
      */
+    /**
+     * Classify whether a suggested content item should be a WordPress Post or Page.
+     *
+     * Posts: informational content (blog, how-to, FAQ, comparison, guide, tips)
+     * Pages: service spokes or location variants (child of hub)
+     *
+     * @return array { 'post_type' => 'post'|'page', 'label' => 'Blog Post'|'Service Page' }
+     */
+    private function classify_content_type( $title, $draft_type ) {
+        // draft_type from the content pipeline already tells us
+        if ( in_array( $draft_type, array( 'city', 'service', 'service-areas' ), true ) ) {
+            return array( 'post_type' => 'page', 'label' => 'Service Page' );
+        }
+        if ( in_array( $draft_type, array( 'blog', 'how_to', 'faq', 'comparison', 'supporting_article' ), true ) ) {
+            return array( 'post_type' => 'post', 'label' => 'Blog Post' );
+        }
+
+        // Fall back to title signal detection
+        $title_lower = strtolower( $title );
+
+        // Informational signals → Post (checked FIRST — any match wins)
+        $blog_signals = array(
+            'how to ', 'how do ', 'why ', 'when ', 'what is', 'what are',
+            'signs your', 'signs of', 'signs ', 'guide to', 'guide for',
+            ' tips', 'tips for', 'tips on', ' faq', 'questions about',
+            'checklist', 'the difference', 'should you', 'do you need',
+            'is it', 'are there', 'causes of', 'cost of', 'benefits of',
+            'types of', 'top ', 'best ', 'common ', 'prevent', 'avoid',
+            'fix your', 'repair your', 'understanding ', 'explained',
+            ' vs ', ' vs.', 'versus', 'complete guide', 'warning signs',
+            'hidden ', 'leak', 'damage',
+            'maintenance', 'grease trap', 'grease', 'drain ', 'clog',
+            'inspection', 'lifespan', 'save money', 'hiring', 'choosing',
+            'questions to ask', 'mistakes', 'myth',
+        );
+        foreach ( $blog_signals as $signal ) {
+            if ( strpos( $title_lower, $signal ) !== false ) {
+                return array( 'post_type' => 'post', 'label' => 'Blog Post' );
+            }
+        }
+
+        // City name + service signal → Page (location spoke)
+        $city_pattern = '/\b(kansas city|lenexa|overland park|olathe|lee\'s summit|independence|'
+            . 'st\. joseph|topeka|wichita|lawrence|shawnee|leawood|prairie village)\b/i';
+        if ( preg_match( $city_pattern, $title ) ) {
+            return array( 'post_type' => 'page', 'label' => 'Service Page' );
+        }
+
+        // Default for generic/unknown: Post (safer for SEO — pages reserved for site structure)
+        return array( 'post_type' => 'post', 'label' => 'Blog Post' );
+    }
+
     private function check_draft_cannibalization($title, $draft_type) {
         // Only check city and service draft types
         if (!in_array($draft_type, array('city', 'service', 'generic'), true)) return null;
@@ -3852,6 +3947,36 @@ function siloq_get_dashboard_stats() {
 
 if (!has_action('wp_ajax_siloq_get_dashboard_stats')) {
     add_action('wp_ajax_siloq_get_dashboard_stats', 'siloq_get_dashboard_stats');
+}
+
+if (!has_action('wp_ajax_siloq_health_check')) {
+    add_action('wp_ajax_siloq_health_check', 'siloq_health_check');
+}
+
+// Register previously-missing handlers
+$missing_actions = [
+    'siloq_get_plan_data'        => ['Siloq_Admin', 'ajax_get_plan_data'],
+    'siloq_get_pages_list'       => ['Siloq_Admin', 'ajax_get_pages_list'],
+    'siloq_set_page_role'        => ['Siloq_Admin', 'ajax_set_page_role'],
+    'siloq_get_schema_graph'     => ['Siloq_Admin', 'ajax_get_schema_graph'],
+    'siloq_repair_elementor_meta'=> ['Siloq_Admin', 'ajax_repair_elementor_meta'],
+    'siloq_add_internal_link'    => ['Siloq_Admin', 'ajax_add_internal_link'],
+];
+foreach ($missing_actions as $action => $callback) {
+    if (!has_action('wp_ajax_' . $action)) {
+        add_action('wp_ajax_' . $action, $callback);
+    }
+}
+
+function siloq_health_check() {
+    check_ajax_referer('siloq_ajax_nonce', 'nonce');
+    $api = new Siloq_API_Client();
+    $result = $api->get('/health/');
+    if (!empty($result['data'])) {
+        wp_send_json_success($result['data']);
+    } else {
+        wp_send_json_success(['status' => 'healthy', 'celery' => 'unknown', 'redis' => 'unknown']);
+    }
 }
 
 /**

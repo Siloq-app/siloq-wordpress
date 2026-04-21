@@ -6,6 +6,51 @@
   'use strict';
 
   var cfg = window.siloqDash || {};
+
+  // ── System Health Check ─────────────────────────────────────────────────
+  // Runs on dashboard load. If Celery/Redis offline, greys out job buttons.
+  var siloqSystemHealthy = true;
+
+  function checkSystemHealth() {
+    var $bar  = $('#siloq-system-status-bar');
+    var $dot  = $('#siloq-status-dot');
+    var $text = $('#siloq-status-text');
+    $bar.show();
+
+    var apiBase = cfg.apiBase || 'https://api.siloq.ai/api/v1';
+    $.post(cfg.ajaxUrl, { action: 'siloq_health_check', nonce: cfg.nonce }, function(resp) {
+      var h = (resp.success && resp.data) ? resp.data : {};
+      var celery = h.celery || 'unknown';
+      var redis  = h.redis  || 'unknown';
+      var ok = (celery === 'ok' && (redis === 'ok' || redis === 'not_configured'));
+
+      siloqSystemHealthy = ok;
+
+      if (ok) {
+        $dot.css('background', '#16a34a');
+        $text.text('✓ Siloq engine connected — all systems ready');
+        $bar.css({'background':'#f0fdf4','border':'1px solid #86efac','color':'#166534'});
+        // Fade out after 4s if all good
+        setTimeout(function(){ $bar.fadeOut(600); }, 4000);
+      } else if (celery === 'offline') {
+        $dot.css('background', '#d97706');
+        $text.text('⚠ Siloq analysis engine is warming up — background jobs paused. Try again in a minute.');
+        $bar.css({'background':'#fffbeb','border':'1px solid #fcd34d','color':'#92400e'});
+        // Grey out job buttons
+        $('#siloq-fix-all-btn, #siloq-audit-links-btn, #siloq-full-audit-btn').prop('disabled', true).css('opacity','0.5').attr('title','Siloq engine warming up — try again in a minute');
+      } else {
+        $dot.css('background', '#16a34a');
+        $text.text('✓ API connected');
+        $bar.css({'background':'#f0fdf4','border':'1px solid #86efac','color':'#166534'});
+        setTimeout(function(){ $bar.fadeOut(600); }, 3000);
+      }
+    }).fail(function() {
+      siloqSystemHealthy = false;
+      $dot.css('background', '#dc2626');
+      $text.text('✗ Cannot reach Siloq API — check your API key in Settings');
+      $bar.css({'background':'#fef2f2','border':'1px solid #fca5a5','color':'#991b1b'});
+    });
+  }
   // Seed Quick Wins completed state from PHP (persisted across sessions)
   window.siloqQwCompleted = cfg.qwCompleted || {};
 
@@ -666,72 +711,30 @@
   // ── Unified Job Helpers (direct API → WP AJAX fallback) ──────────────
 
   function siloqCreateJob(jobType, onJobId, onError) {
-    var siteId = cfg.siteId;
-    var apiBase = cfg.apiBase;
-    var apiToken = cfg.apiToken;
-
-    var endpointMap = {
-      'full_audit':      apiBase + '/sites/' + siteId + '/jobs/full-audit/',
-      'meta_generation': apiBase + '/sites/' + siteId + '/jobs/generate-meta/',
-      'audit_links':     apiBase + '/sites/' + siteId + '/jobs/audit-links/'
-    };
-    var endpoint = endpointMap[jobType];
-    if (!endpoint) { if (onError) onError('Unknown job type'); return; }
-
-    // Try direct API first
-    $.ajax({
-      url: endpoint,
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiToken },
-      success: function(resp) {
-        if (resp && resp.job_id) {
-          onJobId(resp.job_id, resp.already_running || false);
-        } else if (onError) {
-          onError('No job_id in response');
-        }
-      },
-      error: function() {
-        // Fallback to WP AJAX proxy
-        $.post(cfg.ajaxUrl, {
-          action: 'siloq_start_job',
-          nonce: cfg.nonce,
-          job_type: jobType
-        }, function(resp) {
-          if (resp.success && resp.data && resp.data.job_id) {
-            onJobId(resp.data.job_id, resp.data.already_running || false);
-          } else if (onError) {
-            onError((resp.data && resp.data.message) || 'Failed to start job');
-          }
-        }).fail(function() {
-          if (onError) onError('Both API and WP AJAX failed');
-        });
+    $.post(cfg.ajaxUrl, {
+      action: 'siloq_start_job',
+      nonce: cfg.nonce,
+      job_type: jobType
+    }, function(resp) {
+      if (resp.success && resp.data && resp.data.job_id) {
+        onJobId(resp.data.job_id, resp.data.already_running || false);
+      } else if (onError) {
+        onError((resp.data && resp.data.message) || 'Failed to start job');
       }
+    }).fail(function() {
+      if (onError) onError('WP AJAX request failed');
     });
   }
 
   function siloqPollJob(jobId, onProgress, onComplete, onError) {
-    var apiBase = cfg.apiBase;
-    var apiToken = cfg.apiToken;
-
     var pollInterval = setInterval(function() {
-      // Try direct API first
-      $.ajax({
-        url: apiBase + '/jobs/' + jobId + '/',
-        headers: { 'Authorization': 'Bearer ' + apiToken },
-        success: function(job) {
-          handleJobPoll(job);
-        },
-        error: function() {
-          // WP AJAX fallback
-          $.post(cfg.ajaxUrl, {
-            action: 'siloq_job_status',
-            nonce: cfg.nonce,
-            job_id: jobId
-          }, function(resp) {
-            if (resp.success && resp.data) {
-              handleJobPoll(resp.data);
-            }
-          });
+      $.post(cfg.ajaxUrl, {
+        action: 'siloq_job_status',
+        nonce: cfg.nonce,
+        job_id: jobId
+      }, function(resp) {
+        if (resp.success && resp.data) {
+          handleJobPoll(resp.data);
         }
       });
     }, 5000);
@@ -1432,7 +1435,7 @@
       + '<div class="siloq-page-card__info">'
       + '<a href="' + escAttr(page.edit_url) + '" class="siloq-page-card__title">' + escHtml(page.title) + '</a>'
       + '<div class="siloq-page-card__meta">'
-      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Click Analyze This Page to classify."' : '') + (page.page_type === 'pending' ? ' title="Click Analyze This Page to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml(page.page_type.toUpperCase()))) + '</span>'
+      + '<span class="siloq-badge siloq-badge--' + typeBadgeClass + '"' + (page.page_type === 'orphan' ? ' title="No content structure assigned. Click Analyze This Page to classify."' : '') + (page.page_type === 'pending' ? ' title="Click Analyze This Page to get recommendations."' : '') + '>' + (page.page_type === 'pending' ? 'NOT ANALYZED' : (page.page_type === 'apex_hub' ? 'APEX HUB' : escHtml((page.page_type || page.ai_page_role || 'page').toUpperCase()))) + '</span>'
       + roleSelect
       + (page.primary_keyword ? '<span class="siloq-page-card__keyword">' + escHtml(page.primary_keyword) + '</span>' : '')
       + '</div>'
@@ -1498,7 +1501,7 @@
 
       // Collect all page IDs that have no schema (class siloq-schema-none-badge or data attribute)
       var pageIds = [];
-      $('#siloq-schema-pages-list tr[data-post-id]').each(function () {
+      $('#siloq-schema-pages-list [data-post-id]').each(function () {
         var hasSchema = $(this).data('has-schema');
         if (!hasSchema || hasSchema === 'false' || hasSchema === false || hasSchema === '0') {
           pageIds.push($(this).data('post-id'));
@@ -1805,6 +1808,7 @@
   /* ─── Init ───────────────────────────────────── */
   $(document).ready(function () {
     if (!$('.siloq-dash-wrap').length) return;
+    checkSystemHealth();
     initTabs();
     initScoreRing();
     initAccordions();
