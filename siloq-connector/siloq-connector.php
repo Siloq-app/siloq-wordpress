@@ -707,30 +707,58 @@ class Siloq_Connector {
             ));
         }
 
-        // Enqueue sync script on sync + settings pages
-        if ($screen && ($screen->id === 'toplevel_page_siloq-settings' || $screen->id === 'siloq_page_siloq-sync' || $screen->id === 'siloq-settings_page_siloq-dashboard' || (isset($_GET['page']) && in_array($_GET['page'], ['siloq-settings', 'siloq-dashboard', 'siloq-sync'])))) {
-            wp_enqueue_script(
-                'siloq-sync',
-                SILOQ_PLUGIN_URL . 'assets/js/siloq-sync.js',
-                array('jquery'),
-                SILOQ_VERSION,
-                true
-            );
-            
-            wp_localize_script('siloq-sync', 'siloqAdmin', array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('siloq_ajax_nonce')
-            ));
-            
-            wp_localize_script('siloq-sync', 'siloqAjax', array(
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('siloq_ajax_nonce'),
-                'strings' => array(
-                    'testing' => 'Testing...',
-                    'success' => 'Success:',
-                    'error'   => 'Error:'
-                )
-            ));
+        // Enqueue React admin app on modern UI pages (Settings, Dashboard, Sync)
+        $modern_ui_pages = ['siloq-settings', 'siloq-dashboard', 'siloq-sync'];
+        $is_modern_ui_page = $screen && in_array($screen->id, ['toplevel_page_siloq-settings', 'siloq-settings_page_siloq-dashboard', 'siloq_page_siloq-sync']) ||
+                             (isset($_GET['page']) && in_array($_GET['page'], $modern_ui_pages));
+
+        if ($is_modern_ui_page) {
+            // Enqueue React app (built with @wordpress/scripts)
+            $react_asset_file = SILOQ_PLUGIN_DIR . 'build/index.asset.php';
+            if (file_exists($react_asset_file)) {
+                $react_assets = include $react_asset_file;
+                wp_enqueue_script(
+                    'siloq-admin-react',
+                    SILOQ_PLUGIN_URL . 'build/index.js',
+                    $react_assets['dependencies'] ?? ['wp-element', 'wp-components', 'wp-api-fetch', 'wp-i18n'],
+                    $react_assets['version'] ?? SILOQ_VERSION,
+                    true
+                );
+                wp_enqueue_style(
+                    'siloq-admin-react',
+                    SILOQ_PLUGIN_URL . 'build/style-index.css',
+                    array(),
+                    $react_assets['version'] ?? SILOQ_VERSION
+                );
+
+                // Localize data for React app
+                wp_localize_script('siloq-admin-react', 'siloqReactData', array(
+                    'restUrl'   => esc_url_raw(rest_url('siloq/v1')),
+                    'restNonce' => wp_create_nonce('wp_rest'),
+                    'ajaxUrl'   => admin_url('admin-ajax.php'),
+                    'ajaxNonce' => wp_create_nonce('siloq_ajax_nonce'),
+                    'adminUrl'  => admin_url('admin.php'),
+                    'siteId'    => get_option('siloq_site_id', ''),
+                    'apiBase'   => rtrim(get_option('siloq_api_url', 'https://api.siloq.ai/api/v1'), '/'),
+                    'page'      => sanitize_text_field($_GET['page'] ?? ''),
+                ));
+            }
+
+            // Fallback: also load legacy scripts if React build doesn't exist yet
+            if (!file_exists($react_asset_file)) {
+                wp_enqueue_script(
+                    'siloq-sync',
+                    SILOQ_PLUGIN_URL . 'assets/js/siloq-sync.js',
+                    array('jquery'),
+                    SILOQ_VERSION,
+                    true
+                );
+
+                wp_localize_script('siloq-sync', 'siloqAdmin', array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('siloq_ajax_nonce')
+                ));
+            }
         }
         
         // Enqueue admin JS + localize dashboard nonce on dashboard page

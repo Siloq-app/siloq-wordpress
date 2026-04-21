@@ -1,0 +1,34 @@
+{
+  "name": "siloq-connector",
+  "version": "1.5.304",
+  "description": "Connects WordPress to Siloq platform for SEO content silo management and AI-powered content generation",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "wp-scripts build",
+    "check-engines": "wp-scripts check-engines",
+    "format": "wp-scripts format",
+    "lint:css": "wp-scripts lint-style",
+    "lint:js": "wp-scripts lint-js",
+    "start": "wp-scripts start",
+    "test:e2e": "wp-scripts test-e2e",
+    "test:unit": "wp-scripts test-unit-js"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^30.0.0",
+    "@wordpress/components": "^28.0.0",
+    "@wordpress/element": "^6.0.0",
+    "@wordpress/api-fetch": "^7.0.0",
+    "@wordpress/i18n": "^5.0.0",
+    "@wordpress/notices": "^5.0.0",
+    "@wordpress/data": "^10.0.0",
+    "@wordpress/icons": "^10.0.0",
+    "@wordpress/url": "^4.0.0"
+  },
+  "dependencies": {
+    "classnames": "^2.3.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
