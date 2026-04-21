@@ -1,5 +1,11 @@
 # CLAUDE.md — Siloq WordPress Plugin Development Rules
 
+## Documentation map
+
+- **Operators / site owners:** start with repository [`README.md`](README.md) (install, menus, REST overview, webhooks).  
+- **Security triage:** [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) — verified fixes plus a re-audit checklist; do not treat removed historic bullets as current CVEs without re-verification.  
+- **This file:** engineering standards, AJAX/REST conventions, and **release** checklist for maintainers.
+
 ## Plugin Identity
 - **Plugin file:** `siloq-connector/siloq-connector.php`
 - **Current version:** Check `Version:` header in siloq-connector.php

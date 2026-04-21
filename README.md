@@ -4,105 +4,111 @@
 [![PHP](https://img.shields.io/badge/PHP-7.4+-blue.svg)](https://www.php.net/)
 [![License](https://img.shields.io/badge/License-GPL%20v2+-green.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 
-> Official WordPress plugin for seamless integration with the Siloq SEO platform, enabling intelligent content silo management, AI-powered content generation, and automated SEO optimization.
+Official WordPress plugin connecting your site to the **Siloq** platform for SEO silo management, AI-assisted content workflows, schema support, and platform webhooks.
 
 ## Overview
 
-The Siloq WordPress Connector provides enterprise-grade integration between WordPress and the Siloq SEO platform. It enables automatic content synchronization, AI-powered content generation, schema markup injection, and real-time webhook notifications—all designed to streamline SEO workflows and improve search engine visibility.
-
-## Key Features
-
-- **🔄 Bidirectional Synchronization** - Automatically sync WordPress pages with Siloq platform
-- **🤖 AI Content Generation** - Generate optimized content using advanced AI technology
-- **📊 Schema Markup Automation** - Automatic structured data injection for enhanced SEO
-- **⚡ Real-time Integration** - Webhook support for instant notifications and updates
-- **🛡️ Enterprise-Ready** - Built with security, performance, and scalability in mind
+The **Siloq Connector** syncs WordPress content with Siloq, surfaces jobs and recommendations in wp-admin, and receives inbound events over a signed REST webhook. The admin experience combines classic PHP screens with React-based pages where noted in the menu.
 
 ## Requirements
 
-- **WordPress**: 5.0 or higher
-- **PHP**: 7.4 or higher
-- **MySQL**: 5.6 or higher
-- Active Siloq backend instance
-- Valid API credentials (API URL and API Key)
+- **WordPress**: 5.0 or higher  
+- **PHP**: 7.4 or higher  
+- **MySQL**: 5.6 or higher (or MariaDB equivalent)  
+- A **Siloq** account with API access  
+- **API URL** and **API key** from the Siloq dashboard  
+
+The REST layer defaults the API base to `https://api.siloq.ai/api/v1` when no URL is stored yet (see **Siloq → Settings**).
 
 ## Installation
 
-### WordPress Admin (Recommended)
+### WordPress admin (recommended)
 
-1. Download the latest release from the [Releases](https://github.com/Siloq-app/siloq-wordpress/releases) page
-2. Navigate to **WordPress Admin → Plugins → Add New**
-3. Click **Upload Plugin** and select the downloaded ZIP file
-4. Click **Install Now**, then **Activate Plugin**
+1. Download the latest release from [GitHub Releases](https://github.com/Siloq-app/siloq-wordpress/releases).  
+2. In WordPress go to **Plugins → Add New → Upload Plugin**.  
+3. Upload the ZIP, install, and activate **Siloq Connector**.
 
-### Manual Installation
+### Manual install from source
 
-1. Clone or download this repository
-2. Extract the `siloq-connector` folder to `/wp-content/plugins/`
-3. Navigate to **WordPress Admin → Plugins**
-4. Locate **Siloq Connector** and click **Activate**
+1. Clone or download this repository.  
+2. Copy the `siloq-connector` folder to `wp-content/plugins/`.  
+3. Activate **Siloq Connector** under **Plugins**.
+
+If you build admin assets from source, in `siloq-connector/` run `npm install` (or `npm ci`) and `npm run build` before packaging a release ZIP (see `package.json` scripts).
 
 ## Configuration
 
-### Step 1: Obtain API Credentials
+### 1. API credentials
 
-1. Log in to your Siloq platform dashboard
-2. Navigate to **Settings → API Keys**
-3. Generate a new API key or use an existing one
-4. Copy your **API URL** and **API Key**
+1. Sign in to the Siloq dashboard.  
+2. Open **Settings → API Keys** (or your tenant’s equivalent).  
+3. Create or copy an API key. Keys used by this plugin are validated to start with `sk_siloq_`.  
+4. Note the **API base URL** your tenant uses (production commonly matches the default above).
 
-### Step 2: Configure Plugin
+### 2. WordPress: **Siloq → Settings**
 
-1. In WordPress admin, navigate to **Siloq → Settings**
-2. Enter your **API URL** and **API Key**
-3. Enable **Auto-Sync** for automatic synchronization (optional)
-4. Click **Save Settings**
-5. Click **Test Connection** to verify configuration
+1. Enter **API URL** and **API Key**.  
+2. Save, then use **Test Connection** to confirm reachability.  
+3. Copy **Webhook Secret** into the Siloq dashboard webhook configuration so inbound requests can be **HMAC-signed** (`X-Siloq-Signature`). After upgrades that introduced mandatory signing, unsigned webhooks return **401** until the secret matches on both sides.
 
-### Step 3: Initial Sync
+Optional and advanced options (auto-sync flags, content types, BYOK keys for certain AI flows, etc.) live in the same settings area or legacy PHP settings screens depending on your build—inspect **Siloq → Settings** on your install for the exact controls.
 
-Choose one of the following methods:
-- **Bulk Sync**: Navigate to **Siloq → Settings** and click **Sync All Pages**
-- **Individual Sync**: Go to **Siloq → Sync Status** and sync specific pages
-- **Auto-Sync**: Pages automatically sync when published or updated (if enabled)
+### 3. First sync
 
-## Usage
+- **Bulk / guided sync:** **Siloq → Page Sync** (REST-backed UI uses `/wp-json/siloq/v1/sync/status` and `/wp-json/siloq/v1/sync/start`).  
+- **Per-page actions:** Use controls on **Page Sync** or post-level Siloq UI where available.  
+- **Auto-sync on save:** Enable if offered in settings so updates propagate when editors publish or update content.
 
-### Content Synchronization
-- **Bulk Sync**: Sync all pages at once with progress tracking
-- **Individual Sync**: Sync specific pages as needed
-- **Auto-Sync**: Automatic synchronization on publish/update
+## WordPress admin areas
 
-### AI Content Generation
-1. Navigate to **Siloq → Content Import**
-2. Select a page and click **Generate Content**
-3. Wait for AI generation to complete
-4. Choose to **Import as Draft** or **Replace Content**
+Under the top-level **Siloq** menu you will typically see:
 
-### Monitoring
-- **Dashboard**: Overview of sync status and key metrics
-- **Sync Status**: Real-time tracking of all page synchronization
-- **Settings**: Manage API configuration and plugin preferences
+| Submenu | Purpose |
+|--------|---------|
+| **Settings** | API URL/key, connection test, webhook secret, integration toggles |
+| **Dashboard** | Overview metrics and job health |
+| **Page Sync** | Sync status and bulk / selective sync |
+| **Content Import** | AI / content import workflows |
+| **Theme Intelligence** | Theme-level analysis (TALI) |
+| **Image Brief** | Image audit printable brief |
+| **Approvals** | Agent recommendations (submenu label; page title may read “Agent Recommendations”) |
+| **Content Plan** | Planned content view |
+
+Capability requirements vary by screen (`manage_options` vs `edit_pages`); if a menu is missing for a user, grant the appropriate WordPress role capabilities.
+
+## REST API (troubleshooting)
+
+Plugin routes are registered under the namespace **`siloq/v1`**:
+
+- Base URL: `/wp-json/siloq/v1/`  
+- **Public ping:** `GET /wp-json/siloq/v1/ping` — confirms REST is reachable (useful when security plugins block `/wp-json/`).  
+- **Inbound webhook:** `POST /wp-json/siloq/v1/webhook` — authenticated via **HMAC** and the shared secret, not via cookie auth.
+
+Other routes (settings, sync, jobs, schema, snapshots, etc.) are split across PHP classes in `siloq-connector/includes/`; search for `register_rest_route( 'siloq/v1'` when auditing endpoints.
 
 ## Security
 
-The plugin implements comprehensive security measures:
-- Bearer token authentication for all API requests
-- Secure API key storage using WordPress options API
-- WordPress capability checks and nonce verification
-- Input sanitization and output escaping
-- Prepared statements for database queries
+- **Outbound API:** Bearer token using the stored API key; keys live in the WordPress options table—protect database backups accordingly.  
+- **Inbound webhook:** HMAC signature required; secret is generated or shown under **Siloq → Settings**.  
+- **WordPress hardening:** Admin actions use nonces and capability checks; REST calls from the browser use the `wp_rest` nonce via `apiFetch`.  
+- **Data handling:** Sanitization and prepared SQL patterns are used in the plugin code paths that touch the database; hosting-level WAF/rate limits remain your responsibility.
+
+For a concise audit history and re-triage notes, see [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md).
+
+## Contributing and releases
+
+Contributor workflow, database rules, AJAX batching, and release packaging are documented in [`CLAUDE.md`](CLAUDE.md).
 
 ## Support
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/Siloq-app/siloq-wordpress/issues)
-- **Documentation**: [Siloq Platform Documentation](https://siloq.com/docs)
-- **Email Support**: support@siloq.com
+- **Issues:** [github.com/Siloq-app/siloq-wordpress/issues](https://github.com/Siloq-app/siloq-wordpress/issues)  
+- **Documentation:** [siloq.com/docs](https://siloq.com/docs)  
+- **Email:** support@siloq.com  
 
 ## License
 
-This plugin is licensed under the **GPL v2 or later**.
+GPL v2 or later.
 
 ---
 
-**Developed by** [Siloq](https://siloq.com) | [Visit siloq.com](https://siloq.com) for more information
+Developed by [Siloq](https://siloq.com).

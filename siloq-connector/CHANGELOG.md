@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Documentation.** Refreshed root [`README.md`](../README.md) so admin labels (e.g. **Page Sync**), REST namespace, webhook HMAC, and settings defaults match current code. Rewrote [`SECURITY_AUDIT.md`](../SECURITY_AUDIT.md) to drop stale line-specific “critical” claims and document the verified webhook fix plus a re-triage checklist. Added a short documentation map to [`CLAUDE.md`](../CLAUDE.md).
+
+---
+
 ## [1.5.304] — 2026-04-20
 
 ### Fixed
