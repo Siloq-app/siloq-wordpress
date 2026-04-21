@@ -170,37 +170,25 @@ class Siloq_Scan_Results_Shortcode {
             }
         }
 
-        // Apply score overrides here (same logic as html()) so email shows correct score
-        $cannibal_detected_r = ! empty( $cannibal['detected'] );
-        $has_critical_r      = $cannibal_detected_r;
-        foreach ( $narrative['suppressors'] ?? array() as $_s ) {
-            if ( strtolower( $_s['severity'] ?? '' ) === 'critical' ) { $has_critical_r = true; break; }
-        }
-        $has_schema_issue_r = false;
-        foreach ( $top_issues as $_ti ) {
-            if ( stripos( $_ti, 'schema' ) !== false || stripos( $_ti, 'LocalBusiness' ) !== false ) {
-                $has_schema_issue_r = true; break;
-            }
-        }
-        if ( $cannibal_detected_r || $has_schema_issue_r ) {
-            // Recalculate from capped pillars
-            $capped_dims = $dimensions;
-            if ( $cannibal_detected_r && isset( $capped_dims['cannibalization'] ) ) {
-                $capped_dims['cannibalization']['score'] = min(
-                    intval( $capped_dims['cannibalization']['score'] ?? 0 ),
-                    (int) round( intval( $capped_dims['cannibalization']['max'] ?? 30 ) * 0.40 )
-                );
-            }
-            $psum = 0; $pmax = 0;
-            foreach ( $capped_dims as $_d ) { $psum += intval( $_d['score'] ?? 0 ); $pmax += intval( $_d['max'] ?? 0 ); }
-            if ( $pmax > 0 ) $total_score = (int) round( ( $psum / $pmax ) * 100 );
-            if ( $has_critical_r )      $total_score = min( $total_score, 65 );
-            if ( $cannibal_detected_r ) $total_score = min( $total_score, 58 );
-        }
-        // Override grade to match capped score
-        if ( $total_score < 45 )       $grade = 'Critical Issues Found';
-        elseif ( $total_score < 60 )   $grade = 'Significant Issues Found';
-        elseif ( $total_score < 70 )   $grade = 'Needs Attention';
+        // ── v1.1 scoring ──────────────────────────────────────────
+        // Single source of truth for final score + grade + breakdown.
+        // See calculate_v11_score() docblock for the exact math. Results flow
+        // through to the email, HTML view, and Claude narrative metadata so
+        // every surface shows the same number.
+        $v11         = self::calculate_v11_score(
+            $total_score,
+            $dimensions,
+            $cannibal,
+            $top_issues,
+            $narrative,
+            $pages
+        );
+        $total_score = $v11['final'];
+        $grade       = $v11['grade_label'];
+        // Propagate corrected grade into the narrative so downstream renders
+        // (html, email) don't need to re-override.
+        $narrative['grade_label']  = $v11['grade_label'];
+        $narrative['v11_scoring']  = $v11;
 
         // Send email if provided
         if ( ! empty( $email ) ) {
@@ -288,7 +276,11 @@ class Siloq_Scan_Results_Shortcode {
             }
         }
 
-        if ( count( $pairs ) >= 3 ) {
+        // v1.1 (2026-04): Lower detection threshold from >=3 pairs to >=1.
+        // Rationale: any cannibalization triggers the v1.1 graduated cap (1 pair => 84,
+        // 2 => 79, 3 => 74, ...). Prior >=3 threshold let 1-2-conflict sites slip through
+        // uncapped, producing the "93/B+ despite duplicates" outcome.
+        if ( count( $pairs ) >= 1 ) {
             $count   = count( $pairs );
             $example = '/' . $pairs[0]['parents'][0] . '/' . $pairs[0]['suffix'] . '/ vs /' . $pairs[0]['parents'][1] . '/' . $pairs[0]['suffix'] . '/';
             return array(
@@ -298,7 +290,7 @@ class Siloq_Scan_Results_Shortcode {
                 'parents'    => array_unique( array_merge( ...array_column( array_slice( $pairs, 0, 5 ), 'parents' ) ) ),
             );
         }
-        return array( 'detected' => false );
+        return array( 'detected' => false, 'pair_count' => 0 );
     }
 
     /* ── RSEO entity analysis ─────────────────────────────────── */
@@ -993,24 +985,14 @@ class Siloq_Scan_Results_Shortcode {
 
     private static function html( $scan_data, $results, $dimensions, $total_score, $grade, $pages, $duration, $domain, $biz, $benchmark, $auto_count, $content_count, $top_issues, $narrative, $scan_id, $cannibal = array(), $entity_signals = array(), $detected_services = array() ) {
 
-        // ── Score override logic ────────────────────────────────────
-        // Scores from the API are optimistic — they don't account for
-        // architecture-level issues we detect independently. Override before render.
+        // ── Display-only pillar caps (v1.1) ────────────────────────
+        // The final $total_score + $grade were computed by calculate_v11_score()
+        // in render() upstream — this is the single source of truth. These
+        // per-pillar caps below are DISPLAY-ONLY: they keep the pillar bar
+        // chart honest so the visual matches the final score. Do NOT
+        // recompute $total_score from these.
         $cannibal_detected = ! empty( $cannibal['detected'] );
-        $has_critical      = $cannibal_detected; // more flags can be added here
-
-        // Count critical suppressors from narrative
-        $narrative_suppressors = $narrative['suppressors'] ?? array();
-        foreach ( $narrative_suppressors as $_s ) {
-            if ( strtolower( $_s['severity'] ?? '' ) === 'critical' ) {
-                $has_critical = true;
-                break;
-            }
-        }
-
-        // Cap individual pillar scores
         if ( $cannibal_detected ) {
-            // Site Architecture (cannibalization) — cap at 40% of max
             if ( isset( $dimensions['cannibalization'] ) ) {
                 $max_arch = intval( $dimensions['cannibalization']['max'] ?? 30 );
                 $dimensions['cannibalization']['score'] = min(
@@ -1018,7 +1000,6 @@ class Siloq_Scan_Results_Shortcode {
                     (int) round( $max_arch * 0.40 )
                 );
             }
-            // Content Depth — cap at 50% when duplicate content structure
             if ( isset( $dimensions['content_structure'] ) ) {
                 $max_cs = intval( $dimensions['content_structure']['max'] ?? 15 );
                 $dimensions['content_structure']['score'] = min(
@@ -1027,7 +1008,6 @@ class Siloq_Scan_Results_Shortcode {
                 );
             }
         }
-        // GEO Ready — cap at 2/25 if schema is missing from homepage
         $has_schema_issue = false;
         foreach ( $top_issues as $_ti ) {
             if ( stripos( $_ti, 'schema' ) !== false || stripos( $_ti, 'LocalBusiness' ) !== false ) {
@@ -1043,39 +1023,7 @@ class Siloq_Scan_Results_Shortcode {
             );
         }
 
-        // Recalculate overall score from capped pillars
-        if ( $cannibal_detected || $has_schema_issue ) {
-            $pillar_sum = 0;
-            $pillar_max = 0;
-            foreach ( $dimensions as $_dim ) {
-                $pillar_sum += intval( $_dim['score'] ?? 0 );
-                $pillar_max += intval( $_dim['max'] ?? 0 );
-            }
-            if ( $pillar_max > 0 ) {
-                $total_score = (int) round( ( $pillar_sum / $pillar_max ) * 100 );
-            }
-            // Hard cap: critical issues → max 65
-            if ( $has_critical ) {
-                $total_score = min( $total_score, 65 );
-            }
-            // Cannibalization alone → max 58
-            if ( $cannibal_detected ) {
-                $total_score = min( $total_score, 58 );
-            }
-        }
-
-        $score_cls   = $total_score >= 70 ? 'good' : ( $total_score >= 45 ? 'mid' : 'poor' );
-
-        // Override grade_label to match the capped score — Claude's label may not reflect overrides
-        if ( $has_critical || $cannibal_detected ) {
-            if ( $total_score < 45 ) {
-                $narrative['grade_label'] = 'Critical Issues Found';
-            } elseif ( $total_score < 60 ) {
-                $narrative['grade_label'] = 'Significant Issues Found';
-            } elseif ( $total_score < 70 ) {
-                $narrative['grade_label'] = 'Needs Attention';
-            }
-        }
+        $score_cls   = $total_score >= 70 ? 'good' : ( $total_score >= 50 ? 'mid' : 'poor' );
         $grade_label = esc_html( $narrative['grade_label'] ?? $grade );
 
         $pillar_map = array(
@@ -1887,6 +1835,398 @@ foreach ( $roadmap as $i => $item ) :
 </script>
         <?php
         return ob_get_clean();
+    }
+
+
+    /* ══════════════════════════════════════════════════════════════════
+     * v1.1 Scoring Algorithm (2026-04)
+     *
+     * Replaces the prior pillar-averaging + flat 58/65 caps. The v1.1 math:
+     *   1. Start at 100.
+     *   2. Apply issue-based deductions (from top_issues + each dimension's
+     *      issue list) mapped to the v1.1 deduction table.
+     *   3. Apply bonuses (capped at +15).
+     *   4. Apply the graduated cannibalization cap based on conflict count:
+     *        0→100  1→84  2→79  3→74  4→69  5-6→64  7-9→54  10+→44
+     *   5. Apply page-count adjustment (large sites with few conflicts
+     *      aren't destroyed — adjusts cap based on % of pages affected).
+     *   6. Floor at 0, ceiling at 100.
+     *   7. Assign v1.1 grade (A+, A, B+, B, C+, C, D+, D, D-, F).
+     *
+     * The cap is applied AFTER deductions so a cap can only LOWER a score,
+     * never raise it. This fixes the prior behavior where a site with more
+     * cannibalization could score higher than a site with less.
+     * ══════════════════════════════════════════════════════════════════ */
+
+    /**
+     * Compute the final v1.1 score for a scan.
+     *
+     * @param int   $api_score      Raw total_score returned by the API
+     *                              (used as an anchor; final score is
+     *                              recomputed, not trusted blindly).
+     * @param array $dimensions     Pillar scores from API (each has
+     *                              score/max/issues).
+     * @param array $cannibal       Output of detect_cannibalization()
+     *                              with detected/pair_count keys.
+     * @param array $top_issues     Top issue strings from API.
+     * @param array $narrative      Claude-generated narrative; may contain
+     *                              suppressors[] with severity markers.
+     * @param int   $pages_crawled  How many pages the crawler actually hit.
+     * @return array {
+     *   @type int    $final              Final 0-100 score.
+     *   @type string $grade              Letter grade (A+ .. F).
+     *   @type string $grade_label        Human label ("Excellent" .. "Failing").
+     *   @type string $color              Hex color matching grade.
+     *   @type string $message            One-sentence summary for the user.
+     *   @type array  $breakdown          Diagnostic trace of the math.
+     *   @type array  $cannibalization    Conflict count + detected flag.
+     *   @type array  $deductions_applied List of individual deductions.
+     *   @type int    $bonuses_applied    Total bonus points added (<=15).
+     * }
+     */
+    public static function calculate_v11_score( $api_score, $dimensions, $cannibal, $top_issues, $narrative, $pages_crawled ) {
+        $starting = 100;
+        $score    = $starting;
+
+        // ── Gather ALL issue strings (dedupe) ──────────────────
+        $all_issues = is_array( $top_issues ) ? $top_issues : array();
+        foreach ( (array) $dimensions as $_dim ) {
+            if ( ! empty( $_dim['issues'] ) && is_array( $_dim['issues'] ) ) {
+                $all_issues = array_merge( $all_issues, $_dim['issues'] );
+            }
+        }
+        $all_issues = array_values( array_unique( array_filter( array_map( 'strval', $all_issues ) ) ) );
+
+        // ── Step 2: Apply deductions ──────────────────────────
+        $dedu_applied  = array();
+        $dedu_total    = 0;
+        $seen_types    = array();
+        foreach ( $all_issues as $issue_text ) {
+            $match = self::v11_match_deduction( $issue_text );
+            if ( $match === null ) continue;
+            // Dedupe: only apply each deduction type once (avoid double
+            // counting if the same issue surfaces in both top_issues and
+            // a dimension's issue list).
+            if ( isset( $seen_types[ $match['type'] ] ) ) continue;
+            $seen_types[ $match['type'] ] = true;
+
+            $dedu_total += $match['points'];
+            $dedu_applied[] = array(
+                'type'           => $match['type'],
+                'category'       => $match['category'],
+                'points'         => $match['points'],
+                'matched_text'   => $issue_text,
+                'recommendation' => $match['recommendation'],
+            );
+        }
+        $score += $dedu_total; // dedu_total is negative
+
+        // ── Step 3: Apply bonuses (capped at +15) ──────────────
+        // Bonuses are derived from dimension scores at/near max — a pillar
+        // scoring >=90% of its max earns a proportional bonus up to +3.
+        // Hard cap total at +15 per spec.
+        $bonus_total = 0;
+        foreach ( (array) $dimensions as $_dim ) {
+            $_s = intval( $_dim['score'] ?? 0 );
+            $_m = intval( $_dim['max']   ?? 0 );
+            if ( $_m <= 0 ) continue;
+            $ratio = $_s / $_m;
+            if ( $ratio >= 0.95 ) {
+                $bonus_total += 3;
+            } elseif ( $ratio >= 0.90 ) {
+                $bonus_total += 2;
+            }
+            if ( $bonus_total >= 15 ) { $bonus_total = 15; break; }
+        }
+        $score += $bonus_total;
+
+        // ── Step 4: Cannibalization cap ─────────────────────────
+        $conflict_count = self::v11_conflict_count( $cannibal, $top_issues );
+        $base_cap       = self::v11_cannibal_cap( $conflict_count );
+
+        // ── Step 5: Page-count adjustment ───────────────────────
+        $cap_adjustment = self::v11_page_count_adjustment( $conflict_count, $pages_crawled );
+        $adjusted_cap   = min( 100, $base_cap + $cap_adjustment );
+
+        $cap_applied = false;
+        if ( $score > $adjusted_cap ) {
+            $score       = $adjusted_cap;
+            $cap_applied = true;
+        }
+
+        // ── Critical-suppressor safety net ─────────────────────
+        // Spec-adjacent: a critical suppressor in the narrative that is NOT
+        // cannibalization (e.g. NAP inconsistency, schema missing from
+        // homepage) should keep the score from looking "fine". Cap into
+        // D range (<=64) if any critical is present — never raises.
+        $has_non_cannibal_critical = false;
+        foreach ( $narrative['suppressors'] ?? array() as $_s ) {
+            if ( strtolower( $_s['severity'] ?? '' ) !== 'critical' ) continue;
+            $title = strtolower( $_s['title'] ?? '' );
+            // Skip if this "critical" is the cannibalization suppressor
+            // itself — that's already reflected in the cap math above.
+            if ( strpos( $title, 'cannibaliz' ) !== false ) continue;
+            $has_non_cannibal_critical = true;
+            break;
+        }
+        if ( $has_non_cannibal_critical && $score > 64 ) {
+            $score = 64;
+            $cap_applied = true;
+        }
+
+        // ── Step 6: Floor / ceiling / round ────────────────────
+        $score = max( 0, min( 100, (int) round( $score ) ) );
+
+        // ── Step 7: Grade assignment ───────────────────────────
+        $grade_info = self::v11_grade( $score );
+
+        return array(
+            'final'             => $score,
+            'grade'             => $grade_info['grade'],
+            'grade_label'       => $grade_info['label'],
+            'color'             => $grade_info['color'],
+            'message'           => $grade_info['message'],
+            'breakdown'         => array(
+                'starting_score'      => $starting,
+                'total_deductions'    => $dedu_total,
+                'total_bonuses'       => $bonus_total,
+                'score_before_cap'    => $starting + $dedu_total + $bonus_total,
+                'cannibalization_cap' => $base_cap,
+                'page_count_adjust'   => $cap_adjustment,
+                'adjusted_cap'        => $adjusted_cap,
+                'cap_applied'         => $cap_applied,
+                'api_reported_score'  => intval( $api_score ),
+            ),
+            'cannibalization'    => array(
+                'conflict_count' => $conflict_count,
+                'detected'       => $conflict_count > 0,
+            ),
+            'deductions_applied' => $dedu_applied,
+            'bonuses_applied'    => $bonus_total,
+        );
+    }
+
+    /**
+     * Unified conflict counter — combines slug-suffix pair detection
+     * (self::detect_cannibalization) with title-overlap / duplicate-title
+     * signals surfaced in top_issues by the Django API. Returns a single
+     * non-negative integer representing "how many conflicts for cap lookup".
+     */
+    public static function v11_conflict_count( $cannibal, $top_issues ) {
+        $pair_count = intval( $cannibal['pair_count'] ?? 0 );
+
+        // Also detect conflicts surfaced via top_issues (from the API's
+        // title-overlap check). Each mention counts as one conflict,
+        // capped at the pair_count if slug-suffix detection already ran.
+        $title_overlap_hits = 0;
+        foreach ( (array) $top_issues as $issue ) {
+            $lower = strtolower( (string) $issue );
+            if ( strpos( $lower, 'cannibaliz' ) !== false
+              || strpos( $lower, 'duplicate title' ) !== false
+              || strpos( $lower, 'title overlap' ) !== false
+              || strpos( $lower, 'near-duplicate' ) !== false ) {
+                $title_overlap_hits++;
+            }
+        }
+
+        // Use max so we don't double-count when both detectors see the
+        // same pairs, but we also don't miss conflicts that only one
+        // detector catches.
+        return max( $pair_count, $title_overlap_hits );
+    }
+
+    /**
+     * v1.1 cannibalization cap lookup. Input is weighted conflict count
+     * (currently unweighted pair count; severity weights will come in V1.2
+     * when conflict_type classification is wired through from the API).
+     */
+    public static function v11_cannibal_cap( $conflicts ) {
+        if ( $conflicts <= 0 ) return 100;
+        if ( $conflicts <= 1 ) return 84;
+        if ( $conflicts <= 2 ) return 79;
+        if ( $conflicts <= 3 ) return 74;
+        if ( $conflicts <= 4 ) return 69;
+        if ( $conflicts <= 6 ) return 64;
+        if ( $conflicts <= 9 ) return 54;
+        return 44;
+    }
+
+    /**
+     * Page-count adjustment: large sites with few affected pages
+     * shouldn't be destroyed by the cap. Returns additive adjustment
+     * to the cap (never subtracts; max +15).
+     */
+    public static function v11_page_count_adjustment( $conflict_count, $pages_crawled ) {
+        if ( $conflict_count <= 0 || $pages_crawled <= 0 ) return 0;
+        // Each conflict involves at least 2 pages — estimate pages touched.
+        $pages_in_conflict = $conflict_count * 2;
+        $pct = ( $pages_in_conflict / $pages_crawled ) * 100;
+        if ( $pct >= 20 ) return 0;
+        if ( $pct >= 10 ) return 5;
+        if ( $pct >= 5 )  return 10;
+        return 15;
+    }
+
+    /**
+     * v1.1 grade thresholds.
+     */
+    public static function v11_grade( $score ) {
+        $table = array(
+            array( 95, 'A+', 'Excellent',          '#22c55e', "Your site is well-optimized. Minor improvements available, but you're in great shape." ),
+            array( 90, 'A',  'Great',              '#22c55e', "Your site is well-optimized. Minor improvements available, but you're in great shape." ),
+            array( 85, 'B+', 'Good',               '#84cc16', 'Good foundation with room to grow. Addressing the issues below will help you compete for top positions.' ),
+            array( 80, 'B',  'Above Average',      '#84cc16', 'Good foundation with room to grow. Addressing the issues below will help you compete for top positions.' ),
+            array( 75, 'C+', 'Needs Improvement',  '#eab308', 'Several issues are impacting your search performance. The fixes below should be prioritized.' ),
+            array( 70, 'C',  'Below Average',      '#eab308', 'Several issues are impacting your search performance. The fixes below should be prioritized.' ),
+            array( 65, 'D+', 'Poor',               '#f97316', 'Significant problems detected that are hurting your rankings. Immediate attention recommended.' ),
+            array( 60, 'D',  'Serious Issues',     '#f97316', 'Significant problems detected that are hurting your rankings. Immediate attention recommended.' ),
+            array( 50, 'D-', 'Critical Problems',  '#ef4444', 'Critical issues found. Your site is likely losing significant traffic due to these problems.' ),
+            array( 0,  'F',  'Failing',            '#dc2626', 'Severe problems require immediate action. Cannibalization is actively damaging your search visibility.' ),
+        );
+        foreach ( $table as $row ) {
+            if ( $score >= $row[0] ) {
+                return array(
+                    'grade'   => $row[1],
+                    'label'   => $row[2],
+                    'color'   => $row[3],
+                    'message' => $row[4],
+                );
+            }
+        }
+        return array( 'grade' => 'F', 'label' => 'Failing', 'color' => '#dc2626', 'message' => 'Severe problems require immediate action.' );
+    }
+
+    /**
+     * Map an issue string to the v1.1 deduction table. Matching is
+     * keyword-based (case-insensitive substring) because the source
+     * strings come from multiple producers (Django scanner, Claude
+     * narrative, fallback heuristics) and have no guaranteed schema.
+     *
+     * Returns null if no rule matches — we intentionally do not deduct
+     * for unknown issues to avoid false pessimism. Extend the table
+     * as new issue phrasings emerge.
+     */
+    public static function v11_match_deduction( $issue_text ) {
+        $text = strtolower( (string) $issue_text );
+        if ( $text === '' ) return null;
+
+        // Ordered: more specific phrases FIRST (longer match wins).
+        $rules = array(
+            // title — place "too short / too long" before bare "title"
+            array( 'patterns' => array( 'title missing', 'no title tag', 'missing title' ),
+                   'type' => 'title_missing',       'points' => -20, 'category' => 'content',
+                   'rec' => 'Add a title tag with your primary keyword.' ),
+            array( 'patterns' => array( 'title too short' ),
+                   'type' => 'title_too_short',     'points' => -8,  'category' => 'content',
+                   'rec' => 'Expand title to 30-60 characters with primary keyword.' ),
+            array( 'patterns' => array( 'title too long' ),
+                   'type' => 'title_too_long',      'points' => -5,  'category' => 'content',
+                   'rec' => 'Shorten title tag to under 60 characters.' ),
+            array( 'patterns' => array( 'duplicate title' ),
+                   'type' => 'duplicate_title',     'points' => -12, 'category' => 'content',
+                   'rec' => 'Create unique title tags for each page.' ),
+
+            // h1 / headings
+            array( 'patterns' => array( 'missing h1', 'no h1 tag', 'no h1 heading', 'h1 missing' ),
+                   'type' => 'missing_h1',          'points' => -15, 'category' => 'content',
+                   'rec' => 'Add a single H1 tag containing your primary keyword.' ),
+            array( 'patterns' => array( 'multiple h1' ),
+                   'type' => 'multiple_h1',         'points' => -10, 'category' => 'content',
+                   'rec' => 'Ensure exactly one H1 tag per page.' ),
+            array( 'patterns' => array( 'heading hierarchy', 'heading order', 'h1 to h3', 'heading skipped' ),
+                   'type' => 'heading_hierarchy_skipped', 'points' => -12, 'category' => 'content',
+                   'rec' => 'Fix heading hierarchy (H1 → H2 → H3, no skipping).' ),
+
+            // meta description
+            array( 'patterns' => array( 'meta description missing', 'missing meta description', 'no meta description' ),
+                   'type' => 'meta_description_missing', 'points' => -8, 'category' => 'content',
+                   'rec' => 'Add a compelling meta description (70-160 characters).' ),
+            array( 'patterns' => array( 'meta description too short' ),
+                   'type' => 'meta_description_too_short', 'points' => -4, 'category' => 'content',
+                   'rec' => 'Expand meta description to at least 70 characters.' ),
+            array( 'patterns' => array( 'meta description too long' ),
+                   'type' => 'meta_description_too_long',  'points' => -3, 'category' => 'content',
+                   'rec' => 'Shorten meta description to under 160 characters.' ),
+
+            // content depth
+            array( 'patterns' => array( 'thin content' ),
+                   'type' => 'thin_content',        'points' => -8,  'category' => 'content',
+                   'rec' => 'Expand content to at least 300 words.' ),
+
+            // technical
+            array( 'patterns' => array( 'sitemap missing', 'no sitemap', 'missing sitemap' ),
+                   'type' => 'sitemap_missing',     'points' => -8,  'category' => 'technical',
+                   'rec' => 'Create and submit an XML sitemap.' ),
+            array( 'patterns' => array( 'robots.txt missing', 'missing robots' ),
+                   'type' => 'robots_missing',      'points' => -5,  'category' => 'technical',
+                   'rec' => 'Add a robots.txt file.' ),
+            array( 'patterns' => array( 'no ssl', 'not https', 'http only' ),
+                   'type' => 'no_ssl',              'points' => -15, 'category' => 'technical',
+                   'rec' => 'Install SSL certificate and migrate to HTTPS.' ),
+            array( 'patterns' => array( 'mixed content' ),
+                   'type' => 'mixed_content',       'points' => -10, 'category' => 'technical',
+                   'rec' => 'Fix mixed content warnings (HTTP resources on HTTPS pages).' ),
+            array( 'patterns' => array( 'canonical missing', 'no canonical', 'missing canonical' ),
+                   'type' => 'canonical_missing',   'points' => -10, 'category' => 'technical',
+                   'rec' => 'Add canonical tags to prevent duplicate content issues.' ),
+            array( 'patterns' => array( 'mobile viewport' ),
+                   'type' => 'mobile_viewport_missing', 'points' => -10, 'category' => 'technical',
+                   'rec' => 'Add mobile viewport meta tag.' ),
+            array( 'patterns' => array( 'broken internal link', 'broken link' ),
+                   'type' => 'broken_internal_link', 'points' => -5, 'category' => 'technical',
+                   'rec' => 'Fix broken internal links.' ),
+            array( 'patterns' => array( '5xx error', '4xx error', 'server error' ),
+                   'type' => 'server_error',        'points' => -10, 'category' => 'technical',
+                   'rec' => 'Fix 4xx/5xx server errors on key pages.' ),
+
+            // Core Web Vitals
+            array( 'patterns' => array( 'lcp > 4', 'lcp over 4', 'lcp very slow', 'largest contentful paint > 4' ),
+                   'type' => 'lcp_very_slow',       'points' => -12, 'category' => 'performance',
+                   'rec' => 'Urgently improve Largest Contentful Paint (currently >4s).' ),
+            array( 'patterns' => array( 'lcp > 2.5', 'lcp slow', 'largest contentful paint > 2.5' ),
+                   'type' => 'lcp_slow',            'points' => -8,  'category' => 'performance',
+                   'rec' => 'Improve Largest Contentful Paint (currently >2.5s).' ),
+            array( 'patterns' => array( 'cls > 0.25', 'cls very bad' ),
+                   'type' => 'cls_very_bad',        'points' => -10, 'category' => 'performance',
+                   'rec' => 'Urgently reduce Cumulative Layout Shift (currently >0.25).' ),
+            array( 'patterns' => array( 'cls > 0.1', 'cls bad' ),
+                   'type' => 'cls_bad',             'points' => -6,  'category' => 'performance',
+                   'rec' => 'Reduce Cumulative Layout Shift (currently >0.1).' ),
+            array( 'patterns' => array( 'inp > 500', 'inp very slow' ),
+                   'type' => 'inp_very_slow',       'points' => -10, 'category' => 'performance',
+                   'rec' => 'Urgently improve Interaction to Next Paint (currently >500ms).' ),
+            array( 'patterns' => array( 'inp > 200', 'inp slow' ),
+                   'type' => 'inp_slow',            'points' => -6,  'category' => 'performance',
+                   'rec' => 'Improve Interaction to Next Paint (currently >200ms).' ),
+
+            // structure
+            array( 'patterns' => array( 'orphan page', 'no internal links' ),
+                   'type' => 'orphan_page',         'points' => -10, 'category' => 'structure',
+                   'rec' => 'Add internal links to this page.' ),
+            array( 'patterns' => array( 'alt tag', 'alt text', 'alt attribute' ),
+                   'type' => 'images_missing_alt',  'points' => -6,  'category' => 'structure',
+                   'rec' => 'Add alt tags to images.' ),
+            array( 'patterns' => array( 'no schema', 'schema missing', 'missing schema', 'structured data missing' ),
+                   'type' => 'no_schema',           'points' => -3,  'category' => 'structure',
+                   'rec' => 'Implement schema markup for rich results.' ),
+            array( 'patterns' => array( 'breadcrumbs' ),
+                   'type' => 'broken_breadcrumbs',  'points' => -4,  'category' => 'structure',
+                   'rec' => 'Fix breadcrumb navigation.' ),
+        );
+
+        foreach ( $rules as $rule ) {
+            foreach ( $rule['patterns'] as $pat ) {
+                if ( strpos( $text, $pat ) !== false ) {
+                    return array(
+                        'type'           => $rule['type'],
+                        'points'         => $rule['points'],
+                        'category'       => $rule['category'],
+                        'recommendation' => $rule['rec'],
+                    );
+                }
+            }
+        }
+        return null;
     }
 
 }

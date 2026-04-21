@@ -6,6 +6,36 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.303] — 2026-04-20
+
+### Fixed
+- **scan.siloq.ai scoring algorithm — v1.1 rewrite.** The scan-results shortcode previously averaged pillar scores and applied two flat caps (58 for cannibalization, 65 for "critical"), which let sites with obvious cannibalization still grade B+ when most pillars looked healthy. That produced the crystallizedcouture.com 93/B+ output and similar. The scoring now:
+  - **Starts at 100** and applies explicit issue-based deductions (missing H1 -15, heading hierarchy skipped -12, title missing -20, sitemap missing -8, no SSL -15, canonical missing -10, LCP > 4s -12, CLS > 0.25 -10, and ~25 more) mapped via keyword match from API top_issues and per-dimension issue lists.
+  - **Applies small bonuses** (+2/+3 per pillar scoring ≥90%/≥95% of its max), capped at +15 total.
+  - **Applies a graduated cannibalization cap** based on conflict count: 0→100, 1→84, 2→79, 3→74, 4→69, 5-6→64, 7-9→54, 10+→44. Prior flat 58 cap now reserved for ~5-6-conflict sites.
+  - **Applies page-count adjustment**: large sites with few affected pages get the cap relaxed by up to +15. Prevents a 500-page site with 2 duplicate slugs from getting destroyed.
+  - **Applies a critical-suppressor ceiling** (score ≤64 if any non-cannibalization critical suppressor surfaces).
+  - **Caps only lower** — never raise. Math order is: deductions → bonuses → cap. A site with more conflicts can never score higher than a site with fewer.
+- **Cannibalization detection threshold lowered** — `Siloq_Scan_Results_Shortcode::detect_cannibalization()` now returns `detected: true` for 1+ slug-suffix pairs (was 3+), so 1-2-conflict sites stop slipping through uncapped.
+- **Grade labels aligned to v1.1** — A+ / A / B+ / B / C+ / C / D+ / D / D- / F with descriptive labels ("Excellent", "Good", "Needs Improvement", "Serious Issues", "Critical Problems", "Failing") and corresponding grade-color hexes.
+
+### Changed
+- Display-only pillar caps (Site Architecture → 40% of max when cannibalization detected, Content Depth → 50%, GEO Ready → 30% when schema missing from homepage) now run in `html()` but **do not** recompute the overall score — they only keep the visual pillar bar chart honest. Score is the single source of truth from `calculate_v11_score()` in `render()` upstream.
+- New public static methods on `Siloq_Scan_Results_Shortcode` for testability: `calculate_v11_score()`, `v11_cannibal_cap()`, `v11_page_count_adjustment()`, `v11_grade()`, `v11_match_deduction()`, `v11_conflict_count()`. All side-effect-free.
+
+### Not changed
+- Crawler, sitemap fetch, and cannibalization URL collection logic unchanged.
+- Claude-generated narrative (suppressors, roadmap, entity analysis) unchanged.
+- Calendly CTAs and email template unchanged.
+- Django API (siloq-api) unchanged — this PR is PHP-only. Django still returns its current response shape; the PHP scorer just interprets it through v1.1 math. A future PR may port the scoring into Django as a proper Python scan engine.
+
+### Follow-ups
+- [ ] PHPUnit test harness: no PHP test infra exists in this plugin yet. The v1.1 methods are deliberately public-static so they can be tested directly. Recommend adding `tests/test-v11-scoring.php` in a follow-up PR once Composer/PHPUnit scaffolding is added.
+- [ ] Page-count adjustment estimates pages-in-conflict as `pair_count * 2`. When the Django API starts returning the actual list of URLs in conflict, feed that in for a precise percentage.
+- [ ] Severity-weighted conflict counts (v1.1 spec §1) deferred to V1.2 — requires API to emit conflict_type classification (exact_match, high_overlap, intent_collision, etc.).
+
+---
+
 ## [1.5.302] — 2026-04-20
 
 ### Fixed
