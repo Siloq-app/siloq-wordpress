@@ -6,6 +6,37 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.304] — 2026-04-20
+
+### Fixed
+- **Title-overlap false-positive no longer triggers cannibalization cap.** QA on andrewreise.com surfaced the following two issues flagged as "title keyword overlap (75%)" cannibalization:
+  - `/` and `/about` share the words "Customer Experience Consulting"
+  - `/` and `/ebook-case-for-customer-experience-consulting` share the same words
+
+  These are intentional brand consistency — not keyword cannibalization. The v1.1 spec (§1) is explicit: a conflict requires **≥2 signals** (title similarity, H1 similarity, URL slug match, meta description similarity). Title-keyword overlap alone is a soft signal and should not trigger the cap. Our PHP conflict counter was incorrectly promoting every "title keyword overlap" mention in `top_issues` into a conflict.
+
+  Patch narrows `v11_conflict_count()` to only count:
+  1. Slug-suffix pair matches from `detect_cannibalization()` (strongest signal — confirms two pages share the same suffix under different parents).
+  2. Explicit cannibalization language in `top_issues` (e.g. "cannibalization detected across N pages") — not bare section headers like "Site Architecture (cannibalization) issues".
+
+  Soft title-overlap signals still:
+  - Render as issues in the UI
+  - Contribute to the per-page deduction table (via `duplicate_title -12` etc.)
+  - Show up in the Claude narrative suppressors
+  They just don't inflate the conflict count used for the cap.
+
+### Technical notes
+- Change is localized to `Siloq_Scan_Results_Shortcode::v11_conflict_count()`. No other method behavior modified.
+- The companion Python mirror (`v11_scoring_mirror.py` in the Cowork workspace) is updated with this fix and a new regression test for the andrewreise.com case.
+- Upstream fix for the same class of false-positive landed in siloq-api main as commit `9385254` (strip site-name suffix, use meta_title only); this PHP patch is a defense-in-depth layer that prevents over-counting even when the API over-reports.
+
+### Follow-ups
+- [ ] Django crawler: diagnose schema-missing false-negative on andrewreise.com (site has schema; scanner misses it — likely client-side render issue on HubSpot sites).
+- [ ] Django crawler: diagnose llms.txt false-negative (path check likely hits wrong URL).
+- [ ] Django crawler: 20-page cap appears too tight for mid-size sites. Review.
+
+---
+
 ## [1.5.303] — 2026-04-20
 
 ### Fixed
