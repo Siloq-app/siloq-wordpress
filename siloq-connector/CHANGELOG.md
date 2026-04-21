@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.302] — 2026-04-20
+
+### Fixed
+- **Restored production baseline (v1.5.294 → v1.5.301).** Between early April and mid-April a prior release attempt (`0e29231`, "Bump version to 1.5.291") landed on `main` without the v1.5.294-301 fixes that were already running in production. The missing fixes lived on an unmerged branch (`fix/js-undefined-siloqdash`) and included a critical PHP fatal 500 fix. Deploying the `main` tip to any site would re-introduce that outage. This release merges those 8 commits back into mainline so that `main` is once again a superset of production. No new features. No scoring/behavior changes.
+
+### Recovered fixes (originally shipped via `fix/js-undefined-siloqdash` but never merged to `main`)
+- **v1.5.294** — Safe `siloqDash` / `siloqAdminData` access to prevent `ReferenceError` on Elementor sites where the admin dashboard JS never loads.
+- **v1.5.295** — CORS headers on job calls; AIOSEO auto-detect; schema Apply All selector fix; remaining `siloqDash` references cleaned up.
+- **v1.5.296** — Restored `class-siloq-rest-api.php` (dropped since v1.5.286) and fixed duplicate `siloq-goals-save-btn` ID that broke the goals form.
+- **v1.5.297** — System Status light with health check on load, Celery/Redis aware; job buttons grey out when the backend is offline.
+- **v1.5.298** — All missing AJAX handlers added (`get_plan_data`, `pages_list`, `set_role`, `schema_graph`, `repair`, `add_link`), duplicate IDs fixed, Approve & Write response shape normalized.
+- **v1.5.299** — **CRITICAL:** Fix unclosed brace in `siloq-connector.php` causing PHP fatal 500 on activation.
+- **v1.5.300** — `toUpperCase` crash on undefined values, nonce refresh before Approve & Write, blog signal handling, modal hub name, duplicate IDs.
+- **v1.5.301** — Async Approve & Write polling flow (`siloqPollJobStatus`, `siloqCreateDraftPost`, `siloqCheckForActiveJobs`, resume on tab load).
+
+### Notes for operators
+- Production installs already running v1.5.299 are now upgrading forward (to v1.5.302), not sideways.
+- This PR does not change scan.siloq.ai scoring behavior. The v1.1 scoring rework ships as a separate PR on top of this baseline.
+
+---
+
 ## [1.5.291] — 2026-04-09
 
 ### Fixed
