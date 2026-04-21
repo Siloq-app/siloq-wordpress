@@ -1,41 +1,37 @@
-# Security Audit Findings
+# Security audit notes
+
+This file records **verified** security-relevant changes and a **living checklist** for future review. It is not a substitute for a full third-party penetration test.
+
+---
 
 ## Resolved
 
-### Webhook HMAC validation (resolved in 1.5.291)
-- **Location**: `class-siloq-webhook-handler.php`
-- **Issue**: The `/wp-json/siloq/v1/webhook` REST endpoint enforced HMAC signature validation only when a `siloq_webhook_secret` option was already set. On a fresh install with no secret configured, the endpoint accepted any unsigned POST from any source on the public internet, allowing unauthenticated callers to create draft posts, overwrite post content, update meta fields, and rewrite `siloq_site_id` to redirect the install to an attacker-controlled tenant.
-- **Fix**: `Siloq_Webhook_Handler::ensure_secret()` now lazily generates a 64-char `wp_generate_password` secret on the first request if none exists, so the option is never empty in normal operation. The HMAC check is unconditional: empty secret, missing signature, or mismatched HMAC all return 401. The secret is surfaced in Settings → Webhook Secret for the user to copy into the Siloq dashboard.
+### Webhook HMAC validation (fixed in **1.5.291**)
 
-## Critical Issues Identified
+- **Component:** `siloq-connector/includes/class-siloq-webhook-handler.php`  
+- **Endpoint:** `POST /wp-json/siloq/v1/webhook`  
+- **Issue (historical):** When no `siloq_webhook_secret` option existed yet, the endpoint could accept unsigned POST bodies, allowing unauthenticated callers to manipulate drafts, content, meta, or `siloq_site_id` on a fresh install.  
+- **Fix:** `Siloq_Webhook_Handler::ensure_secret()` lazily generates a 64-character secret (via `wp_generate_password`) so the option is not left empty in normal operation. HMAC verification is **mandatory**: missing or mismatched `X-Siloq-Signature` (or an empty secret edge case) yields **401**. The secret is shown in **Siloq → Settings → Webhook Secret** for copying into the Siloq dashboard.
 
-### 1. Mock API Implementations
-- **Location**: `siloq-connector.php:318-322`, `class-siloq-ai-content-generator.php:51-58`
-- **Issue**: Hardcoded success responses instead of real API calls
-- **Risk**: False sense of connectivity, data not actually syncing
+Details and rollout notes also appear under **Security** in `siloq-connector/CHANGELOG.md` for version **1.5.291**.
 
-### 2. Insufficient Input Validation
-- **Location**: Multiple AJAX handlers
-- **Issue**: Basic sanitization but no comprehensive validation
-- **Risk**: Potential XSS or injection attacks
+---
 
-### 3. Debug Mode Exposure
-- **Location**: `siloq-connector.php:653-659`
-- **Issue**: Debug logging may expose sensitive information
-- **Risk**: Information disclosure in logs
+## Re-triage (2026-04-22)
 
-## Recommendations
+Older copies of this document listed “critical” issues with **stale file/line references** (e.g. pointing at shortcode/AJAX registration or script localization instead of mock APIs). Those entries have been **removed** as unverified against current `main`.
 
-1. Replace mock implementations with actual API calls
-2. Implement comprehensive input validation
-3. Add rate limiting to API endpoints
-4. Secure debug logging with proper access controls
-5. Add CSRF protection improvements
-6. Implement proper error handling without information disclosure
+When re-auditing, prioritize:
 
-## Code Quality Issues
+1. **New REST routes** under `siloq/v1` — confirm `permission_callback` coverage, JSON validation, and that privileged operations never rely on `__return_true` except where intentionally public (e.g. diagnostic ping/webhook contract).  
+2. **AJAX handlers** — `check_ajax_referer`, `current_user_can`, and stable error shapes without leaking secrets.  
+3. **Webhook secret lifecycle** — secret rotation coordination between WordPress and the Siloq dashboard.  
+4. **Hosting controls** — WAF, rate limiting, and TLS termination in front of `/wp-json/`.
 
-- Multiple classes with incomplete implementations
-- Extensive use of mock data throughout
-- Missing error handling in critical paths
-- Inconsistent coding standards across files
+---
+
+## Ongoing recommendations
+
+- Keep dependencies and build toolchain patched (`siloq-connector/package.json`).  
+- Avoid logging raw API keys, webhook secrets, or full request bodies in production debug plugins.  
+- Run periodic reviews after large changes to `includes/class-siloq-rest-api.php` and related `register_rest_route` call sites.
