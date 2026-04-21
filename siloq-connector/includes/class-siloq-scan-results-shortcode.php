@@ -2013,26 +2013,36 @@ foreach ( $roadmap as $i => $item ) :
      * non-negative integer representing "how many conflicts for cap lookup".
      */
     public static function v11_conflict_count( $cannibal, $top_issues ) {
+        // Primary signal: slug-suffix pair detection from detect_cannibalization().
+        // This is the strongest available signal because it confirms TWO pages share
+        // the same suffix under different parent paths (e.g. /commercial/jackets/
+        // and /residential/jackets/) — a structural duplicate, not a semantic near-miss.
         $pair_count = intval( $cannibal['pair_count'] ?? 0 );
 
-        // Also detect conflicts surfaced via top_issues (from the API's
-        // title-overlap check). Each mention counts as one conflict,
-        // capped at the pair_count if slug-suffix detection already ran.
-        $title_overlap_hits = 0;
+        // Soft signals from top_issues (title-keyword overlap, near-duplicate, etc.)
+        // are INTENTIONALLY not counted here. Per v1.1 spec §1, a conflict requires
+        // >=2 of: title similarity, H1 similarity, URL slug match, meta similarity.
+        // Title-keyword overlap alone was producing false positives on sites with
+        // legitimate brand consistency (e.g. andrewreise.com — home and /about both
+        // contained "Customer Experience Consulting" as intended brand language).
+        // Those overlap messages are still rendered as issues and still contribute
+        // to the per-page deduction table — they just don't trigger the cap.
+        //
+        // Exception: an explicit "cannibalization" mention from the Claude
+        // narrative or the API's structured cannibalization detector is a
+        // high-confidence signal and is counted.
+        $explicit_cannibal_hits = 0;
         foreach ( (array) $top_issues as $issue ) {
             $lower = strtolower( (string) $issue );
-            if ( strpos( $lower, 'cannibaliz' ) !== false
-              || strpos( $lower, 'duplicate title' ) !== false
-              || strpos( $lower, 'title overlap' ) !== false
-              || strpos( $lower, 'near-duplicate' ) !== false ) {
-                $title_overlap_hits++;
+            // Strict: the string "cannibaliz" appears AND it's not just a header/label.
+            // Looks for phrases like "X cannibalization detected" or "cannibalization
+            // across N pages" — not bare "Site Architecture (cannibalization) issues".
+            if ( preg_match( '/cannibaliz(ation|ing)\s+(detected|found|across|between|on|pairs?|conflicts?)/i', (string) $issue ) ) {
+                $explicit_cannibal_hits++;
             }
         }
 
-        // Use max so we don't double-count when both detectors see the
-        // same pairs, but we also don't miss conflicts that only one
-        // detector catches.
-        return max( $pair_count, $title_overlap_hits );
+        return max( $pair_count, $explicit_cannibal_hits );
     }
 
     /**
